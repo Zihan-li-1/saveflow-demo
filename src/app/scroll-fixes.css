@@ -1,0 +1,43 @@
+.app-shell {
+  height: 100dvh;
+}
+
+.chat-area {
+  min-height: 0;
+}
+
+.messages {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.composer-wrap,
+.chat-header,
+.flow-strip {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 700px) {
+  .app-shell {
+    height: 100dvh;
+    min-height: 0;
+  }
+
+  .chat-area {
+    height: 100dvh;
+    min-height: 0;
+  }
+}
+button:disabled { cursor: not-allowed; opacity: .5; }
+.consent-control { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 10px; color: #536275; }
+.consent-control input { width: 16px; height: 16px; accent-color: #287c68; }
+.validation-message { color: #aa3828; font-size: 13px; padding: 10px; }
+.error-actions { flex-wrap: wrap; overflow-wrap: anywhere; }
+.exception-toggle { flex-wrap: wrap; }
+.exception-toggle select { max-width: 100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; color: #334155; }
+.model-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; font-size: 12px; color: #536275; }
+.model-controls select, .model-controls input { border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 8px; background: white; color: #334155; max-width: 100%; }
+.model-controls input { flex: 1; min-width: 170px; }
+.bubble p { white-space: pre-wrap; }

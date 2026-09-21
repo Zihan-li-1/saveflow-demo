@@ -1,0 +1,672 @@
+{
+  "schemaVersion": "1.0.0",
+  "datasetId": "saveflow-phase1-fixed-v1",
+  "dataType": "synthetic_demo_only",
+  "currency": "CNY",
+  "snapshotDate": "2026-09-01",
+  "historicalMonths": [
+    "2026-06",
+    "2026-07",
+    "2026-08"
+  ],
+  "resetPolicy": "reload_original_json_before_each_demo; do_not_mutate_seed_file",
+  "user": {
+    "id": "USR-DEMO-001",
+    "displayName": "演示用户小林",
+    "monthlyIncome": 12000,
+    "preferredLanguage": "zh-CN"
+  },
+  "accounts": [
+    {
+      "id": "ACC-CHECKING",
+      "name": "模拟活期账户",
+      "type": "checking",
+      "availableBalance": 5000,
+      "currency": "CNY",
+      "isRealAccount": false
+    },
+    {
+      "id": "ACC-SAVINGS",
+      "name": "模拟储蓄账户",
+      "type": "savings",
+      "availableBalance": 0,
+      "currency": "CNY",
+      "isRealAccount": false
+    }
+  ],
+  "transactions": [
+    {
+      "id": "TXN-202606-SAL",
+      "date": "2026-06-05",
+      "accountId": "ACC-CHECKING",
+      "type": "income",
+      "category": "工资",
+      "merchant": "模拟雇主",
+      "amount": 12000,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202606-01-1",
+      "date": "2026-06-10",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "房租",
+      "merchant": "模拟房东",
+      "amount": 3000,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202606-02-1",
+      "date": "2026-06-12",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "餐饮",
+      "merchant": "模拟餐厅",
+      "amount": 1350,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202606-03-1",
+      "date": "2026-06-14",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "交通",
+      "merchant": "模拟出行",
+      "amount": 380,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202606-04-1",
+      "date": "2026-06-16",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "通信",
+      "merchant": "模拟运营商",
+      "amount": 100,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202606-05-1",
+      "date": "2026-06-18",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "日用品",
+      "merchant": "模拟超市",
+      "amount": 450,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202606-06-1",
+      "date": "2026-06-20",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "娱乐",
+      "merchant": "模拟影院/活动",
+      "amount": 225,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202606-06-2",
+      "date": "2026-06-21",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "娱乐",
+      "merchant": "模拟影院/活动",
+      "amount": 225,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202606-07-1",
+      "date": "2026-06-22",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "购物",
+      "merchant": "模拟商城",
+      "amount": 325,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202606-07-2",
+      "date": "2026-06-23",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "购物",
+      "merchant": "模拟商城",
+      "amount": 325,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202606-08-1",
+      "date": "2026-06-24",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "订阅",
+      "merchant": "模拟订阅合计",
+      "amount": 60,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202606-09-1",
+      "date": "2026-06-26",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "其他",
+      "merchant": "模拟其他商户",
+      "amount": 240,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202607-SAL",
+      "date": "2026-07-05",
+      "accountId": "ACC-CHECKING",
+      "type": "income",
+      "category": "工资",
+      "merchant": "模拟雇主",
+      "amount": 12000,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202607-01-1",
+      "date": "2026-07-10",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "房租",
+      "merchant": "模拟房东",
+      "amount": 3000,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202607-02-1",
+      "date": "2026-07-12",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "餐饮",
+      "merchant": "模拟餐厅",
+      "amount": 1450,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202607-03-1",
+      "date": "2026-07-14",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "交通",
+      "merchant": "模拟出行",
+      "amount": 400,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202607-04-1",
+      "date": "2026-07-16",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "通信",
+      "merchant": "模拟运营商",
+      "amount": 100,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202607-05-1",
+      "date": "2026-07-18",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "日用品",
+      "merchant": "模拟超市",
+      "amount": 500,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202607-06-1",
+      "date": "2026-07-20",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "娱乐",
+      "merchant": "模拟影院/活动",
+      "amount": 250,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202607-06-2",
+      "date": "2026-07-21",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "娱乐",
+      "merchant": "模拟影院/活动",
+      "amount": 250,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202607-07-1",
+      "date": "2026-07-22",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "购物",
+      "merchant": "模拟商城",
+      "amount": 425,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202607-07-2",
+      "date": "2026-07-23",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "购物",
+      "merchant": "模拟商城",
+      "amount": 425,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202607-08-1",
+      "date": "2026-07-24",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "订阅",
+      "merchant": "模拟订阅合计",
+      "amount": 60,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202607-09-1",
+      "date": "2026-07-26",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "其他",
+      "merchant": "模拟其他商户",
+      "amount": 320,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202608-SAL",
+      "date": "2026-08-05",
+      "accountId": "ACC-CHECKING",
+      "type": "income",
+      "category": "工资",
+      "merchant": "模拟雇主",
+      "amount": 12000,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202608-01-1",
+      "date": "2026-08-10",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "房租",
+      "merchant": "模拟房东",
+      "amount": 3000,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202608-02-1",
+      "date": "2026-08-12",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "餐饮",
+      "merchant": "模拟餐厅",
+      "amount": 1450,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202608-03-1",
+      "date": "2026-08-14",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "交通",
+      "merchant": "模拟出行",
+      "amount": 400,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202608-04-1",
+      "date": "2026-08-16",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "通信",
+      "merchant": "模拟运营商",
+      "amount": 100,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202608-05-1",
+      "date": "2026-08-18",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "日用品",
+      "merchant": "模拟超市",
+      "amount": 500,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202608-06-1",
+      "date": "2026-08-20",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "娱乐",
+      "merchant": "模拟影院/活动",
+      "amount": 560,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202608-06-2",
+      "date": "2026-08-21",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "娱乐",
+      "merchant": "模拟影院/活动",
+      "amount": 560,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202608-07-1",
+      "date": "2026-08-22",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "购物",
+      "merchant": "模拟商城",
+      "amount": 640,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202608-07-2",
+      "date": "2026-08-23",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "购物",
+      "merchant": "模拟商城",
+      "amount": 640,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202608-08-1",
+      "date": "2026-08-24",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "订阅",
+      "merchant": "模拟订阅合计",
+      "amount": 90,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202608-09-1",
+      "date": "2026-08-26",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "其他",
+      "merchant": "模拟其他商户",
+      "amount": 520,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    }
+  ],
+  "monthlySummaries": [
+    {
+      "month": "2026-06",
+      "income": 12000,
+      "expense": 6680,
+      "netCashFlow": 5320,
+      "byCategory": {
+        "房租": 3000,
+        "餐饮": 1350,
+        "交通": 380,
+        "通信": 100,
+        "日用品": 450,
+        "娱乐": 450,
+        "购物": 650,
+        "订阅": 60,
+        "其他": 240
+      }
+    },
+    {
+      "month": "2026-07",
+      "income": 12000,
+      "expense": 7180,
+      "netCashFlow": 4820,
+      "byCategory": {
+        "房租": 3000,
+        "餐饮": 1450,
+        "交通": 400,
+        "通信": 100,
+        "日用品": 500,
+        "娱乐": 500,
+        "购物": 850,
+        "订阅": 60,
+        "其他": 320
+      }
+    },
+    {
+      "month": "2026-08",
+      "income": 12000,
+      "expense": 8460,
+      "netCashFlow": 3540,
+      "byCategory": {
+        "房租": 3000,
+        "餐饮": 1450,
+        "交通": 400,
+        "通信": 100,
+        "日用品": 500,
+        "娱乐": 1120,
+        "购物": 1280,
+        "订阅": 90,
+        "其他": 520
+      }
+    }
+  ],
+  "cards": [
+    {
+      "id": "CARD-MAIN",
+      "name": "日常虚拟卡",
+      "linkedAccountId": "ACC-CHECKING",
+      "status": "active",
+      "monthlyLimit": 5000,
+      "monthlySpent": 0,
+      "savingRate": 0.05,
+      "requiresConfirmationForOverLimit": true
+    },
+    {
+      "id": "CARD-ENT",
+      "name": "娱乐虚拟卡",
+      "linkedAccountId": "ACC-CHECKING",
+      "status": "active",
+      "monthlyLimit": 800,
+      "monthlySpent": 760,
+      "savingRate": 0.1,
+      "requiresConfirmationForOverLimit": true
+    }
+  ],
+  "subscriptions": [
+    {
+      "id": "SUB-001",
+      "name": "模拟视频会员",
+      "monthlyFee": 30,
+      "status": "active",
+      "lastUsedDate": "2026-06-10",
+      "isPotentiallyUnused": true
+    },
+    {
+      "id": "SUB-002",
+      "name": "模拟云存储",
+      "monthlyFee": 30,
+      "status": "active",
+      "lastUsedDate": "2026-08-25",
+      "isPotentiallyUnused": false
+    }
+  ],
+  "savingGoals": [
+    {
+      "id": "GOAL-001",
+      "name": "年底储蓄目标",
+      "targetAmount": 20000,
+      "currentAmount": 0,
+      "targetDate": "2026-12-31",
+      "status": "draft",
+      "proposedMonthlySaving": 5000,
+      "proposedEntertainmentBudget": 800,
+      "requiresConfirmation": true
+    }
+  ],
+  "budgets": [
+    {
+      "category": "娱乐",
+      "month": "2026-08",
+      "limit": 800,
+      "actual": 1120,
+      "overBudget": 320
+    },
+    {
+      "category": "购物",
+      "month": "2026-08",
+      "limit": 1000,
+      "actual": 1280,
+      "overBudget": 280
+    }
+  ],
+  "analysisFixtures": {
+    "currentMonth": "2026-08",
+    "previousMonth": "2026-07",
+    "currentExpense": 8460,
+    "previousExpense": 7180,
+    "expenseIncrease": 1280,
+    "entertainmentIncrease": 620,
+    "shoppingIncrease": 430,
+      "notes": [
+      "2026-08订阅支出比2026-07增加30元；当前仅列出两项有效订阅，历史订阅合计另见交易。",
+      "目标从2026-09-01开始、在2026-12-31前完成，按4个月计算，建议月供为5000元；演示默认不计入目标已有余额。"
+    ]
+  },
+  "simulationScenarios": [
+    {
+      "id": "SCN-OVER-LIMIT",
+      "name": "娱乐卡超限消费",
+      "cardId": "CARD-ENT",
+      "purchaseAmount": 100,
+      "savingRate": 0.1,
+      "savingAmount": 10,
+      "totalDebitIfApproved": 110,
+      "spentBefore": 760,
+      "monthlyLimit": 800,
+      "spentAfterIfApproved": 860,
+      "expectedInitialState": "OVER_LIMIT",
+      "requiresConfirmation": true,
+      "onConfirm": "simulate_approved_payment_and_saving_transfer",
+      "onCancel": "no_balance_change"
+    },
+    {
+      "id": "SCN-INSUFFICIENT",
+      "name": "余额不足",
+      "cardId": "CARD-MAIN",
+      "purchaseAmount": 6000,
+      "savingRate": 0.05,
+      "savingAmount": 300,
+      "totalDebitIfApproved": 6300,
+      "expectedInitialState": "INSUFFICIENT_BALANCE",
+      "requiresConfirmation": false
+    },
+    {
+      "id": "SCN-NORMAL",
+      "name": "正常消费即储蓄",
+      "cardId": "CARD-MAIN",
+      "purchaseAmount": 100,
+      "savingRate": 0.05,
+      "savingAmount": 5,
+      "totalDebitIfApproved": 105,
+      "expectedInitialState": "WAITING_CONFIRMATION",
+      "requiresConfirmation": true
+    }
+  ],
+  "mockActions": [
+    {
+      "actionId": "action-001",
+      "type": "CREATE_SAVING_PLAN",
+      "targetId": "GOAL-001",
+      "requiresConfirmation": true,
+      "status": "pending",
+      "auditEventId": "AUDIT-001"
+    },
+    {
+      "actionId": "action-002",
+      "type": "SET_CARD_LIMIT",
+      "targetId": "CARD-ENT",
+      "amount": 800,
+      "requiresConfirmation": true,
+      "status": "pending",
+      "auditEventId": "AUDIT-002"
+    }
+  ],
+  "implementationNotes": [
+    "金额字段单位均为元，演示金额均为整数；真实系统建议使用分为单位的整数。",
+    "transactions为2026-06至2026-08已入账历史记录；2026-09的卡片monthlySpent为独立演示初始状态，不要与8月账单相加。",
+    "历史订阅支出按月合计模拟；subscriptions仅代表当前两项订阅，不可据此推断历史订阅数量。",
+    "执行模拟操作时复制数据到运行时状态，按用户确认结果更新余额、卡片消费额和储蓄账户；不要直接改写种子文件。",
+    "超限后是否放行仅为Demo规则，不代表真实银行卡授权规则。"
+  ]
+}
