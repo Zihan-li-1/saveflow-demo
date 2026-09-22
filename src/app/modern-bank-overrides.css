@@ -1,0 +1,11 @@
+/* Modern banking surface: calm blue accents, clear hierarchy, no legacy dark/gold palette. */
+.mini-icon.purple { color: #3978df; background: #eaf2ff; }
+.ai-badge { color: #3978df !important; background: #eaf2ff; }
+.tip-card { background: #f4f8ff; border-color: #dce9fb; }
+.tip-icon { color: #3978df; }
+.tip-card b { color: #315e9e; }
+.tip-card p { color: #7188a8; }
+.green-tag { color: #2f6ec7; background: #eaf2ff; }
+.analysis-categories { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.analysis-categories span { color: #6f7e91; background: #f3f7fc; border: 1px solid #e2ebf7; border-radius: 999px; padding: 5px 8px; font-size: 10px; }
+.analysis-categories b { color: #3577e5; font-weight: 600; }

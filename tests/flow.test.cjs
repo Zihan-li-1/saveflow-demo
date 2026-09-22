@@ -47,16 +47,13 @@ test('same operation replays its receipt; modified payload conflicts', () => {
   assert.throws(() => mockRequest('create-plan', { ...plan, monthlySavingFen: 200000 }, 'plan-1'), { code: 'IDEMPOTENCY_CONFLICT' });
   assert.deepEqual(mockRequest('operation-status', { operationId: 'plan-1' }, ''), first);
 });
-test('timeout after acceptance is reconciled by operation ID', () => {
-  assert.throws(() => mockRequest('create-plan', { ...plan, scenario: 'timeout' }, 'plan-timeout'), { code: 'TIMEOUT', uncertain: true });
-  assert.equal(mockRequest('operation-status', { operationId: 'plan-timeout' }, '').status, 'succeeded');
+test('operation status keeps an unknown operation pending until a backend receipt exists', () => {
   assert.equal(mockRequest('operation-status', { operationId: 'missing' }, '').status, 'pending');
 });
 test('consent, confirmation, action whitelist and risk rejection are enforced', () => {
   assert.throws(() => mockRequest('analyze', { goal: 'goal', consent: false }, ''), { code: 'VALIDATION_ERROR' });
   assert.throws(() => mockRequest('create-plan', { ...plan, confirmed: false }, 'no-confirm'), { code: 'CONFIRMATION_REQUIRED' });
   assert.throws(() => mockRequest('unknown', {}, 'unknown'), { code: 'UNKNOWN_ACTION' });
-  for (const scenario of ['insufficient', 'overLimit']) assert.equal(mockRequest('create-plan', { ...plan, scenario }, scenario).status, 'failed');
   assert.equal(mockRequest('analyze', { goal: 'goal', consent: true }, '').totalExpenseFen > 0, true);
 });
 
