@@ -9,7 +9,7 @@ export async function request<A extends Action>(action: A, input: RequestMap[A],
     if (options.signal?.aborted) throw new ApiError("ABORTED", "请求已取消");
     return mockRequest(action, input, operationId);
   }
-  const write = action === "create-plan" || action === "confirm-payment";
+  const write = action === "create-plan";
   const controller = new AbortController();
   const abort = () => controller.abort();
   options.signal?.addEventListener("abort", abort, { once: true });

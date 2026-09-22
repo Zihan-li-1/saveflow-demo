@@ -603,70 +603,11 @@
       "目标从2026-09-01开始、在2026-12-31前完成，按4个月计算，建议月供为5000元；演示默认不计入目标已有余额。"
     ]
   },
-  "simulationScenarios": [
-    {
-      "id": "SCN-OVER-LIMIT",
-      "name": "娱乐卡超限消费",
-      "cardId": "CARD-ENT",
-      "purchaseAmount": 100,
-      "savingRate": 0.1,
-      "savingAmount": 10,
-      "totalDebitIfApproved": 110,
-      "spentBefore": 760,
-      "monthlyLimit": 800,
-      "spentAfterIfApproved": 860,
-      "expectedInitialState": "OVER_LIMIT",
-      "requiresConfirmation": true,
-      "onConfirm": "simulate_approved_payment_and_saving_transfer",
-      "onCancel": "no_balance_change"
-    },
-    {
-      "id": "SCN-INSUFFICIENT",
-      "name": "余额不足",
-      "cardId": "CARD-MAIN",
-      "purchaseAmount": 6000,
-      "savingRate": 0.05,
-      "savingAmount": 300,
-      "totalDebitIfApproved": 6300,
-      "expectedInitialState": "INSUFFICIENT_BALANCE",
-      "requiresConfirmation": false
-    },
-    {
-      "id": "SCN-NORMAL",
-      "name": "正常消费即储蓄",
-      "cardId": "CARD-MAIN",
-      "purchaseAmount": 100,
-      "savingRate": 0.05,
-      "savingAmount": 5,
-      "totalDebitIfApproved": 105,
-      "expectedInitialState": "WAITING_CONFIRMATION",
-      "requiresConfirmation": true
-    }
-  ],
-  "mockActions": [
-    {
-      "actionId": "action-001",
-      "type": "CREATE_SAVING_PLAN",
-      "targetId": "GOAL-001",
-      "requiresConfirmation": true,
-      "status": "pending",
-      "auditEventId": "AUDIT-001"
-    },
-    {
-      "actionId": "action-002",
-      "type": "SET_CARD_LIMIT",
-      "targetId": "CARD-ENT",
-      "amount": 800,
-      "requiresConfirmation": true,
-      "status": "pending",
-      "auditEventId": "AUDIT-002"
-    }
-  ],
   "implementationNotes": [
     "金额字段单位均为元，演示金额均为整数；真实系统建议使用分为单位的整数。",
     "transactions为2026-06至2026-08已入账历史记录；2026-09的卡片monthlySpent为独立演示初始状态，不要与8月账单相加。",
     "历史订阅支出按月合计模拟；subscriptions仅代表当前两项订阅，不可据此推断历史订阅数量。",
-    "执行模拟操作时复制数据到运行时状态，按用户确认结果更新余额、卡片消费额和储蓄账户；不要直接改写种子文件。",
-    "超限后是否放行仅为Demo规则，不代表真实银行卡授权规则。"
+    "执行模拟操作时复制数据到运行时状态，按用户确认结果更新演示目标；不要直接改写种子文件。",
+    "卡片、订阅和理财字段作为 Financial Context v1 只读素材，任何写操作都必须经过独立的风险与确认流程。"
   ]
 }

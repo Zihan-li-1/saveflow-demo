@@ -4,7 +4,7 @@ import { canTransition, transition, type FlowEvent, type Stage } from "./flow-ma
 import { request } from "./api/client";
 import { apiConfig } from "./api/config";
 import { askQwen, type AgentTurn } from "./agent-client";
-import { ApiError, validatePlan, type Analysis, type Receipt, type Scenario } from "./api/contracts";
+import { ApiError, validatePlan, type Analysis, type Receipt } from "./api/contracts";
 
 export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error"; analysis?: Analysis };
 const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。告诉我一个具体的储蓄目标，我会把它拆成可执行的消费规则。" }];
@@ -23,7 +23,6 @@ export function useSaveflow() {
   const [input, setInput] = useState("");
   const [monthlySaving, setMonthlySaving] = useState(2500);
   const [saveRate, setSaveRate] = useState(10);
-  const [scenario, setScenario] = useState<Scenario>("normal");
   const [consent, setConsent] = useState(false);
   const [operationId, setOperationId] = useState("");
   const [failure, setFailure] = useState<"analysis" | "plan">("analysis");
@@ -107,7 +106,7 @@ export function useSaveflow() {
     addMessage({ role: "user", text: `确认创建计划：每月 ¥${monthlySaving}，${category}储蓄 ${saveRate}%。本次不发起支付。` });
     try {
       if (apiConfig.mode === "http") sessionStorage.setItem(pendingKey, id);
-      settle(await request("create-plan", { ...draft, ...(apiConfig.mode === "mock" ? { scenario } : {}) }, { operationId: id }));
+      settle(await request("create-plan", draft, { operationId: id }));
     } catch (error) {
       const uncertain = !(error instanceof ApiError) || error.uncertain;
       send(uncertain ? "UNCERTAIN" : "FAILED");
@@ -132,9 +131,9 @@ export function useSaveflow() {
   const restart = () => {
     if (!send("RESET")) return;
     generation.current++; active.current?.abort(); setMessages(initialMessages); setInput("");
-    setMonthlySaving(2500); setSaveRate(10); setScenario("normal"); setValidation(""); setOperationId(""); setConsent(false);
+    setMonthlySaving(2500); setSaveRate(10); setValidation(""); setOperationId(""); setConsent(false);
     setCategory("日常消费"); setTargetAmountFen(2000000); setUsage(null); conversation.current = [];
   };
   const changeModelMode = (mode: "qwen" | "mock") => { if (!canTransition(stageRef.current, "RESET")) return; restart(); setModelMode(mode); };
-  return { stage, messages, input, setInput, monthlySaving, setMonthlySaving, saveRate, setSaveRate, scenario, setScenario, consent, setConsent, validation, operationId, failure, startDemo, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => startDemo(goal.current), canStart: ["welcome", "success", "cancelled", "clarifying", "answered"].includes(stage), canReset: canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, category, targetAmountFen, usage };
+  return { stage, messages, input, setInput, monthlySaving, setMonthlySaving, saveRate, setSaveRate, consent, setConsent, validation, operationId, failure, startDemo, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => startDemo(goal.current), canStart: ["welcome", "success", "cancelled", "clarifying", "answered"].includes(stage), canReset: canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, category, targetAmountFen, usage };
 }

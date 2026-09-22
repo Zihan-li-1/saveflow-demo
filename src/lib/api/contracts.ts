@@ -1,14 +1,17 @@
-export type Scenario = "normal" | "insufficient" | "overLimit" | "timeout";
-export type PlanInput = { monthlySavingFen: number; saveRateBps: number; confirmed: true; scenario?: Scenario; category?: string; targetAmountFen?: number | null };
+export type PlanInput = { monthlySavingFen: number; saveRateBps: number; confirmed: true; category?: string; targetAmountFen?: number | null };
 export type Receipt = { operationId: string; status: "succeeded" | "failed" | "pending"; message: string };
-export type Analysis = { totalExpenseFen: number; subscriptionCount: number };
+export type Analysis = {
+  totalExpenseFen: number;
+  subscriptionCount: number;
+  momIncreaseFen?: number;
+  categories?: readonly { name: string; changeAmountFen: number }[];
+};
 export type RequestMap = {
   analyze: { goal: string; consent: true };
   "create-plan": PlanInput;
-  "confirm-payment": { scenario: Exclude<Scenario, "timeout">; confirmed: true };
   "operation-status": { operationId: string };
 };
-export type ResultMap = { analyze: Analysis; "create-plan": Receipt; "confirm-payment": Receipt; "operation-status": Receipt };
+export type ResultMap = { analyze: Analysis; "create-plan": Receipt; "operation-status": Receipt };
 export type Action = keyof RequestMap;
 export type Envelope<T> = { code: string; message: string; requestId: string; data?: T };
 export class ApiError extends Error {
