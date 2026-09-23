@@ -2,6 +2,7 @@
   "name": "saveflow-demo",
   "version": "0.1.0",
   "private": true,
+  "engines": { "node": ">=22.12.0" },
   "scripts": {
     "dev": "next dev",
     "dev:qwen": "node scripts/dev-qwen.mjs",
@@ -10,7 +11,8 @@
     "start": "next start",
     "start:network": "next start --hostname 0.0.0.0",
     "lint": "eslint",
-    "test": "node --test tests/flow.test.cjs tests/qwen.test.cjs",
+    "test": "node --test tests/flow.test.cjs tests/qwen.test.cjs tests/banking-core.test.mjs tests/banking-http.test.cjs",
+    "demo:banking": "node scripts/demo-banking.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

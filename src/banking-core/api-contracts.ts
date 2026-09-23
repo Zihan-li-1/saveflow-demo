@@ -1,0 +1,32 @@
+import type { Account, ActionReceipt, ContextInfo, DecisionInput, OperationStatus, Payee, PreparedAction, Transaction, TransferInput, InvestmentProduct, Card, Subscription } from "./contracts";
+export type BankingRequestMap = {
+  "context.get": Record<string, never>;
+  "account.list": Record<string, never>;
+  "account.get": { id: string };
+  "payee.list": Record<string, never>;
+  "payee.get": { id: string };
+  "transaction.list": { accountId?: string; month?: string };
+  "product.list": Record<string, never>;
+  "card.list": Record<string, never>;
+  "subscription.list": Record<string, never>;
+  "transfer.prepare": TransferInput;
+  "action.decide": DecisionInput & { operationId: string };
+  "action.execute": { operationId: string; previewHash: string };
+  "action.status": { operationId: string };
+};
+export type BankingResultMap = {
+  "context.get": ContextInfo;
+  "account.list": Account[];
+  "account.get": Account;
+  "payee.list": Payee[];
+  "payee.get": Payee;
+  "transaction.list": Transaction[];
+  "product.list": InvestmentProduct[];
+  "card.list": Card[];
+  "subscription.list": Subscription[];
+  "transfer.prepare": PreparedAction;
+  "action.decide": OperationStatus;
+  "action.execute": ActionReceipt;
+  "action.status": OperationStatus;
+};
+export type BankingAction = keyof BankingRequestMap;

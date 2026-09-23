@@ -1,3 +1,5 @@
+import { writeOutcomeTransitions } from "../banking-core/action-machine.mjs";
+
 export type Stage = "welcome" | "analyzing" | "plan" | "edit" | "executing" | "success" | "cancelled" | "error" | "unknown" | "checking" | "clarifying" | "answered";
 export type FlowEvent = "START" | "ANALYZED" | "EDIT" | "SAVE" | "CONFIRM" | "SUCCEEDED" | "FAILED" | "UNCERTAIN" | "CHECK" | "CANCEL" | "RESET" | "CLARIFY" | "ANSWER";
 
@@ -9,9 +11,9 @@ export const transitions: Partial<Record<Stage, Partial<Record<FlowEvent, Stage>
   answered: { START: "analyzing", RESET: "welcome" },
   plan: { EDIT: "edit", CONFIRM: "executing", CANCEL: "cancelled", RESET: "welcome" },
   edit: { SAVE: "plan", CANCEL: "cancelled", RESET: "welcome" },
-  executing: { SUCCEEDED: "success", FAILED: "error", UNCERTAIN: "unknown" },
-  unknown: { CHECK: "checking" },
-  checking: { SUCCEEDED: "success", FAILED: "error", UNCERTAIN: "unknown" },
+  ...Object.fromEntries(Object.entries(writeOutcomeTransitions).map(([state, events]) => [state,
+    Object.fromEntries(Object.entries(events).map(([event, next]) => [event, next === "succeeded" ? "success" : next === "failed" ? "error" : next])),
+  ])),
   error: { START: "analyzing", EDIT: "edit", RESET: "welcome" },
   success: { START: "analyzing", RESET: "welcome" },
   cancelled: { START: "analyzing", RESET: "welcome" },

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { canTransition, transition, type FlowEvent, type Stage } from "./flow-machine";
+import { saveflowMock } from "./saveflow-mock";
 import { request } from "./api/client";
 import { apiConfig } from "./api/config";
 import { askQwen, type AgentTurn } from "./agent-client";
@@ -15,13 +16,13 @@ export function useSaveflow() {
   const [modelMode, setModelMode] = useState<"qwen" | "mock">("qwen");
   const [accessCode, setAccessCode] = useState("");
   const [category, setCategory] = useState("日常消费");
-  const [targetAmountFen, setTargetAmountFen] = useState<number | null>(2000000);
+  const [targetAmountFen, setTargetAmountFen] = useState<number | null>(saveflowMock.goal.targetAmount * 100);
   const [usage, setUsage] = useState<{ inputTokens: number; outputTokens: number } | null>(null);
   const conversation = useRef<AgentTurn[]>([]);
   const stageRef = useRef<Stage>("welcome");
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState("");
-  const [monthlySaving, setMonthlySaving] = useState(2500);
+  const [monthlySaving, setMonthlySaving] = useState(saveflowMock.goal.monthlySaving);
   const [saveRate, setSaveRate] = useState(10);
   const [consent, setConsent] = useState(false);
   const [operationId, setOperationId] = useState("");
@@ -59,7 +60,7 @@ export function useSaveflow() {
   const startDemo = async (text = input.trim() || "我想在年底存下 2 万元") => {
     if (!consent) { setValidation("请先勾选账单分析授权。"); return; }
     if (!text.trim() || text.length > 500) { setValidation("目标须为 1–500 字。"); return; }
-    if (modelMode === "qwen" && !accessCode.trim()) { setValidation("请输入服务端配置的演示访问码（不是百炼 API Key）。"); return; }
+    if ((modelMode === "qwen" || apiConfig.mode === "http") && !accessCode.trim()) { setValidation("请输入服务端配置的演示访问码（不是百炼 API Key）。"); return; }
     if (!send("START")) return;
     setValidation(""); setInput(""); goal.current = text;
     addMessage({ role: "user", text });
@@ -79,7 +80,7 @@ export function useSaveflow() {
         } else send(answer.needsClarification ? "CLARIFY" : "ANSWER");
         return;
       }
-      const analysis = await request("analyze", { goal: text, consent: true }, { signal: active.current.signal });
+      const analysis = await request("analyze", { goal: text, consent: true }, { signal: active.current.signal, accessCode });
       if (generation.current !== version) return;
       addMessage({ role: "agent", kind: "analysis", analysis, text: "模拟账单分析已完成。以下为演示方案，修改后请再次确认。" });
       send("ANALYZED");
@@ -106,7 +107,7 @@ export function useSaveflow() {
     addMessage({ role: "user", text: `确认创建计划：每月 ¥${monthlySaving}，${category}储蓄 ${saveRate}%。本次不发起支付。` });
     try {
       if (apiConfig.mode === "http") sessionStorage.setItem(pendingKey, id);
-      settle(await request("create-plan", draft, { operationId: id }));
+      settle(await request("create-plan", draft, { operationId: id, accessCode }));
     } catch (error) {
       const uncertain = !(error instanceof ApiError) || error.uncertain;
       send(uncertain ? "UNCERTAIN" : "FAILED");
@@ -116,7 +117,7 @@ export function useSaveflow() {
   };
   const checkResult = async () => {
     if (!operationId || !send("CHECK")) return;
-    try { settle(await request("operation-status", { operationId })); }
+    try { settle(await request("operation-status", { operationId }, { accessCode })); }
     catch (error) { send("UNCERTAIN"); addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "结果查询失败" }); }
   };
   const editPlan = () => { if (send("EDIT")) setValidation(""); };
@@ -131,7 +132,7 @@ export function useSaveflow() {
   const restart = () => {
     if (!send("RESET")) return;
     generation.current++; active.current?.abort(); setMessages(initialMessages); setInput("");
-    setMonthlySaving(2500); setSaveRate(10); setValidation(""); setOperationId(""); setConsent(false);
+    setMonthlySaving(saveflowMock.goal.monthlySaving); setSaveRate(10); setValidation(""); setOperationId(""); setConsent(false);
     setCategory("日常消费"); setTargetAmountFen(2000000); setUsage(null); conversation.current = [];
   };
   const changeModelMode = (mode: "qwen" | "mock") => { if (!canTransition(stageRef.current, "RESET")) return; restart(); setModelMode(mode); };
