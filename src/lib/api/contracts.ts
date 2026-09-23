@@ -1,6 +1,10 @@
 export type PlanInput = { monthlySavingFen: number; saveRateBps: number; confirmed: true; category?: string; targetAmountFen?: number | null };
 export type Receipt = { operationId: string; status: "succeeded" | "failed" | "pending"; message: string };
 export type Analysis = {
+  asOf?: string;
+  currentMonth?: string;
+  previousMonth?: string;
+  dataSource?: string;
   totalExpenseFen: number;
   subscriptionCount: number;
   momIncreaseFen?: number;
