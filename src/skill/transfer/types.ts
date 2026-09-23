@@ -2,28 +2,35 @@
 /**
  * Transfer Skill 类型定义（阶段一：仅转账能力）
  *
+ * 契约依据：intent-contracts.md v1.1.0 的 transfer.create 动作。
  * 约定：
- * 1. 本模块只实现转账能力，不包含任何卡片相关代码。
- * 2. 金额一律使用「分」（fen）的整数表示：500 元 = 50000 fen。
- *    严禁浮点数，禁止直接用元作为内部计算单位。
- * 3. 所有外部依赖（FinancialContextRepository / riskCheck / executeTransfer）
- *    均由调用方以入参注入，本模块不自行实现、不写硬编码 mock 账户 / 收款人数据。
- * 4. 状态一律用字面量联合类型严格约束，便于编译期收窄与校验。
+ * 1. 金额严禁浮点数，统一 { amount_minor: number, currency: "CNY" }，amount_minor 为分的整数。
+ * 2. 槽位名遵循契约：payee_ref / amount / source_account_ref；
+ *    payee_ref 原始可为用户口语称呼，解析完成后映射服务端 entity_id。
+ * 3. 收款人歧义 / 找不到 → 返回 state:needs_clarification 并附带 clarification，不抛异常、不猜测。
+ * 4. 本 skill 只做实体解析与转账预览数据组装：不实现用户确认、不计算 risk_level（由上层 Risk 引擎负责）、绝不直接执行真实转账。
+ * 5. 对外输出字段 snake_case，对齐合约 JSON。
  */
 
-/** 货币代码（严格字面量约束；当前仅支持人民币，fen 即人民币最小货币单位） */
+/** 货币代码（严格字面量约束；当前仅支持人民币） */
 export type Currency = "CNY";
 
-/** 收款人实体（由 FinancialContextRepository 提供） */
+/** 金额结构：严禁浮点，amount_minor 为分的整数 */
+export interface Amount {
+  /** 金额（分，整数） */
+  amount_minor: number;
+  /** 货币代码 */
+  currency: Currency;
+}
+
+/** 收款人实体（由 FinancialContextRepository 提供）；id 即服务端 entity_id */
 export interface Payee {
-  /** 收款人唯一 ID */
+  /** 服务端 entity_id */
   id: string;
   /** 收款人姓名 */
   name: string;
-  /** 收款账户号（可选，由底座按需提供） */
-  accountNumber?: string;
-  /** 收款银行（可选） */
-  bankName?: string;
+  /** 别名（口语称呼），用于 payee_ref 匹配 */
+  aliases?: string[];
 }
 
 /** 账户实体（由 FinancialContextRepository 提供） */
@@ -37,126 +44,99 @@ export interface Account {
 }
 
 /**
- * 金融上下文底座（B 同学提供）。
- * 本模块仅声明接口契约，不实现、不 mock。
+ * 金融上下文底座（只读查询）。本模块仅声明接口契约，不实现、不 mock。
  */
 export interface FinancialContextRepository {
   /** 按账户 ID 查询账户；不存在时返回 null */
   queryAccount(accountId: string): Promise<Account | null> | Account | null;
-  /** 按收款人姓名查询收款人列表（可能 0 个、1 个或多个重名） */
+  /** 按收款人姓名（含别名）查询收款人列表（可能 0 / 1 / 多个） */
   queryPayeesByName(name: string): Promise<Payee[]> | Payee[];
 }
 
-/** 风险等级（严格字面量约束） */
-export type RiskLevel = "none" | "low" | "medium" | "high";
-
-/** 外部风险校验结果（riskCheck 返回） */
-export interface RiskCheckResult {
-  /** 是否通过风险校验 */
-  passed: boolean;
-  /** 风险等级 */
-  level: RiskLevel;
-  /** 未通过时的具体原因 */
-  reasons?: string[];
+/** 解析后的实体引用（对齐 wire.mjs 的 references 结构） */
+export interface EntityReference {
+  slot: "source_account_ref" | "payee_ref";
+  /** 服务端实体 ID */
+  entity_id: string;
+  /** 实体来源：financial_context（底座唯一匹配）/ user_selection（用户显式选择） */
+  source: "financial_context" | "user_selection";
 }
 
-/** 风险校验入参 */
-export interface RiskCheckInput {
-  sourceAccountId: string;
-  payeeId: string;
-  amountFen: number;
+/** 转账意图原始槽位（LLM 抽取的口语槽位，可能缺失） */
+export interface TransferIntentSlots {
+  /** 收款人原始称呼（口语）；缺失时为 null / undefined */
+  payee_ref?: string | null;
+  /** 金额结构；缺失时为 null / undefined */
+  amount?: Amount | null;
+  /** 转出账户引用；缺失时为 null / undefined */
+  source_account_ref?: string | null;
+}
+
+/** clarification 追问信息（交由上层 Orchestrator 向用户澄清） */
+export interface Clarification {
+  reason:
+    | "missing_slot"
+    | "invalid_amount"
+    | "payee_not_found"
+    | "ambiguous_payee"
+    | "source_account_not_found";
+  /** 追问文案 */
+  question: string;
+  /** 需要澄清的槽位 */
+  slot?: "payee_ref" | "amount" | "source_account_ref";
+  /** 重名歧义时的候选列表 */
+  candidates?: Payee[];
+}
+
+/** 转账预览数据（纯组装，不扣款、不含 risk_level） */
+export interface TransferPreview {
+  source_account_id: string;
+  payee_id: string;
+  amount_minor: number;
   currency: Currency;
+  /** 转出账户可用余额（分） */
+  available_balance_minor: number;
+  /** 预估转账后余额（分） */
+  estimated_balance_after_minor: number;
 }
 
-/** 风险校验函数（B 同学 Banking Core），本模块仅声明类型 */
-export type RiskCheck = (input: RiskCheckInput) => Promise<RiskCheckResult> | RiskCheckResult;
-
-/** 真实转账入参 */
-export interface ExecuteTransferInput {
-  sourceAccountId: string;
-  payeeId: string;
-  amountFen: number;
-  currency: Currency;
-}
-
-/** 转账回执 */
-export interface TransferReceipt {
-  operationId: string;
-  status: "succeeded" | "failed" | "pending";
-  message: string;
-}
-
-/**
- * 真实执行转账（B 同学 Banking Core）。
- * 本模块只做「调用声明」，不实现内部逻辑；真正的扣款由外部实现，
- * 并在 Orchestrator 确认预览结果后调用。
- */
-export type ExecuteTransfer = (input: ExecuteTransferInput) => Promise<TransferReceipt>;
-
-/**
- * 收款人解析结果（可辨识联合，用字面量严格约束状态）：
- * - resolved   ：唯一匹配，携带 payee 实体
- * - not_found  ：0 个匹配
- * - ambiguous  ：重名歧义，携带全部候选列表（绝不私下挑选其中一个）
- */
-export type ResolvePayeeResult =
+/** 收款人解析结果（resolve_payee 输出） */
+export type PayeeResolution =
   | { status: "resolved"; payee: Payee }
-  | { status: "not_found"; query: string }
-  | { status: "ambiguous"; query: string; candidates: Payee[] };
+  | { status: "needs_clarification"; clarification: Clarification };
 
-/** 转账预览入参 */
+/** 转账预览组装入参（已唯一解析的实体 ID + 金额） */
 export interface PrepareTransferInput {
-  /** 转出账户 ID */
-  sourceAccountId: string;
-  /** 收款人 ID（由 resolve_payee 解析得到） */
-  payeeId: string;
-  /** 转账金额（分，整数） */
-  amountFen: number;
-  /** 货币代码 */
-  currency: Currency;
+  source_account_id: string;
+  payee_id: string;
+  amount: Amount;
 }
+
+/** 转账预览组装结果（prepare_transfer 输出） */
+export type PrepareTransferResult =
+  | { status: "ready"; preview: TransferPreview }
+  | { status: "needs_clarification"; clarification: Clarification };
 
 /**
- * 转账预览状态（严格字面量约束）：
- * - ready               ：余额充足且风险校验通过，可执行
- * - insufficient-balance：余额不足，标记风险，禁止执行
- * - risk-rejected       ：外部风险校验未通过，禁止执行
+ * 解析后的转账意图（D skill 对外输出，snake_case，对齐 wire.mjs 的 A/D handoff）：
+ * - ready_for_planning  ：全部槽位唯一解析成功，附带 references + preview
+ * - needs_clarification ：缺失必备槽位 / 金额非法 / 收款人找不到或重名歧义 / 转出账户不存在
  */
-export type TransferPrepareStatus = "ready" | "insufficient-balance" | "risk-rejected";
+export type ResolvedTransferIntent =
+  | {
+      action: "transfer.create";
+      state: "ready_for_planning";
+      resolved_slots: { amount: Amount };
+      references: EntityReference[];
+      preview: TransferPreview;
+    }
+  | {
+      action: "transfer.create";
+      state: "needs_clarification";
+      clarification: Clarification;
+    };
 
-/** 转账预览结果（纯预演算，不改账户、不扣款） */
-export interface TransferPrepareResult {
-  status: TransferPrepareStatus;
-  sourceAccountId: string;
-  payeeId: string;
-  amountFen: number;
-  currency: Currency;
-  /** 转账前可用余额（分） */
-  availableBalanceFen: number;
-  /** 预估转账后可用余额（分） */
-  estimatedBalanceAfterFen: number;
-  /** 外部风险校验结果 */
-  risk: RiskCheckResult;
-  /** 是否可提交真实扣款（余额不足或风险拒绝时为 false） */
-  canExecute: boolean;
-  /** 提示 / 风险说明 */
-  warnings: string[];
-}
-
-/** 转账 Skill 全部外部依赖（由调用方一次性注入） */
+/** 转账 Skill 全部外部依赖（只读底座；不注入 riskCheck / executeTransfer） */
 export interface TransferDependencies {
   repository: FinancialContextRepository;
-  riskCheck: RiskCheck;
-  executeTransfer: ExecuteTransfer;
-}
-
-/** 转账 Skill 业务异常（非法金额、账户不存在等前置条件失败） */
-export class TransferSkillError extends Error {
-  constructor(
-    public readonly code: "INVALID_INPUT" | "INVALID_AMOUNT" | "ACCOUNT_NOT_FOUND",
-    message: string
-  ) {
-    super(message);
-    this.name = "TransferSkillError";
-  }
 }

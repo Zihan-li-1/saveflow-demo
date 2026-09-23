@@ -1,38 +1,58 @@
 // skill/transfer/resolve_payee.ts
-import {
-  TransferSkillError,
-  type FinancialContextRepository,
-  type ResolvePayeeResult,
-} from "./types";
+import type { FinancialContextRepository, PayeeResolution } from "./types";
 
 /**
- * 解析收款人：输入收款人姓名字符串，查询收款人列表并消歧。
+ * 解析收款人：输入 payee_ref 口语称呼，查询收款人列表并消歧。
  *
- * - 0 个匹配   → 返回 { status: "not_found" }
- * - 1 个匹配   → 返回 { status: "resolved", payee }
- * - 多个匹配   → 返回 { status: "ambiguous", candidates }，附带全部候选，
- *                绝不私下挑选其中一个收款人。
+ * - 1 个匹配   → { status: "resolved", payee }，payee.id 即服务端 entity_id
+ * - 0 个匹配   → { status: "needs_clarification" }（payee_not_found）
+ * - 多个匹配   → { status: "needs_clarification" }（ambiguous_payee），附带全部候选，
+ *                绝不私下挑选其中一个收款人
+ * - 缺失称呼   → { status: "needs_clarification" }（missing_slot）
  *
- * @param repository 金融上下文底座（B 同学提供），用于查询收款人
- * @param name       用户输入的收款人姓名
+ * 不抛异常：一切无法唯一定位的情形都返回 clarification，交由上层 Orchestrator 澄清。
+ *
+ * @param repository 金融上下文底座（只读），用于查询收款人
+ * @param payeeRef   用户输入的收款人口语称呼（payee_ref）
  */
 export async function resolvePayee(
   repository: FinancialContextRepository,
-  name: string
-): Promise<ResolvePayeeResult> {
-  const query = typeof name === "string" ? name.trim() : "";
+  payeeRef: string | null | undefined
+): Promise<PayeeResolution> {
+  const query = typeof payeeRef === "string" ? payeeRef.trim() : "";
   if (!query) {
-    throw new TransferSkillError("INVALID_INPUT", "收款人姓名不能为空。");
+    return {
+      status: "needs_clarification",
+      clarification: {
+        reason: "missing_slot",
+        slot: "payee_ref",
+        question: "请告诉我要转给谁（收款人姓名）。",
+      },
+    };
   }
 
   const candidates = (await repository.queryPayeesByName(query)) ?? [];
 
   if (candidates.length === 0) {
-    return { status: "not_found", query };
+    return {
+      status: "needs_clarification",
+      clarification: {
+        reason: "payee_not_found",
+        slot: "payee_ref",
+        question: `没有找到收款人「${query}」，请确认姓名是否正确。`,
+      },
+    };
   }
   if (candidates.length === 1) {
     return { status: "resolved", payee: candidates[0] };
   }
-  // 重名歧义：返回全部候选，由上层（Orchestrator / 用户）决定，不做任何自动挑选。
-  return { status: "ambiguous", query, candidates };
+  return {
+    status: "needs_clarification",
+    clarification: {
+      reason: "ambiguous_payee",
+      slot: "payee_ref",
+      question: `「${query}」匹配到多位收款人，请确认是哪一位。`,
+      candidates,
+    },
+  };
 }

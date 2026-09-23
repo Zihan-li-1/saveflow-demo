@@ -1,81 +1,44 @@
 // skill/transfer/prepare_transfer.ts
-import {
-  TransferSkillError,
-  type FinancialContextRepository,
-  type PrepareTransferInput,
-  type RiskCheck,
-  type TransferPrepareResult,
-  type TransferPrepareStatus,
+import type {
+  FinancialContextRepository,
+  PrepareTransferInput,
+  PrepareTransferResult,
 } from "./types";
 
 /**
- * 转账预览预演算。
+ * 组装转账预览数据：仅查询转出账户余额并计算预估转账后余额。
+ * 不改账户、不扣款、不计算风险（risk_level 由上层 Risk 引擎负责）、不执行真实转账。
  *
- * 只计算预估转账后的可用余额，绝不修改、变更任何真实账户数据，不做扣款。
- * 调用外部 riskCheck 做风险校验；余额不足时在结果中标记风险状态。
+ * 转出账户在此处做唯一解析：若账户不存在，返回 needs_clarification，不抛异常。
  *
- * @param repository 金融上下文底座（B 同学提供），用于查询转出账户余额
- * @param riskCheck  外部风险校验函数（B 同学 Banking Core）
- * @param input      转出账户、收款人、金额（分）与币种
+ * @param repository 金融上下文底座（只读），用于查询转出账户余额
+ * @param input      已唯一解析的转出账户 ID、收款人 ID 与金额
  */
 export async function prepareTransfer(
   repository: FinancialContextRepository,
-  riskCheck: RiskCheck,
   input: PrepareTransferInput
-): Promise<TransferPrepareResult> {
-  const { sourceAccountId, payeeId, amountFen, currency } = input;
-
-  if (!sourceAccountId || !payeeId) {
-    throw new TransferSkillError("INVALID_INPUT", "转出账户与收款人 ID 不能为空。");
-  }
-  // 金额强制规则：必须为大于 0 的整数分，严禁浮点数。
-  if (!Number.isSafeInteger(amountFen) || amountFen <= 0) {
-    throw new TransferSkillError("INVALID_AMOUNT", "转账金额必须为大于 0 的整数分（fen），严禁浮点数。");
-  }
-
-  const account = await repository.queryAccount(sourceAccountId);
+): Promise<PrepareTransferResult> {
+  const account = (await repository.queryAccount(input.source_account_id)) ?? null;
   if (!account) {
-    throw new TransferSkillError("ACCOUNT_NOT_FOUND", `转出账户 ${sourceAccountId} 不存在。`);
-  }
-
-  const availableBalanceFen = account.availableBalanceFen;
-  // 预演算：仅计算预估结果，不写回任何账户数据。
-  const estimatedBalanceAfterFen = availableBalanceFen - amountFen;
-
-  const risk = await riskCheck({ sourceAccountId, payeeId, amountFen, currency });
-
-  const warnings: string[] = [];
-  let status: TransferPrepareStatus;
-  let canExecute: boolean;
-
-  if (estimatedBalanceAfterFen < 0) {
-    // 余额不足：标记风险状态，禁止执行。
-    status = "insufficient-balance";
-    canExecute = false;
-    warnings.push(
-      `余额不足：可用余额 ${availableBalanceFen} 分，不足以支付 ${amountFen} 分，本次未扣款。`
-    );
-  } else if (!risk.passed) {
-    status = "risk-rejected";
-    canExecute = false;
-    warnings.push(
-      ...(risk.reasons && risk.reasons.length > 0 ? risk.reasons : ["外部风险校验未通过。"])
-    );
-  } else {
-    status = "ready";
-    canExecute = true;
+    return {
+      status: "needs_clarification",
+      clarification: {
+        reason: "source_account_not_found",
+        slot: "source_account_ref",
+        question: `转出账户 ${input.source_account_id} 不存在，请确认。`,
+      },
+    };
   }
 
   return {
-    status,
-    sourceAccountId,
-    payeeId,
-    amountFen,
-    currency,
-    availableBalanceFen,
-    estimatedBalanceAfterFen,
-    risk,
-    canExecute,
-    warnings,
+    status: "ready",
+    preview: {
+      source_account_id: account.id,
+      payee_id: input.payee_id,
+      amount_minor: input.amount.amount_minor,
+      currency: input.amount.currency,
+      available_balance_minor: account.availableBalanceFen,
+      estimated_balance_after_minor: account.availableBalanceFen - input.amount.amount_minor,
+    },
   };
 }

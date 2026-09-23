@@ -1,69 +1,99 @@
 // skill/transfer/index.ts
 import { resolvePayee } from "./resolve_payee";
 import { prepareTransfer } from "./prepare_transfer";
-import type { PrepareTransferInput, TransferDependencies } from "./types";
+import type {
+  Amount,
+  Clarification,
+  ResolvedTransferIntent,
+  TransferDependencies,
+  TransferIntentSlots,
+} from "./types";
 
 // 导出两个核心函数 + 全部类型定义
 export { resolvePayee, prepareTransfer };
 export * from "./types";
 
-/** Tool 输入 schema 字段描述 */
-export interface ToolInputSchema {
-  type: "object";
-  properties: Record<string, { type: "string" | "integer"; description: string }>;
-  required: string[];
+/** 构造 needs_clarification 意图 */
+function needsClarification(clarification: Clarification): ResolvedTransferIntent {
+  return { action: "transfer.create", state: "needs_clarification", clarification };
 }
 
 /**
- * 单个 Tool 元信息 + 已绑定依赖的处理函数。
- * 供 A 同学的 ToolRegistry 注册，供 Orchestrator 调度调用。
- */
-export interface TransferTool {
-  /** Tool 唯一名，建议带命名空间前缀 */
-  name: string;
-  /** Tool 用途描述，供 Orchestrator 做意图路由 */
-  description: string;
-  /** 输入约束（JSON Schema 风格），供参数校验 */
-  inputSchema: ToolInputSchema;
-  /** 已绑定依赖的执行入口 */
-  run: (args: Record<string, unknown>) => Promise<unknown>;
-}
-
-/**
- * 产出 Transfer Skill 的 Tool 元信息（用于注册进 A 同学的 ToolRegistry，
- * 供 Orchestrator 调度调用）。外部依赖由调用方注入并在此绑定。
+ * 解析转账意图（transfer.create）：把 LLM 抽取的口语槽位解析为服务端实体引用并组装转账预览。
  *
- * 注意：executeTransfer 在 deps 中声明但不在任何 Tool 内直接调用——
- * 真正扣款应在 Orchestrator 拿到 canExecute=true 的预览结果、并取得用户
- * 确认后，由上层调用 deps.executeTransfer 执行。
+ * 输出 snake_case 的 ResolvedTransferIntent：
+ * - ready_for_planning  ：全部槽位唯一解析成功，附带 references + preview
+ * - needs_clarification ：缺失必备槽位 / 金额非法 / 收款人找不到或重名歧义 / 转出账户不存在
+ *
+ * 职责边界：只做实体解析与转账预览数据组装；不实现用户确认、不计算 risk_level、绝不执行真实转账。
+ * 真正扣款应由上层（Orchestrator）在取得用户确认后调用 Banking Core 的 transfer.prepare → decide → execute。
  */
-export function createTransferTools(deps: TransferDependencies): TransferTool[] {
-  return [
-    {
-      name: "transfer.resolve_payee",
-      description: "根据收款人姓名解析唯一收款人；重名时返回全部候选，绝不私下挑选。",
-      inputSchema: {
-        type: "object",
-        properties: { name: { type: "string", description: "收款人姓名" } },
-        required: ["name"],
-      },
-      run: (args) => resolvePayee(deps.repository, typeof args.name === "string" ? args.name : ""),
-    },
-    {
-      name: "transfer.prepare_transfer",
-      description: "转账预览预演算：只计算预估转账后余额，不扣款、不改账户，并做风险校验。",
-      inputSchema: {
-        type: "object",
-        properties: {
-          sourceAccountId: { type: "string", description: "转出账户 ID" },
-          payeeId: { type: "string", description: "收款人 ID" },
-          amountFen: { type: "integer", description: "转账金额（分，整数）" },
-          currency: { type: "string", description: "货币代码，当前仅 CNY" },
-        },
-        required: ["sourceAccountId", "payeeId", "amountFen", "currency"],
-      },
-      run: (args) =>
-        prepareTransfer(deps.repository, deps.riskCheck, args as unknown as PrepareTransferInput),
-    },
-  ];
+export async function resolveTransferIntent(
+  deps: TransferDependencies,
+  slots: TransferIntentSlots
+): Promise<ResolvedTransferIntent> {
+  const { repository } = deps;
+
+  // ① 金额校验：缺失 → needs_clarification；必须为大于 0 的整数分，严禁浮点。
+  const amount = slots.amount;
+  if (!amount) {
+    return needsClarification({
+      reason: "missing_slot",
+      slot: "amount",
+      question: "请告诉我转账金额。",
+    });
+  }
+  if (!Number.isSafeInteger(amount.amount_minor) || amount.amount_minor <= 0) {
+    return needsClarification({
+      reason: "invalid_amount",
+      slot: "amount",
+      question: "转账金额必须为大于 0 的整数分，请重新输入。",
+    });
+  }
+  if (amount.currency !== "CNY") {
+    return needsClarification({
+      reason: "invalid_amount",
+      slot: "amount",
+      question: "目前仅支持人民币（CNY）转账。",
+    });
+  }
+  const normalizedAmount: Amount = { amount_minor: amount.amount_minor, currency: amount.currency };
+
+  // ② 转出账户槽位：缺失必备槽位 → needs_clarification。
+  const sourceAccountRef =
+    typeof slots.source_account_ref === "string" ? slots.source_account_ref.trim() : "";
+  if (!sourceAccountRef) {
+    return needsClarification({
+      reason: "missing_slot",
+      slot: "source_account_ref",
+      question: "请确认从哪个账户转出。",
+    });
+  }
+
+  // ③ 收款人解析（payee_ref 口语称呼 → 服务端 entity_id）。
+  const payee = await resolvePayee(repository, slots.payee_ref);
+  if (payee.status === "needs_clarification") {
+    return needsClarification(payee.clarification);
+  }
+
+  // ④ 组装转账预览数据（此处同时完成转出账户的唯一解析）。
+  const prepared = await prepareTransfer(repository, {
+    source_account_id: sourceAccountRef,
+    payee_id: payee.payee.id,
+    amount: normalizedAmount,
+  });
+  if (prepared.status === "needs_clarification") {
+    return needsClarification(prepared.clarification);
+  }
+
+  return {
+    action: "transfer.create",
+    state: "ready_for_planning",
+    resolved_slots: { amount: normalizedAmount },
+    references: [
+      { slot: "source_account_ref", entity_id: prepared.preview.source_account_id, source: "financial_context" },
+      { slot: "payee_ref", entity_id: prepared.preview.payee_id, source: "financial_context" },
+    ],
+    preview: prepared.preview,
+  };
 }
