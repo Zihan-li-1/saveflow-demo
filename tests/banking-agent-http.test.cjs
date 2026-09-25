@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { createBankingCore } = require('../src/banking-core/core.mjs');
 const { handleBankingAgent } = require('../server/banking-agent.mjs');
 
-const env = { SAVEFLOW_ACCESS_CODE: 'test-access-code-1234', DASHSCOPE_API_KEY: 'fake-key' };
+const env = { SAVEFLOW_ACCESS_CODE: 'test-access-code-1234', CONTINUATION_TOKEN_SECRET: 'test-continuation-secret-1234', DASHSCOPE_API_KEY: 'fake-key' };
 const request = (body, headers = {}) => new Request('http://localhost/api/banking-agent', {
   method: 'POST',
   headers: { 'content-type': 'application/json', 'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, ...headers },

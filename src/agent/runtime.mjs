@@ -12,6 +12,7 @@ export async function dispatchParsedIntent(value, dependencies) {
   try {
     if (intent.action === 'transfer.create') return await dependencies.transferHandler(intent);
     if (intent.action === 'bill.summary') return await dependencies.billHandler(intent);
+    return { ok: false, kind: 'unsupported' };
   } catch (error) {
     return { ok: false, kind: 'skill_error', action: intent.action, error: { code: 'SKILL_ERROR', message: error instanceof Error && error.message.trim() ? error.message : 'Skill 处理失败，请稍后重试。' } };
   }
@@ -33,11 +34,17 @@ export async function handleBillSummary(intent, repository) {
   return { ok: true, kind: 'bill_result', action: 'bill.summary', data: summary, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: transactions.map(transaction => transaction.id) }] };
 }
 
-function transferRepository(repository) {
+function transferRepository(repository, selections = {}) {
   const normalize = value => value.trim().replace(/^模拟/, '').replace(/账户$/, '');
   return {
     queryAccount(reference) {
       const query = reference.trim();
+      const selected = selections.source_account_ref;
+      if (selected?.entityId) {
+        const account = repository.getAccount(selected.entityId);
+        if (!account || account.status !== 'active') return null;
+        return { id: account.id, currency: account.currency, availableBalanceFen: account.availableBalanceFen };
+      }
       const normalized = normalize(query);
       const account = repository.getAccounts().find(candidate => {
         const name = normalize(candidate.name);
@@ -48,7 +55,13 @@ function transferRepository(repository) {
     },
     queryPayeesByName(name) {
       const query = name.trim();
-      return repository.getPayees().filter(payee => payee.status === 'active' && (payee.name === query || payee.aliases.includes(query))).map(payee => ({ id: payee.id, name: payee.name, aliases: [...payee.aliases] }));
+      const selected = selections.payee_ref;
+      if (selected?.entityId) {
+        const payee = repository.getPayee(selected.entityId);
+        if (!payee || payee.status !== 'active') return [];
+        return [{ id: payee.id, name: payee.name, aliases: [...payee.aliases], accountNoMasked: payee.accountNoMasked }];
+      }
+      return repository.getPayees().filter(payee => payee.status === 'active' && (payee.name === query || payee.aliases.includes(query))).map(payee => ({ id: payee.id, name: payee.name, aliases: [...payee.aliases], accountNoMasked: payee.accountNoMasked }));
     },
   };
 }
@@ -79,7 +92,7 @@ async function resolveTransferIntent(repository, slots) {
 
 export async function handleTransfer(intent, repository) {
   const resolved = await resolveTransferIntent(repository, intent.slots);
-  if (resolved.state === 'needs_clarification') return { ok: false, kind: 'needs_clarification', action: 'transfer.create', source: 'resolver', question: resolved.clarification.question, ...(resolved.clarification.candidates ? { candidates: resolved.clarification.candidates } : {}) };
+  if (resolved.state === 'needs_clarification') return { ok: false, kind: 'needs_clarification', action: 'transfer.create', source: 'resolver', question: resolved.clarification.question, slot: resolved.clarification.slot, reason: resolved.clarification.reason, ...(resolved.clarification.candidates ? { candidates: resolved.clarification.candidates } : {}) };
   return { ok: true, kind: 'transfer_resolution', action: 'transfer.create', data: resolved };
 }
 
