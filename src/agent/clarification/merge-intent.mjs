@@ -16,5 +16,7 @@ export function buildParsedIntent(action, slots) {
 }
 
 export function mergeSlots(slots, updates) {
-  return { ...slots, ...updates };
+  const merged = { ...slots, ...updates };
+  for (const key of Object.keys(merged)) if (merged[key] === undefined) delete merged[key];
+  return merged;
 }

@@ -1,0 +1,24 @@
+{
+  "code": "NEEDS_CLARIFICATION",
+  "message": "要从哪个账户转出？",
+  "requestId": "fixture-request-id",
+  "data": {
+    "kind": "clarification",
+    "status": "needs_clarification",
+    "action": "transfer.create",
+    "question": "要从哪个账户转出？",
+    "slot": "source_account_ref",
+    "source": "parser",
+    "choices": [
+      {
+        "optionId": "opt_52171d91-bbfb-49a6-bfbd-76debe5f12f1",
+        "label": "模拟活期账户"
+      },
+      {
+        "optionId": "opt_2b73d93b-b59a-453d-9546-597eb03104d9",
+        "label": "模拟储蓄账户"
+      }
+    ],
+    "continuationToken": "<opaque-token-use-live-response-for-requests>"
+  }
+}

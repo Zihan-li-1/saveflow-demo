@@ -1,0 +1,46 @@
+{
+  "code": "OK",
+  "message": "账单统计已生成",
+  "requestId": "fixture-request-id",
+  "data": {
+    "status": "bill_result",
+    "action": "bill.summary",
+    "data": {
+      "totalIncomeFen": 1200000,
+      "totalExpenseFen": 846000,
+      "transactionCount": 12,
+      "categoryTotals": {
+        "房租": 300000,
+        "餐饮": 145000,
+        "交通": 40000,
+        "通信": 10000,
+        "日用品": 50000,
+        "娱乐": 112000,
+        "购物": 128000,
+        "订阅": 9000,
+        "其他": 52000
+      },
+      "month": "2026-08"
+    },
+    "evidence": [
+      {
+        "source": "synthetic_demo_only",
+        "asOf": "2026-09-01T00:00:00+08:00",
+        "entityIds": [
+          "TXN-202608-SAL",
+          "TXN-202608-01-1",
+          "TXN-202608-02-1",
+          "TXN-202608-03-1",
+          "TXN-202608-04-1",
+          "TXN-202608-05-1",
+          "TXN-202608-06-1",
+          "TXN-202608-06-2",
+          "TXN-202608-07-1",
+          "TXN-202608-07-2",
+          "TXN-202608-08-1",
+          "TXN-202608-09-1"
+        ]
+      }
+    ]
+  }
+}

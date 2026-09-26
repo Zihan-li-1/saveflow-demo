@@ -20,6 +20,7 @@ DASHSCOPE_API_KEY=你的北京地域百炼密钥
 QWEN_MODEL=qwen-plus
 QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 SAVEFLOW_ACCESS_CODE=自己设置的至少16位演示访问码
+CONTINUATION_TOKEN_SECRET=另一个至少16位服务端续接密钥
 ```
 
 `DASHSCOPE_API_KEY` 只交给后端。`SAVEFLOW_ACCESS_CODE` 是另外设置的私人演示口令，在网页输入；它不等于百炼密钥。二者都不能加 `NEXT_PUBLIC_` 前缀，不能提交到仓库。演示访问码只保存在页面内存，刷新后需重输。
@@ -48,7 +49,7 @@ Banking Core 已新增独立的模拟接口与确认流程，说明见 [Banking 
 2. 在现有 Netlify 项目的构建设置里连接该仓库，不新建站点。
 3. 如果仓库根目录就是项目目录，Base directory 留空；否则填 `saveflow-demo`。
 4. Build command 为 `npm run build`，Publish directory 为 `out`。仓库中的 `netlify.toml` 已配置 `netlify/functions` 为函数目录。
-5. 在项目 Environment variables 中增加 `DASHSCOPE_API_KEY`、`QWEN_MODEL`、`QWEN_BASE_URL`、`SAVEFLOW_ACCESS_CODE`，确保对 **Functions 运行时和 Production 部署**生效。业务接口模式保持默认 `mock`。
+5. 在项目 Environment variables 中增加 `DASHSCOPE_API_KEY`、`QWEN_MODEL`、`QWEN_BASE_URL`、`SAVEFLOW_ACCESS_CODE`、`CONTINUATION_TOKEN_SECRET`，确保对 **Functions 运行时和 Production 部署**生效。业务接口模式保持默认 `mock`。
 6. 触发部署，在部署结果中确认有 `agent` Function，查看日志确认限流规则成功生效。打开原网址，选择 Qwen、输入演示访问码并提问。
 
 ### 方式二：Netlify CLI 发布到原站点
@@ -98,3 +99,5 @@ netlify deploy --prod --dir=out --functions=netlify/functions
 - [Qwen Plus 能力及价格](https://help.aliyun.com/zh/model-studio/qwen-plus)
 - [Netlify Functions 入门](https://docs.netlify.com/build/functions/get-started/)
 - [Netlify 限流规则](https://docs.netlify.com/manage/security/secure-access-to-sites/rate-limiting/)
+
+Banking Agent 为 IM 默认入口，旧 Qwen 储蓄助手需手动切换。新合同与部署验收范围见 [Banking Agent API](Banking-Agent-API.md) 和 [联调记录](Banking-Agent-Integration.md)。

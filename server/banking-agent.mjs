@@ -145,6 +145,7 @@ export async function handleBankingAgent(
 
     const expected = env.SAVEFLOW_ACCESS_CODE;
     if (!expected || expected.length < 16) return reply(503, 'ACCESS_NOT_CONFIGURED', '请配置服务端演示访问码');
+    if (typeof continuationSecret(env) !== 'string' || continuationSecret(env).length < 16) return reply(503, 'CONTINUATION_CONFIG_ERROR', '请配置服务端续接令牌密钥');
     const supplied = Buffer.from(request.headers.get('x-saveflow-access') || '');
     const expectedBytes = Buffer.from(expected);
     if (supplied.length !== expectedBytes.length || !timingSafeEqual(supplied, expectedBytes)) return reply(401, 'UNAUTHORIZED', '演示访问码无效');
@@ -154,11 +155,12 @@ export async function handleBankingAgent(
     const allowed = ['message', 'history', 'consent', 'continuationToken', 'choice'];
     if (Object.keys(body).some(key => !allowed.includes(key))) return reply(400, 'INVALID_REQUEST', '请求包含未注册字段');
     const continuing = body.continuationToken !== undefined;
+    if (body.choice !== undefined && (!continuing || body.message !== undefined)) return reply(400, 'INVALID_REQUEST', 'choice 必须与 continuationToken 一起提交，且不能同时提交 message');
     if (continuing && (typeof body.continuationToken !== 'string' || body.continuationToken.length > 10000)) return reply(400, 'CONTINUATION_INVALID', '续接凭据无效');
     if (!continuing && (typeof body.message !== 'string' || !body.message.trim() || body.message.length > 2000)) return reply(400, 'INVALID_REQUEST', 'message 必须是 1-2000 字符的文本');
     if (continuing && body.message !== undefined && (typeof body.message !== 'string' || body.message.length > 2000)) return reply(400, 'INVALID_REQUEST', 'message 格式无效');
     if (continuing && body.message === undefined && (!body.choice || typeof body.choice !== 'object')) return reply(400, 'INVALID_REQUEST', '续接请求需要 message 或 choice');
-    if (body.choice !== undefined && (!body.choice || typeof body.choice !== 'object' || Array.isArray(body.choice) || typeof body.choice.optionId !== 'string')) return reply(400, 'INVALID_REQUEST', 'choice 格式无效');
+    if (body.choice !== undefined && (!body.choice || typeof body.choice !== 'object' || Array.isArray(body.choice) || typeof body.choice.optionId !== 'string' || !body.choice.optionId.trim() || Object.keys(body.choice).some(key => key !== 'optionId'))) return reply(400, 'INVALID_REQUEST', 'choice 只能包含非空 optionId');
     if (body.consent !== undefined && body.consent !== true) return reply(400, 'INVALID_REQUEST', 'consent 必须明确为 true');
     const history = body.history ?? [];
     if (!Array.isArray(history) || history.length > 12 || history.some(item => !item || !['user', 'assistant'].includes(item.role) || typeof item.content !== 'string' || !item.content.trim() || item.content.length > 2000)) return reply(400, 'INVALID_REQUEST', 'history 格式无效');
@@ -181,7 +183,8 @@ export async function handleBankingAgent(
           parsed = buildParsedIntent(continuation.action, mergeSlots(continuation.slots, { [continuation.pendingSlot]: selected.rawValue || selected.label }));
         } else if (answer.kind === 'slot') {
           parsed = buildParsedIntent(continuation.action, mergeSlots(continuation.slots, answer.updates));
-          selections = continuation.selections || {};
+          selections = { ...continuation.selections };
+          for (const slot of Object.keys(answer.updates)) delete selections[slot];
         } else {
           return clarificationResponse(reply, {
             action: continuation.action,
@@ -209,13 +212,16 @@ export async function handleBankingAgent(
       : { prepare: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'Banking Core prepare 未配置', uncertain: true } }) };
     const result = await prepareTransferPreview(dispatched, prepareTransfer);
 
-    if (result.ok && result.kind === 'bill_result') return reply(200, 'OK', '账单统计已生成', { status: 'bill_result', action: result.action, data: result.data, evidence: result.evidence });
-    if (result.ok && result.kind === 'transfer_preview') return reply(200, 'OK', '转账正式预览已生成，等待用户确认', { status: result.data.state, action: result.action, operationId: result.data.operationId, preview: result.data.preview, risk: result.data.risk });
+    if (result.ok && result.kind === 'bill_result') return reply(200, 'OK', '账单统计已生成', { status: 'bill_result', action: result.action, data: { ...result.data, month: parsed.slots.month }, evidence: result.evidence });
+    if (result.ok && result.kind === 'transfer_preview') {
+      const continuationToken = issueState({ action: 'transfer.create', slots: parsed.slots, pendingSlot: 'amount', selections, env, now });
+      return reply(200, 'OK', '转账正式预览已生成，等待用户确认', { status: result.data.state, action: result.action, operationId: result.data.operationId, preview: result.data.preview, risk: result.data.risk, continuationToken });
+    }
     if (result.kind === 'needs_clarification') {
       const action = result.action || parsed.action;
       const slots = parsed.slots || {};
       const slot = result.slot || nextMissingSlot(parsed) || (result.candidates ? 'payee_ref' : undefined);
-      const choices = result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' ? accountChoices(repository) : [];
+      const choices = result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' ? accountChoices(repository) : slot === 'payee_ref' && !slots.payee_ref ? payeeChoices(repository.getPayees().filter(payee => payee.status === 'active')) : [];
       return clarificationResponse(reply, {
         action,
         slot,

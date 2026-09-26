@@ -5,15 +5,16 @@ import { saveflowMock } from "./saveflow-mock";
 import { request } from "./api/client";
 import { apiConfig } from "./api/config";
 import { askQwen, type AgentTurn } from "./agent-client";
+import { askBankingAgent, type BankingAgentData } from "./banking-agent-client";
 import { ApiError, validatePlan, type Analysis, type Receipt } from "./api/contracts";
 
-export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error"; analysis?: Analysis };
-const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。告诉我一个具体的储蓄目标，我会把它拆成可执行的消费规则。" }];
+export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview"; analysis?: Analysis; banking?: BankingAgentData };
+const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。可以查询模拟账单，或生成转账正式预览，例如：给张三转 500 元。" }];
 const pendingKey = "saveflow.pending-operation.v1";
 
 export function useSaveflow() {
   const [stage, setStage] = useState<Stage>("welcome");
-  const [modelMode, setModelMode] = useState<"qwen" | "mock">("qwen");
+  const [modelMode, setModelMode] = useState<"qwen" | "mock" | "banking">("banking");
   const [accessCode, setAccessCode] = useState("");
   const [category, setCategory] = useState("日常消费");
   const [targetAmountFen, setTargetAmountFen] = useState<number | null>(saveflowMock.goal.targetAmount * 100);
@@ -28,6 +29,8 @@ export function useSaveflow() {
   const [operationId, setOperationId] = useState("");
   const [failure, setFailure] = useState<"analysis" | "plan">("analysis");
   const [validation, setValidation] = useState("");
+  const [bankingContinuation, setBankingContinuation] = useState<string | null>(null);
+  const lastBankingRequest = useRef<{ text: string; choice?: { optionId: string; label: string } } | null>(null);
   const active = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const goal = useRef("");
@@ -57,10 +60,49 @@ export function useSaveflow() {
       active.current?.abort();
     };
   }, []);
+  const startBanking = async (text: string, choice?: { optionId: string; label: string }) => {
+    if (!consent || !accessCode.trim()) { setValidation("请勾选授权并输入演示访问码。"); return; }
+    if (!send("START")) return;
+    lastBankingRequest.current = { text, choice };
+    setValidation("");
+    if (!choice) setInput("");
+    setMessages(current => current.filter(message => message.kind !== "banking_preview").map(message => message.kind === "banking_clarification" ? { ...message, banking: { ...message.banking!, choices: [] } } : message));
+    addMessage({ role: "user", text: choice?.label || text });
+    const version = ++generation.current;
+    active.current?.abort(); active.current = new AbortController();
+    try {
+      const body = choice
+        ? { continuationToken: bankingContinuation || undefined, choice: { optionId: choice.optionId } }
+        : { message: text, continuationToken: bankingContinuation || undefined };
+      const answer = await askBankingAgent(body, accessCode, active.current.signal);
+      if (generation.current !== version) return;
+      setBankingContinuation(answer.continuationToken || null);
+      if (answer.kind === "clarification" || answer.status === "needs_clarification") {
+        addMessage({ role: "agent", kind: "banking_clarification", text: answer.question || "请补充必要信息。", banking: answer });
+        send("CLARIFY");
+      } else if (answer.status === "bill_result") {
+        setBankingContinuation(null);
+        addMessage({ role: "agent", kind: "banking_bill", text: "账单统计已生成。", banking: answer });
+        send("ANSWER");
+      } else if (answer.status === "awaiting_confirmation") {
+        addMessage({ role: "agent", kind: "banking_preview", text: "转账正式预览已生成，资金未变；确认与执行尚未开放。可继续修改金额或收款人。", banking: answer });
+        send("ANSWER");
+      } else {
+        setFailure("analysis");
+        addMessage({ role: "agent", kind: "error", text: answer.error?.message || "Banking Agent 未返回可用结果。" });
+        send("FAILED");
+      }
+    } catch (error) {
+      if (generation.current !== version) return;
+      setFailure("analysis"); send("FAILED");
+      addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "Banking Agent 请求失败" });
+    }
+  };
   const startDemo = async (text = input.trim() || "我想在年底存下 2 万元") => {
     if (!consent) { setValidation("请先勾选账单分析授权。"); return; }
     if (!text.trim() || text.length > 500) { setValidation("目标须为 1–500 字。"); return; }
-    if ((modelMode === "qwen" || apiConfig.mode === "http") && !accessCode.trim()) { setValidation("请输入服务端配置的演示访问码（不是百炼 API Key）。"); return; }
+    if ((modelMode === "qwen" || modelMode === "banking" || apiConfig.mode === "http") && !accessCode.trim()) { setValidation("请输入服务端配置的演示访问码（不是百炼 API Key）。"); return; }
+    if (modelMode === "banking") { await startBanking(text); return; }
     if (!send("START")) return;
     setValidation(""); setInput(""); goal.current = text;
     addMessage({ role: "user", text });
@@ -133,8 +175,13 @@ export function useSaveflow() {
     if (!send("RESET")) return;
     generation.current++; active.current?.abort(); setMessages(initialMessages); setInput("");
     setMonthlySaving(saveflowMock.goal.monthlySaving); setSaveRate(10); setValidation(""); setOperationId(""); setConsent(false);
-    setCategory("日常消费"); setTargetAmountFen(2000000); setUsage(null); conversation.current = [];
+    setCategory("日常消费"); setTargetAmountFen(2000000); setUsage(null); conversation.current = []; setBankingContinuation(null); lastBankingRequest.current = null;
   };
-  const changeModelMode = (mode: "qwen" | "mock") => { if (!canTransition(stageRef.current, "RESET")) return; restart(); setModelMode(mode); };
-  return { stage, messages, input, setInput, monthlySaving, setMonthlySaving, saveRate, setSaveRate, consent, setConsent, validation, operationId, failure, startDemo, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => startDemo(goal.current), canStart: ["welcome", "success", "cancelled", "clarifying", "answered"].includes(stage), canReset: canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, category, targetAmountFen, usage };
+  const changeModelMode = (mode: "qwen" | "mock" | "banking") => { if (!canTransition(stageRef.current, "RESET")) return; restart(); setModelMode(mode); };
+  const chooseBankingOption = (optionId: string, label: string) => {
+    if (!messages.some(message => message.banking?.choices?.some(choice => choice.optionId === optionId))) return;
+    if (modelMode !== "banking" || !bankingContinuation || !["welcome", "success", "cancelled", "clarifying", "answered"].includes(stage)) return;
+    void startBanking("", { optionId, label });
+  };
+  return { stage, messages, input, setInput, monthlySaving, setMonthlySaving, saveRate, setSaveRate, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice) : startDemo(goal.current), canStart: ["welcome", "success", "cancelled", "clarifying", "answered"].includes(stage), canReset: canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, category, targetAmountFen, usage };
 }
