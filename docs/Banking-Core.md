@@ -152,14 +152,18 @@ npm run demo:banking
 
 `demo:banking` 在隔离内存里模拟按钮确认，演示张三 ¥500 转账、确认前余额不变、重复只扣一次、余额不足和不存在收款人。没有模型费用。
 
+Netlify 的 `/api/banking`、`/api/saveflow` 与 `/api/banking-agent` 在配置 `DATABASE_URL` 后共用 PostgreSQL 持久层。首次部署前运行 `npm run db:migrate`；连接串仅配置为服务端环境变量。Netlify 未配置数据库时写接口返回 `DATABASE_NOT_CONFIGURED`，不会静默退回实例内存。浏览器 `mock` 模式仍是单标签页内存演示，不与 PostgreSQL HTTP 模式共享状态。
+
+跨实例验收：将独立测试数据库连接串设为 `BANKING_TEST_DATABASE_URL`，先运行迁移，再执行 `npm test`。PostgreSQL 测试创建独立测试用户，检查两个 Core 实例并发重复执行只扣一次、新实例重启后能按原编号查到回执，并在结束后删除该测试用户数据。
+
 默认 `NEXT_PUBLIC_SAVEFLOW_API_MODE=mock` 使用浏览器内存底座。HTTP 本地联调设置 `NEXT_PUBLIC_SAVEFLOW_API_MODE=http`、`NEXT_PUBLIC_SAVEFLOW_API_BASE_URL=`（留空，同源），运行 `npm run dev:qwen`。该命令同时提供 Next、`/api/agent`、`/api/banking`、旧 POST `/api/saveflow`；只有主动请求 `/api/agent` 才可能调用 Qwen。普通 `next dev` 不提供这些 POST 服务。
 
 自动化测试涵盖 B 的四个必验项目，另含 20 次重复提交、两笔不同转账争用余额、取消、篡改确认、过期、用户隔离、响应丢失后查询、HTTP 拒绝、客户端回执校验、旧 UI/Qwen 回归。核心测试、HTTP 测试和验收脚本均不读取真实密钥或调用供应商。
 
 ## 8. 存储与扩展边界
 
-当前是**单运行时内存 Mock**：operation store 按用户+操作编号隔离，执行的校验、扣款、交易追加和回执落在同一个同步临界段，没有 await，保证该运行时内不重复扣款。刷新浏览器/重启进程会重置；不同标签页、进程、Netlify 实例不共享状态。HTTP 与浏览器 Mock 也是独立数据空间，不应混用同一笔操作。
+浏览器 Mock 仍是**单运行时内存模式**：刷新浏览器/重启进程会重置，不同标签页不共享状态。服务端配置 PostgreSQL 后，账户余额与版本、交易、操作状态和回执由数据库维护；操作编号按用户唯一，执行以事务锁定操作与账户，并原子提交扣款、交易和成功回执。数据库连接不可用或迁移缺失时请求失败，不将不确定结果伪报为成功。
 
-`netlify/functions/banking.mjs` 与 `saveflow.mjs` 是完整项目部署时的模拟处理器，不代表已更新线上站点；`out/` 自身不包含 POST 能力。Serverless 多实例不提供持久幂等保证，不应用于真实资金或跨实例账务验收。演示访问码 + mock_explicit 只是私人 Mock 的确认门，不是银行 L3 强认证。
+`netlify/functions/banking.mjs` 与 `saveflow.mjs` 是完整项目部署时的模拟处理器，不代表已更新线上站点；`out/` 自身不包含 POST 能力。PostgreSQL 持久层仍只处理合成演示数据，不应用于真实资金。演示访问码 + mock_explicit 只是私人 Mock 的确认门，不是银行 L3 强认证。
 
 新增 cancel_subscription/update_card_limit/purchase_product 时，向同一引擎增加 action 专属校验、风险、精确效果和原子提交适配器，复用状态机、确认、OperationStore、ActionReceipt 和审计。当前这些动作明确拒绝，不能用假成功占位。真实后端还需替换为用户身份/强认证、持久化幂等唯一约束与账务事务、银行状态查询/对账及审计存储；未来异步银行调用不能直接套用当前同步内存提交假设。

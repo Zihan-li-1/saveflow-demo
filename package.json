@@ -11,13 +11,15 @@
     "start": "next start",
     "start:network": "next start --hostname 0.0.0.0",
     "lint": "eslint",
-    "test": "node --test tests/flow.test.cjs tests/qwen.test.cjs tests/banking-core.test.mjs tests/banking-http.test.cjs tests/parsed-intent.test.cjs tests/banking-intent-parser.test.cjs tests/agent-dispatcher.test.cjs tests/transfer-orchestrator.test.cjs tests/banking-agent-http.test.cjs tests/banking-clarification.test.cjs",
+    "test": "node --test tests/flow.test.cjs tests/qwen.test.cjs tests/banking-core.test.mjs tests/banking-http.test.cjs tests/parsed-intent.test.cjs tests/banking-intent-parser.test.cjs tests/agent-dispatcher.test.cjs tests/transfer-orchestrator.test.cjs tests/banking-agent-http.test.cjs tests/banking-clarification.test.cjs tests/postgres-persistence.test.mjs",
     "demo:banking": "node scripts/demo-banking.mjs",
+    "db:migrate": "node scripts/migrate-banking.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "lucide-react": "^1.47.0",
     "next": "16.3.5",
+    "postgres": "^3.4.7",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

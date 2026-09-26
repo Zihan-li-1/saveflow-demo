@@ -10,9 +10,9 @@ export async function handleBillSummary(
   const month = intent.slots.month;
   if (!month) throw new Error("bill.summary requires month before dispatch");
 
-  const transactions = repository.getTransactions({ month });
+  const transactions = await repository.getTransactions({ month });
   const summary = summarizeBills(transactions);
-  const context = repository.getContextInfo();
+  const context = await repository.getContextInfo();
 
   return {
     ok: true,

@@ -12,10 +12,10 @@ function normalize(value: string): string {
   return value.trim().replace(/^模拟/, "").replace(/账户$/, "");
 }
 
-function findAccount(repository: BankingRepository, reference: string): BankingAccount | undefined {
+async function findAccount(repository: BankingRepository, reference: string): Promise<BankingAccount | undefined> {
   const query = reference.trim();
   const normalized = normalize(query);
-  return repository.getAccounts().find((account) => {
+  return (await repository.getAccounts()).find((account) => {
     const name = normalize(account.name);
     return account.id === query || account.name === query || name === normalized ||
       (normalized === "活期" && account.type === "checking") ||
@@ -28,8 +28,8 @@ export function createTransferRepositoryAdapter(
   repository: BankingRepository,
 ): TransferRepository {
   return {
-    queryAccount(reference: string): Account | null {
-      const account = findAccount(repository, reference);
+    async queryAccount(reference: string): Promise<Account | null> {
+      const account = await findAccount(repository, reference);
       if (!account) return null;
       return {
         id: account.id,
@@ -37,9 +37,9 @@ export function createTransferRepositoryAdapter(
         availableBalanceFen: account.availableBalanceFen,
       };
     },
-    queryPayeesByName(name: string): Payee[] {
+    async queryPayeesByName(name: string): Promise<Payee[]> {
       const query = name.trim();
-      return repository.getPayees()
+      return (await repository.getPayees())
         .filter((payee) => payee.status === "active" && (payee.name === query || payee.aliases.includes(query)))
         .map((payee) => ({ id: payee.id, name: payee.name, aliases: [...payee.aliases] }));
     },

@@ -21,7 +21,7 @@ export async function dispatchParsedIntent(value, dependencies) {
 export async function handleBillSummary(intent, repository) {
   const month = intent.slots.month;
   if (!month) throw new Error('bill.summary requires month before dispatch');
-  const transactions = repository.getTransactions({ month });
+  const transactions = await repository.getTransactions({ month });
   const summary = transactions.reduce((result, transaction) => {
     if (transaction.type === 'income') result.totalIncomeFen += transaction.amountFen;
     if (transaction.type === 'expense') {
@@ -30,38 +30,38 @@ export async function handleBillSummary(intent, repository) {
     }
     return result;
   }, { totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: transactions.length, categoryTotals: {} });
-  const context = repository.getContextInfo();
+  const context = await repository.getContextInfo();
   return { ok: true, kind: 'bill_result', action: 'bill.summary', data: summary, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: transactions.map(transaction => transaction.id) }] };
 }
 
 function transferRepository(repository, selections = {}) {
   const normalize = value => value.trim().replace(/^模拟/, '').replace(/账户$/, '');
   return {
-    queryAccount(reference) {
+    async queryAccount(reference) {
       const query = reference.trim();
       const selected = selections.source_account_ref;
       if (selected?.entityId) {
-        const account = repository.getAccount(selected.entityId);
+        const account = await repository.getAccount(selected.entityId);
         if (!account || account.status !== 'active') return null;
         return { id: account.id, currency: account.currency, availableBalanceFen: account.availableBalanceFen };
       }
       const normalized = normalize(query);
-      const account = repository.getAccounts().find(candidate => {
+      const account = (await repository.getAccounts()).find(candidate => {
         const name = normalize(candidate.name);
         return candidate.id === query || candidate.name === query || name === normalized ||
           (normalized === '活期' && candidate.type === 'checking') || (normalized === '储蓄' && candidate.type === 'saving');
       });
       return account ? { id: account.id, currency: account.currency, availableBalanceFen: account.availableBalanceFen } : null;
     },
-    queryPayeesByName(name) {
+    async queryPayeesByName(name) {
       const query = name.trim();
       const selected = selections.payee_ref;
       if (selected?.entityId) {
-        const payee = repository.getPayee(selected.entityId);
+        const payee = await repository.getPayee(selected.entityId);
         if (!payee || payee.status !== 'active') return [];
         return [{ id: payee.id, name: payee.name, aliases: [...payee.aliases], accountNoMasked: payee.accountNoMasked }];
       }
-      return repository.getPayees().filter(payee => payee.status === 'active' && (payee.name === query || payee.aliases.includes(query))).map(payee => ({ id: payee.id, name: payee.name, aliases: [...payee.aliases], accountNoMasked: payee.accountNoMasked }));
+      return (await repository.getPayees()).filter(payee => payee.status === 'active' && (payee.name === query || payee.aliases.includes(query))).map(payee => ({ id: payee.id, name: payee.name, aliases: [...payee.aliases], accountNoMasked: payee.accountNoMasked }));
     },
   };
 }

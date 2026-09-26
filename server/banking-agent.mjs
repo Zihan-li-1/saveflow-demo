@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { bankingCore } from '../src/banking-core/core.mjs';
+import { getConfiguredBankingCore } from '../src/banking-core/postgres-store.mjs';
 import { BankingIntentParserError, parseBankingIntent as defaultParseBankingIntent } from './banking-intent-parser.mjs';
 import { ParsedIntentValidationError } from '../src/agent/validate-parsed-intent.mjs';
 import { dispatchParsedIntent, handleBillSummary, handleTransfer, prepareTransferPreview, transferRepository } from '../src/agent/runtime.mjs';
@@ -93,8 +93,8 @@ function issueState({ action, slots, pendingSlot, choices = [], selections = {},
   return issueContinuationToken({ action, slots, pendingSlot, choices, selections }, continuationSecret(env), now());
 }
 
-function accountChoices(repository) {
-  return repository.getAccounts().filter(account => account.status === 'active').map(account => ({
+async function accountChoices(repository) {
+  return (await repository.getAccounts()).filter(account => account.status === 'active').map(account => ({
     optionId: `opt_${crypto.randomUUID()}`,
     label: account.name,
     entityId: account.id,
@@ -129,8 +129,9 @@ function nextMissingSlot(intent) {
 /** Banking Agent: Parser -> Dispatcher -> Skill -> Core formal preview. */
 export async function handleBankingAgent(
   request,
-  { env = process.env, core = bankingCore, repository = core.repository, parseIntent = defaultParseBankingIntent, fetchImpl = fetch, now = Date.now } = {},
+  options = {},
 ) {
+  const { env = process.env, parseIntent = defaultParseBankingIntent, fetchImpl = fetch, now = Date.now } = options;
   const requestId = crypto.randomUUID();
   const reply = (status, code, message, data) => Response.json(
     responseEnvelope(requestId, code, message, data),
@@ -148,6 +149,9 @@ export async function handleBankingAgent(
     const supplied = Buffer.from(request.headers.get('x-saveflow-access') || '');
     const expectedBytes = Buffer.from(expected);
     if (supplied.length !== expectedBytes.length || !timingSafeEqual(supplied, expectedBytes)) return reply(401, 'UNAUTHORIZED', '演示访问码无效');
+
+    const core = options.core ?? await getConfiguredBankingCore(env);
+    const repository = options.repository ?? core.repository;
 
     const body = await readBody(request);
     if (!body || typeof body !== 'object' || Array.isArray(body)) return reply(400, 'INVALID_REQUEST', '请求体必须是对象');
@@ -215,7 +219,7 @@ export async function handleBankingAgent(
       const action = result.action || parsed.action;
       const slots = parsed.slots || {};
       const slot = result.slot || nextMissingSlot(parsed) || (result.candidates ? 'payee_ref' : undefined);
-      const choices = result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' ? accountChoices(repository) : [];
+      const choices = result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' ? await accountChoices(repository) : [];
       return clarificationResponse(reply, {
         action,
         slot,
@@ -232,8 +236,8 @@ export async function handleBankingAgent(
     if (result.kind === 'core_error') return reply(statusFor(result.error.code), result.error.code, result.error.message, { status: 'core_error', action: result.action, ...(result.operationId ? { operationId: result.operationId } : {}), error: result.error });
     return reply(500, 'INTERNAL_ERROR', '未取得可靠结果', errorData('INTERNAL_ERROR', '未取得可靠结果'));
   } catch (error) {
-    const code = typeof error?.code === 'string' ? error.code : error instanceof BankingIntentParserError || error instanceof ParsedIntentValidationError ? 'MODEL_FORMAT_ERROR' : 'MODEL_UNAVAILABLE';
+    const code = typeof error?.code === 'string' ? error.code : error instanceof BankingIntentParserError || error instanceof ParsedIntentValidationError ? 'MODEL_FORMAT_ERROR' : error?.message?.includes('DATABASE_URL') ? 'DATABASE_NOT_CONFIGURED' : 'MODEL_UNAVAILABLE';
     const message = error instanceof BankingIntentParserError ? error.message : publicMessage(code, '请求未取得可靠结果，请稍后重试。');
-    return reply(Number.isInteger(error?.status) ? error.status : statusFor(code), code, message, errorData(code, message));
+    return reply(Number.isInteger(error?.status) ? error.status : code === 'DATABASE_NOT_CONFIGURED' ? 503 : statusFor(code), code, message, errorData(code, message));
   }
 }
