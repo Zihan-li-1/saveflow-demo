@@ -9,3 +9,14 @@
 .analysis-categories { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
 .analysis-categories span { color: #6f7e91; background: #f3f7fc; border: 1px solid #e2ebf7; border-radius: 999px; padding: 5px 8px; font-size: 10px; }
 .analysis-categories b { color: #3577e5; font-weight: 600; }
+.banking-choice-card, .banking-result-card, .banking-preview-card { margin-top: 10px; padding: 12px; border: 1px solid #e4eaf1; border-radius: 8px; background: #fbfcfe; text-align: left; }
+.banking-choice-card > b, .banking-preview-card b, .banking-result-card > b { display: block; color: #33404d; font-size: 12px; }
+.banking-choice-list { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.banking-choice-list button { border: 1px solid #bfd3ee; border-radius: 6px; background: #fff; color: #3978df; padding: 7px 10px; font-size: 11px; cursor: pointer; }
+.banking-choice-list button:hover { background: #edf4ff; }
+.banking-choice-card small, .banking-result-card small, .banking-preview-card small { display: block; color: #8e9aa6; font-size: 10px; margin-top: 9px; }
+.banking-result-card { display: grid; gap: 5px; color: #586675; font-size: 11px; }
+.banking-preview-card > div { display: flex; justify-content: space-between; gap: 12px; color: #83909d; font-size: 10px; }
+.banking-preview-card > div span { color: #d19435; }
+.banking-preview-card strong { display: block; color: #2e4050; font-size: 22px; margin-top: 12px; }
+.banking-preview-card p { margin: 5px 0 0; color: #536171; font-size: 12px; }

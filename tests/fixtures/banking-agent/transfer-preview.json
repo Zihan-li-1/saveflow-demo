@@ -1,0 +1,53 @@
+{
+  "code": "OK",
+  "message": "转账正式预览已生成，等待用户确认",
+  "requestId": "fixture-request-id",
+  "data": {
+    "status": "awaiting_confirmation",
+    "action": "transfer.create",
+    "operationId": "op_a7e52962-7a7e-4a33-b9d2-3701eb4d6cc2",
+    "preview": {
+      "planId": "plan_7aa6497d-a55b-4a49-86c0-a69190f952ba",
+      "stepIds": [
+        "step_774d9a74-1c96-4004-b05b-7f191b574dc9"
+      ],
+      "summary": "从模拟活期账户向张三（****1001）模拟转账 ¥500.00，手续费 ¥0.00，模拟即时到账。",
+      "exactEffects": [
+        {
+          "kind": "transfer_out",
+          "fromAccountId": "ACC-CHECKING",
+          "accountName": "模拟活期账户",
+          "payeeId": "payee_001",
+          "payeeName": "张三",
+          "accountNoMasked": "****1001",
+          "amountFen": 50000,
+          "feeFen": 0,
+          "currency": "CNY",
+          "balanceBeforeFen": 500000,
+          "balanceAfterFen": 450000,
+          "availableBalanceAfterFen": 450000,
+          "accountVersion": 0,
+          "memo": "",
+          "arrival": "mock_immediate"
+        }
+      ],
+      "riskLevel": "L3",
+      "warnings": [
+        "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+      ],
+      "expiresAt": "2026-09-26T04:46:32.755Z",
+      "previewHash": "2dc17b8950a99a9db42050631e566fd73cc940551f4ec6768a4f4f7a42e260ed",
+      "contextSnapshotId": "saveflow-phase1-fixed-v1:0"
+    },
+    "risk": {
+      "allowed": true,
+      "riskLevel": "L3",
+      "policyVersion": "mock-transfer-v1",
+      "requiredConfirmation": "mock_explicit",
+      "warnings": [
+        "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+      ]
+    },
+    "continuationToken": "<opaque-token-use-live-response-for-requests>"
+  }
+}
