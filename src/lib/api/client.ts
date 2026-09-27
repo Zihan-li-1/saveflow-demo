@@ -7,7 +7,7 @@ export async function request<A extends Action>(action: A, input: RequestMap[A],
   if (apiConfig.mode === "mock") {
     const { mockRequest } = await import("./mock");
     if (options.signal?.aborted) throw new ApiError("ABORTED", "请求已取消");
-    return mockRequest(action, input, operationId);
+    return await mockRequest(action, input, operationId);
   }
   const write = action === "create-plan";
   const controller = new AbortController();

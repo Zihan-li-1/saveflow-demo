@@ -41,20 +41,20 @@ test('invalid amounts, fractional cents and invalid rates are rejected', () => {
   for (const rate of [-1, 10001, NaN, 1.5]) assert.ok(validatePlan({ ...plan, saveRateBps: rate }));
   assert.equal(validatePlan({ ...plan, monthlySavingFen: 1, saveRateBps: 0 }), null);
 });
-test('same operation replays its receipt; modified payload conflicts', () => {
-  const first = mockRequest('create-plan', plan, 'plan-1');
-  assert.deepEqual(mockRequest('create-plan', { confirmed: true, saveRateBps: 1000, monthlySavingFen: 250000 }, 'plan-1'), first);
-  assert.throws(() => mockRequest('create-plan', { ...plan, monthlySavingFen: 200000 }, 'plan-1'), { code: 'IDEMPOTENCY_CONFLICT' });
-  assert.deepEqual(mockRequest('operation-status', { operationId: 'plan-1' }, ''), first);
+test('same operation replays its receipt; modified payload conflicts', async () => {
+  const first = await mockRequest('create-plan', plan, 'plan-1');
+  assert.deepEqual(await mockRequest('create-plan', { confirmed: true, saveRateBps: 1000, monthlySavingFen: 250000 }, 'plan-1'), first);
+  await assert.rejects(mockRequest('create-plan', { ...plan, monthlySavingFen: 200000 }, 'plan-1'), { code: 'IDEMPOTENCY_CONFLICT' });
+  assert.deepEqual(await mockRequest('operation-status', { operationId: 'plan-1' }, ''), first);
 });
-test('operation status keeps an unknown operation pending until a backend receipt exists', () => {
-  assert.equal(mockRequest('operation-status', { operationId: 'missing' }, '').status, 'pending');
+test('operation status keeps an unknown operation pending until a backend receipt exists', async () => {
+  assert.equal((await mockRequest('operation-status', { operationId: 'missing' }, '')).status, 'pending');
 });
-test('consent, confirmation, action whitelist and risk rejection are enforced', () => {
-  assert.throws(() => mockRequest('analyze', { goal: 'goal', consent: false }, ''), { code: 'VALIDATION_ERROR' });
-  assert.throws(() => mockRequest('create-plan', { ...plan, confirmed: false }, 'no-confirm'), { code: 'CONFIRMATION_REQUIRED' });
-  assert.throws(() => mockRequest('unknown', {}, 'unknown'), { code: 'UNKNOWN_ACTION' });
-  assert.equal(mockRequest('analyze', { goal: 'goal', consent: true }, '').totalExpenseFen > 0, true);
+test('consent, confirmation, action whitelist and risk rejection are enforced', async () => {
+  await assert.rejects(mockRequest('analyze', { goal: 'goal', consent: false }, ''), { code: 'VALIDATION_ERROR' });
+  await assert.rejects(mockRequest('create-plan', { ...plan, confirmed: false }, 'no-confirm'), { code: 'CONFIRMATION_REQUIRED' });
+  await assert.rejects(mockRequest('unknown', {}, 'unknown'), { code: 'UNKNOWN_ACTION' });
+  assert.equal((await mockRequest('analyze', { goal: 'goal', consent: true }, '')).totalExpenseFen > 0, true);
 });
 
 process.env.NEXT_PUBLIC_SAVEFLOW_API_MODE = 'http';

@@ -12,18 +12,30 @@ export type InvestmentProduct = { id: string; name: string; riskLevel: "R1" | "R
 export type ContextInfo = { datasetId: string; asOf: string; currentMonth: string; previousMonth: string; snapshotId: string; dataSource: "synthetic_demo_only"; currency: Currency };
 export type SavingGoal = { id: string; targetAmountFen: number; currentAmountFen: number; targetDate: string; proposedMonthlySavingFen: number };
 export type DemoSettings = { monthlyIncomeFen: number; defaultMonthlySavingFen: number; monthlySavingCapFen: number };
+export type MaybePromise<T> = T | Promise<T>;
 export interface FinancialContextRepository {
-  getContextInfo(): ContextInfo;
-  getAccounts(): Account[];
-  getAccount(id: string): Account | undefined;
-  getPayees(): Payee[];
-  getPayee(id: string): Payee | undefined;
-  getTransactions(filter?: { accountId?: string; month?: string }): Transaction[];
-  getCards(): Card[];
-  getSubscriptions(): Subscription[];
-  getInvestmentProducts(): InvestmentProduct[];
-  getSavingGoal(): SavingGoal;
-  getDemoSettings(): DemoSettings;
+  getContextInfo(): MaybePromise<ContextInfo>;
+  getAccounts(): MaybePromise<Account[]>;
+  getAccount(id: string): MaybePromise<Account | undefined>;
+  getPayees(): MaybePromise<Payee[]>;
+  getPayee(id: string): MaybePromise<Payee | undefined>;
+  getTransactions(filter?: { accountId?: string; month?: string }): MaybePromise<Transaction[]>;
+  getCards(): MaybePromise<Card[]>;
+  getSubscriptions(): MaybePromise<Subscription[]>;
+  getInvestmentProducts(): MaybePromise<InvestmentProduct[]>;
+  getSavingGoal(): MaybePromise<SavingGoal>;
+  getDemoSettings(): MaybePromise<DemoSettings>;
+}
+/** The in-memory fixture repository always returns resolved values. */
+export type SyncFinancialContextRepository = {
+  [K in keyof FinancialContextRepository]: (...args: Parameters<FinancialContextRepository[K]>) => Awaited<ReturnType<FinancialContextRepository[K]>>;
+};
+export interface BankingOperationStore {
+  get(owner: string, operationId: string): MaybePromise<OperationRecord | undefined>;
+  put(owner: string, record: OperationRecord): MaybePromise<void>;
+  fingerprint(action: string, input: unknown): string;
+  close?(): MaybePromise<void>;
+  commitTransfer?(owner: string, record: OperationRecord, effect: TransferEffect, at: string, makeReceipt: (transaction: Transaction) => ActionReceipt): MaybePromise<ActionReceipt>;
 }
 export type TransferInput = { fromAccountId: string; payeeId: string; amountFen: number; currency: Currency; memo?: string };
 export type ActionRequest = { action: "transfer_money"; input: TransferInput; planId?: string; stepId?: string; origin?: "user_requested" | "agent_suggested" | "event_triggered" };

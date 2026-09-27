@@ -93,7 +93,7 @@ test('B HTTP: client timeout does not retry writes; legacy HTTP shares the Core 
   const response = await handleBanking(new Request('https://demo.example/api/saveflow', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Saveflow-Access': env.SAVEFLOW_ACCESS_CODE, 'Idempotency-Key': 'legacy_http' }, body: JSON.stringify({ action: 'create-plan', confirmed: true, monthlySavingFen: 250000, saveRateBps: 500 }) }), { env, core });
   assert.equal(response.status, 200);
   const payload = await response.json(); assert.equal(payload.data.status, 'succeeded');
-  assert.equal(core.getOperation('legacy_http').data.receipt.action, 'legacy.create-plan');
+  assert.equal((await core.getOperation('legacy_http')).data.receipt.action, 'legacy.create-plan');
   assert.equal(core.repository.getAccount(input.fromAccountId).balanceFen, 500000);
 });
 
