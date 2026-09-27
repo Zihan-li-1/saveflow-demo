@@ -26,6 +26,17 @@ export interface FinancialContextRepository {
   getSavingGoal(): MaybePromise<SavingGoal>;
   getDemoSettings(): MaybePromise<DemoSettings>;
 }
+/** The in-memory fixture repository always returns resolved values. */
+export type SyncFinancialContextRepository = {
+  [K in keyof FinancialContextRepository]: (...args: Parameters<FinancialContextRepository[K]>) => Awaited<ReturnType<FinancialContextRepository[K]>>;
+};
+export interface BankingOperationStore {
+  get(owner: string, operationId: string): MaybePromise<OperationRecord | undefined>;
+  put(owner: string, record: OperationRecord): MaybePromise<void>;
+  fingerprint(action: string, input: unknown): string;
+  close?(): MaybePromise<void>;
+  commitTransfer?(owner: string, record: OperationRecord, effect: TransferEffect, at: string, makeReceipt: (transaction: Transaction) => ActionReceipt): MaybePromise<ActionReceipt>;
+}
 export type TransferInput = { fromAccountId: string; payeeId: string; amountFen: number; currency: Currency; memo?: string };
 export type ActionRequest = { action: "transfer_money"; input: TransferInput; planId?: string; stepId?: string; origin?: "user_requested" | "agent_suggested" | "event_triggered" };
 export type ActionState = "preparing" | "risk_check" | "awaiting_confirmation" | "confirmed" | "executing" | "succeeded" | "failed" | "cancelled" | "unknown" | "checking";

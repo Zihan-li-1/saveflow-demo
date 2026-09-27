@@ -25,7 +25,7 @@ export function createFinancialContext(source = seed) {
     { id: 'product_003', name: '模拟定期组合 C', riskLevel: 'R3', expectedYield: 300, liquidity: 'AT_MATURITY', minimumAmountFen: 100000, durationDays: 30, currency: 'CNY', isSynthetic: true },
   ];
   let revision = 0;
-  /** @type {import('./contracts').FinancialContextRepository} */
+  /** @type {import('./contracts').SyncFinancialContextRepository} */
   const repository = {
     getContextInfo: () => ({ datasetId: raw.datasetId, asOf: `${raw.snapshotDate}T00:00:00+08:00`, currentMonth: raw.analysisFixtures.currentMonth, previousMonth: raw.analysisFixtures.previousMonth, snapshotId: `${raw.datasetId}:${revision}`, dataSource: 'synthetic_demo_only', currency: 'CNY' }),
     getAccounts: () => structuredClone(accounts),
