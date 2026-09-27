@@ -1,5 +1,10 @@
 # AI Banking Agent — Intent Contracts v1.1
 
+本轮转账预览安全与双月账单分析的交接接口见 [本轮开发交接契约](iteration-handoff-transfer-bill.md)；该文件是待成员核对的实现约定，不表示相关能力已完成。
+
+本轮落地范围、名称对照与成员确认见 [目标动作—当前实现—本轮状态](intent-action-status.md)。
+订阅接入属于合同预备，前两条主链路验收及 B、C、D 接口确认后再新增解析器动作枚举；E 不作为前置确认人。当前服务仍采用单意图 `schemaVersion: "1.0.0"`。
+
 > 状态：面向新版 SaveFlow Demo 的目标合同，尚未由现有代码实现；适用于 IM 输入、意图识别器、Orchestrator、六类 Skill、Financial Context、Risk & Action Engine。  
 > 范围：定义“用户想做什么、已说清什么、还缺什么”；不授权银行操作。演示数据与银行接口均可为 Mock，但确认、状态与审计链路按真实系统设计。
 

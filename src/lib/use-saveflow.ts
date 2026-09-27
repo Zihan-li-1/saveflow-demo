@@ -8,7 +8,7 @@ import { askQwen, type AgentTurn } from "./agent-client";
 import { askBankingAgent, type BankingAgentData } from "./banking-agent-client";
 import { ApiError, validatePlan, type Analysis, type Receipt } from "./api/contracts";
 
-export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview"; analysis?: Analysis; banking?: BankingAgentData };
+export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview"; analysis?: Analysis; banking?: BankingAgentData; errorHint?: string };
 const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。可以查询模拟账单，或生成转账正式预览，例如：给张三转 500 元。" }];
 const pendingKey = "saveflow.pending-operation.v1";
 
@@ -89,13 +89,13 @@ export function useSaveflow() {
         send("ANSWER");
       } else {
         setFailure("analysis");
-        addMessage({ role: "agent", kind: "error", text: answer.error?.message || "Banking Agent 未返回可用结果。" });
+        addMessage({ role: "agent", kind: "error", text: answer.error?.message || "Banking Agent 未返回可用结果。", errorHint: "本次请求未执行转账，可重试或修改请求。" });
         send("FAILED");
       }
     } catch (error) {
       if (generation.current !== version) return;
       setFailure("analysis"); send("FAILED");
-      addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "Banking Agent 请求失败" });
+      addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "Banking Agent 请求失败", errorHint: "本次请求未执行转账，可重试或修改请求。" });
     }
   };
   const startDemo = async (text = input.trim() || "我想在年底存下 2 万元") => {

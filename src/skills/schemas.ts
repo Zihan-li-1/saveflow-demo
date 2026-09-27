@@ -19,7 +19,9 @@ export type SubscriptionAction =
       action: "subscription.find_unused";
     }
   | {
-      action: "subscription.cancel";
+      /** Reserved target contract only; not registered or callable this round.
+       * subscription.cancel was an obsolete draft name, not a merchant membership cancellation capability. */
+      action: "subscription.cancel_debit";
       subscriptionId: string;
       mandateId?: string;
     };
@@ -27,4 +29,3 @@ export type SubscriptionAction =
 export type BillSkillAction =
   | BillAction
   | SubscriptionAction;
-  

@@ -34,7 +34,7 @@ function requireRecord(value, path) {
 
 function rejectUnknownKeys(value, allowed, path) {
   for (const key of Object.keys(value)) {
-    if (!allowed.includes(key)) fail(`${path}.${key} is not allowed`);
+    if (!allowed.includes(key)) fail(`${path} contains unknown fields`);
   }
 }
 

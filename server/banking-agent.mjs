@@ -176,7 +176,7 @@ export async function handleBankingAgent(
       try { continuation = verifyContinuationToken(body.continuationToken, continuationSecret(env), now()); }
       catch (error) { throw tokenError(error); }
       if (body.message && ((isBillTask(body.message) && continuation.action === 'transfer.create') || (isTransferTask(body.message) && continuation.action === 'bill.summary'))) {
-        parsed = await parseIntent(body.message, { history, env, fetchImpl });
+        parsed = await parseIntent(body.message, { history, env, fetchImpl, requestId });
       } else {
         if (body.choice && !resolveChoice(body.choice, continuation.choices)) throw Object.assign(new Error('选项不存在或已失效'), { code: 'INVALID_CHOICE', status: 400 });
         const answer = parseClarificationAnswer(body.message || '', { slot: continuation.pendingSlot, choices: continuation.choices, choice: body.choice, now: now() });
@@ -204,7 +204,7 @@ export async function handleBankingAgent(
         }
       }
     } else {
-      parsed = await parseIntent(body.message, { history, env, fetchImpl });
+      parsed = await parseIntent(body.message, { history, env, fetchImpl, requestId });
     }
     const dependencies = {
       billHandler: intent => handleBillSummary(intent, repository),
