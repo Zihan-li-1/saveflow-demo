@@ -1,0 +1,12 @@
+{
+  "code": "INVALID_CHOICE",
+  "message": "请求未取得可靠结果，请稍后重试。",
+  "requestId": "fixture-request-id",
+  "data": {
+    "status": "error",
+    "error": {
+      "code": "INVALID_CHOICE",
+      "message": "请求未取得可靠结果，请稍后重试。"
+    }
+  }
+}

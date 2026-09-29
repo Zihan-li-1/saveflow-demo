@@ -17,12 +17,13 @@ function validateTransfer(input) {
 
 /** One isolated Mock banking session. Never feed model output to decide()/execute().
  * Future write actions must use this engine and a transaction adapter, not per-Skill Maps.
- * @param {{source?: Parameters<typeof createFinancialContext>[0], now?: () => number, store?: Pick<OperationStore, 'get'|'put'|'fingerprint'> & {commitTransfer?: Function}, repository?: import('./contracts').FinancialContextRepository, ownerId?: string, policy?: {version: string, maxTransferFen: number, previewTtlMs: number}}} [options] */
+ * @param {{source?: Parameters<typeof createFinancialContext>[0], now?: () => number, store?: import('./contracts').BankingOperationStore, repository?: import('./contracts').FinancialContextRepository, ownerId?: string, policy?: {version: string, maxTransferFen: number, previewTtlMs: number}}} [options] */
 export function createBankingCore(options = {}) {
   const context = createFinancialContext(options.source);
   const repository = options.repository ?? context.repository;
   const commitTransfer = context.commitTransfer;
   const ownerId = options.ownerId ?? context.ownerId;
+  /** @type {import('./contracts').BankingOperationStore} */
   const store = options.store ?? new OperationStore();
   const now = options.now ?? Date.now;
   const policy = Object.freeze({ version: 'mock-transfer-v1', maxTransferFen: 10000000, previewTtlMs: 300000, ...options.policy });
@@ -51,12 +52,12 @@ export function createBankingCore(options = {}) {
   function errorData(error) {
     return error instanceof BankingError ? error.toJSON() : new BankingError('INTERNAL_ERROR', '未取得可靠结果，请查询原操作', true).toJSON();
   }
-  /** @template T @param {() => T} run @param {string} [operationId] @returns {import('./contracts').ActionResult<T>} */
+  /** @template T @param {() => T} run @param {string} [operationId] @returns {Promise<import('./contracts').ActionResult<Awaited<T>>>} */
   async function guard(run, operationId) {
     try { return { ok: true, data: await run() }; }
     catch (error) { return { ok: false, error: errorData(error), ...(operationId ? { operationId } : {}) }; }
   }
-  /** @param {import('./contracts').TransferInput} input @returns {import('./contracts').RiskResult} */
+  /** @param {import('./contracts').TransferInput} input @returns {Promise<import('./contracts').RiskResult>} */
   async function riskCheck(input) {
     const result = await guard(async () => {
       validateTransfer(input);
@@ -72,7 +73,7 @@ export function createBankingCore(options = {}) {
     });
     return { allowed: result.ok, riskLevel: 'L3', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', warnings: ['合成数据模拟转账，不接真实银行；此确认仅用于 Mock。'], ...(!result.ok ? { error: result.error } : {}) };
   }
-  /** @param {import('./contracts').TransferInput} input @returns {import('./contracts').TransferEffect} */
+  /** @param {import('./contracts').TransferInput} input @returns {Promise<import('./contracts').TransferEffect>} */
   async function effectFor(input) {
     const account = await repository.getAccount(input.fromAccountId);
     const payee = await repository.getPayee(input.payeeId);

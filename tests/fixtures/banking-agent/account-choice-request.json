@@ -1,0 +1,4 @@
+{
+  "continuationToken": "<short-lived-encrypted-token>",
+  "choice": { "optionId": "opt_<opaque-checking>" }
+}
