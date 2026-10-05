@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Card action fragment carried by ParsedIntentEnvelope v1.1.0",
+  "oneOf": [
+    { "$ref": "#/$defs/get" },
+    { "$ref": "#/$defs/setLimit" },
+    { "$ref": "#/$defs/freeze" },
+    { "$ref": "#/$defs/unfreeze" }
+  ],
+  "$defs": {
+    "cardRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "allOf": [
+        { "pattern": "\\S" },
+        { "not": { "pattern": "^\\s*[Cc][Aa][Rr][Dd][_-][a-zA-Z0-9_-]+\\s*$" } }
+      ]
+    },
+    "referenceSlots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["card_ref"],
+      "properties": { "card_ref": { "$ref": "#/$defs/cardRef" } }
+    },
+    "amount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amount_minor", "currency"],
+      "properties": {
+        "amount_minor": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "currency": { "const": "CNY" }
+      }
+    },
+    "get": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "slots"],
+      "properties": { "action": { "const": "card.get" }, "slots": { "$ref": "#/$defs/referenceSlots" } }
+    },
+    "freeze": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "slots"],
+      "properties": { "action": { "const": "card.freeze" }, "slots": { "$ref": "#/$defs/referenceSlots" } }
+    },
+    "unfreeze": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "slots"],
+      "properties": { "action": { "const": "card.unfreeze" }, "slots": { "$ref": "#/$defs/referenceSlots" } }
+    },
+    "setLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "slots"],
+      "properties": {
+        "action": { "const": "card.set_limit" },
+        "slots": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["card_ref", "limit_type", "amount"],
+          "properties": {
+            "card_ref": { "$ref": "#/$defs/cardRef" },
+            "limit_type": { "const": "monthly_total" },
+            "amount": { "$ref": "#/$defs/amount" }
+          }
+        }
+      }
+    }
+  }
+}
