@@ -23,7 +23,12 @@ function accountFromRow(row, sourceAccount) {
   };
 }
 
-/** Creates an async Postgres adapter; migration 001 must be applied first. */
+function cardFromRow(row) {
+  if (!row) return undefined;
+  return { id: row.card_id, name: row.name, accountId: row.account_id, status: row.status, monthlyBudgetFen: Number(row.monthly_budget_fen), monthlySpentFen: Number(row.monthly_spent_fen), version: Number(row.version), previewGeneration: Number(row.preview_generation) };
+}
+
+/** Creates an async Postgres adapter; migrations 001 and 002 must be applied first. */
 export async function createPostgresBankingCore({ connectionString, source = seed } = {}) {
   if (typeof connectionString !== 'string' || !connectionString.trim()) throw new Error('DATABASE_URL is required');
   const { default: postgres } = await import('postgres');
@@ -32,6 +37,7 @@ export async function createPostgresBankingCore({ connectionString, source = see
   const ownerId = context.ownerId;
   const staticAccounts = context.repository.getAccounts();
   const staticTransactions = context.repository.getTransactions();
+  const staticCards = context.repository.getCards();
 
   await sql.begin(async tx => {
     for (const account of staticAccounts) {
@@ -48,6 +54,13 @@ export async function createPostgresBankingCore({ connectionString, source = see
         [ownerId, transaction.id, transaction.accountId, transaction.operationId ?? null, transaction.occurredAt, transaction.amountFen, JSON.stringify(transaction)],
       );
     }
+    for (const card of staticCards) {
+      await tx.unsafe(
+        `INSERT INTO banking_cards (owner_id, card_id, name, account_id, status, monthly_budget_fen, monthly_spent_fen, version, preview_generation)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (owner_id, card_id) DO NOTHING`,
+        [ownerId, card.id, card.name, card.accountId, card.status, card.monthlyBudgetFen, card.monthlySpentFen, card.version, card.previewGeneration],
+      );
+    }
   });
 
   const repository = Object.freeze({
@@ -57,7 +70,8 @@ export async function createPostgresBankingCore({ connectionString, source = see
         `SELECT COALESCE(SUM(version), 0)::bigint + COUNT(*)::bigint AS revision FROM banking_accounts WHERE owner_id = $1`,
         [ownerId],
       );
-      return { ...context.repository.getContextInfo(), snapshotId: `${source.datasetId}:${revision.revision}` };
+      const [cards] = await sql.unsafe('SELECT COALESCE(SUM(version), 0)::bigint AS revision FROM banking_cards WHERE owner_id = $1', [ownerId]);
+      return { ...context.repository.getContextInfo(), snapshotId: `${source.datasetId}:${BigInt(revision.revision) + BigInt(cards.revision)}` };
     },
     async getAccounts() {
       const rows = await sql.unsafe('SELECT * FROM banking_accounts WHERE owner_id = $1 ORDER BY account_id', [ownerId]);
@@ -66,6 +80,14 @@ export async function createPostgresBankingCore({ connectionString, source = see
     async getAccount(id) {
       const [row] = await sql.unsafe('SELECT * FROM banking_accounts WHERE owner_id = $1 AND account_id = $2', [ownerId, id]);
       return accountFromRow(row, staticAccounts.find(account => account.id === id));
+    },
+    async getCards() {
+      const rows = await sql.unsafe('SELECT * FROM banking_cards WHERE owner_id = $1 ORDER BY card_id', [ownerId]);
+      return rows.map(cardFromRow);
+    },
+    async getCard(id) {
+      const [row] = await sql.unsafe('SELECT * FROM banking_cards WHERE owner_id = $1 AND card_id = $2', [ownerId, id]);
+      return cardFromRow(row);
     },
     async getTransactions(filter = {}) {
       const clauses = ['owner_id = $1'];
@@ -100,6 +122,30 @@ export async function createPostgresBankingCore({ connectionString, source = see
            ON CONFLICT (owner_id, operation_id) DO UPDATE SET action = EXCLUDED.action, fingerprint = EXCLUDED.fingerprint, state = EXCLUDED.state, record = EXCLUDED.record, updated_at = now()`,
           [owner, record.operationId, record.action, record.fingerprint, record.state, JSON.stringify(record)],
         );
+      });
+    },
+    async reserveCardPreview(owner, cardId) {
+      return sql.begin(async tx => {
+        const [row] = await tx.unsafe('UPDATE banking_cards SET preview_generation = preview_generation + 1, updated_at = now() WHERE owner_id = $1 AND card_id = $2 RETURNING preview_generation', [owner, cardId]);
+        if (!row) throw new BankingError('CARD_NOT_FOUND', '当前用户无法访问该卡片');
+        return Number(row.preview_generation);
+      });
+    },
+    async commitCard(owner, record, effect, makeReceipt) {
+      return sql.begin(async tx => {
+        const [operationRow] = await tx.unsafe('SELECT record FROM banking_operations WHERE owner_id = $1 AND operation_id = $2 FOR UPDATE', [owner, record.operationId]);
+        const persisted = operationRow?.record;
+        if (!persisted) throw new BankingError('OPERATION_NOT_FOUND', '未取得此操作的记录', true);
+        if (persisted.receipt) return structuredClone(persisted.receipt);
+        if (persisted.action !== effect.action || persisted.state !== 'executing' || persisted.decision?.decision !== 'confirm' || persisted.preview?.previewHash !== record.preview?.previewHash) throw new BankingError('INVALID_STATE', '卡片操作未处于已确认的执行状态', true);
+        const [card] = await tx.unsafe('SELECT * FROM banking_cards WHERE owner_id = $1 AND card_id = $2 FOR UPDATE', [owner, effect.cardId]);
+        if (!card || Number(card.version) !== effect.cardVersion || Number(card.preview_generation) !== effect.previewGeneration || card.status !== effect.before.status || Number(card.monthly_budget_fen) !== effect.before.monthlyBudgetFen) throw new BankingError('PREVIEW_STALE', '卡片已变化，请重新预览并确认');
+        await tx.unsafe('UPDATE banking_cards SET status = $3, monthly_budget_fen = $4, version = version + 1, updated_at = now() WHERE owner_id = $1 AND card_id = $2', [owner, effect.cardId, effect.after.status, effect.after.monthlyBudgetFen]);
+        const receipt = makeReceipt();
+        persisted.receipt = receipt;
+        persisted.state = 'succeeded';
+        await tx.unsafe('UPDATE banking_operations SET state = $3, record = $4::jsonb, updated_at = now() WHERE owner_id = $1 AND operation_id = $2', [owner, record.operationId, persisted.state, JSON.stringify(persisted)]);
+        return structuredClone(receipt);
       });
     },
     async commitTransfer(owner, record, effect, at, makeReceipt) {

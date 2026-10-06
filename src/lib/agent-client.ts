@@ -1,6 +1,6 @@
 import { ApiError, type Analysis } from './api/contracts';
 
-export type AgentPlan = { monthlySavingFen: number; saveRateBps: number; category: string; targetAmountFen: number | null };
+export type AgentPlan = { monthlySavingFen: number; targetAmountFen: number | null };
 export type AgentReply = { intent: string; reply: string; needsClarification: boolean; plan: AgentPlan | null; analysis: Analysis; model: string; usage: { inputTokens: number; outputTokens: number } };
 export type AgentTurn = { role: 'user' | 'assistant'; content: string };
 export async function askQwen(message: string, history: AgentTurn[], accessCode: string, signal: AbortSignal): Promise<AgentReply> {
@@ -15,7 +15,7 @@ export async function askQwen(message: string, history: AgentTurn[], accessCode:
   const data = payload.data;
   if (!data || typeof data.reply !== 'string' || typeof data.needsClarification !== 'boolean' || !data.analysis || !data.usage ||
     !Number.isSafeInteger(data.analysis.totalExpenseFen) || !Number.isInteger(data.analysis.subscriptionCount) ||
-    (data.plan !== null && (!data.plan || !Number.isSafeInteger(data.plan.monthlySavingFen) || data.plan.monthlySavingFen <= 0 || data.plan.monthlySavingFen > 300000 || !Number.isInteger(data.plan.saveRateBps) || data.plan.saveRateBps < 0 || data.plan.saveRateBps > 10000 || !['日常消费', '餐饮', '购物', '交通', '娱乐', '订阅', '其他'].includes(data.plan.category)))) {
+    (data.plan !== null && (!data.plan || !Number.isSafeInteger(data.plan.monthlySavingFen) || data.plan.monthlySavingFen <= 0 || data.plan.monthlySavingFen > 300000 || (data.plan.targetAmountFen !== null && (!Number.isSafeInteger(data.plan.targetAmountFen) || data.plan.targetAmountFen <= 0)) || 'saveRateBps' in data.plan || 'category' in data.plan))) {
     throw new ApiError('MODEL_RESPONSE_ERROR', '模型建议未通过前端校验。');
   }
   return data as AgentReply;

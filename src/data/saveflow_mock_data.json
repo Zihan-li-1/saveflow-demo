@@ -527,9 +527,8 @@
       "name": "日常虚拟卡",
       "linkedAccountId": "ACC-CHECKING",
       "status": "active",
-      "monthlyLimit": 5000,
+      "monthlyBudget": 5000,
       "monthlySpent": 0,
-      "savingRate": 0.05,
       "requiresConfirmationForOverLimit": true
     },
     {
@@ -537,9 +536,8 @@
       "name": "娱乐虚拟卡",
       "linkedAccountId": "ACC-CHECKING",
       "status": "active",
-      "monthlyLimit": 800,
+      "monthlyBudget": 800,
       "monthlySpent": 760,
-      "savingRate": 0.1,
       "requiresConfirmationForOverLimit": true
     }
   ],

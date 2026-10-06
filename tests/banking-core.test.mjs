@@ -141,9 +141,10 @@ test('B unknown outcomes: only CHECK is allowed, missing records never mean fail
 });
 
 test('B old plan adapter shares operation store, cannot re-use transfer key or fake money effects', async () => {
-  const core = createBankingCore(); const inputPlan = { monthlySavingFen: 250000, saveRateBps: 1000, confirmed: true };
+  const core = createBankingCore(); const inputPlan = { monthlySavingFen: 250000, confirmed: true };
   const first = await legacyRequest('create-plan', inputPlan, 'old-plan', core);
-  assert.deepEqual(await legacyRequest('create-plan', { confirmed: true, saveRateBps: 1000, monthlySavingFen: 250000 }, 'old-plan', core), first);
+  assert.deepEqual(await legacyRequest('create-plan', { confirmed: true, monthlySavingFen: 250000 }, 'old-plan', core), first);
+  await assert.rejects(legacyRequest('create-plan', { ...inputPlan, saveRateBps: 1000 }, 'old-rate', core), { code: 'VALIDATION_ERROR' });
   assert.equal(unwrap(await core.getOperation('old-plan')).receipt.action, 'legacy.create-plan');
   assert.deepEqual(unwrap(await core.getOperation('old-plan')).receipt.effects, []);
   await assert.rejects(legacyRequest('create-plan', { ...inputPlan, monthlySavingFen: 100 }, 'old-plan', core), { code: 'IDEMPOTENCY_CONFLICT' });
@@ -181,7 +182,7 @@ test('legacy analysis resolves asynchronous repository reads and preserves mock 
   const analysis = await legacyRequest('analyze', { consent: true, goal: '分析账单' }, 'async-analysis', core);
   assert.equal(analysis.totalExpenseFen, expected.totalExpenseFen);
   assert.equal(analysis.currentMonth, expected.currentMonth);
-  const plan = await legacyRequest('create-plan', { monthlySavingFen: 250000, saveRateBps: 1000, confirmed: true }, 'async-plan', core);
+  const plan = await legacyRequest('create-plan', { monthlySavingFen: 250000, confirmed: true }, 'async-plan', core);
   assert.deepEqual(await legacyRequest('operation-status', { operationId: 'async-plan' }, '', core), plan);
 });
 

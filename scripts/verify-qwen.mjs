@@ -20,7 +20,7 @@ let networkCode = null;
 const request = new Request('http://localhost/api/agent', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', 'X-Saveflow-Access': access, Origin: 'http://localhost' },
-  body: JSON.stringify({ message: '我想每月存2000元，餐饮消费自动存5%。', history: [], consent: true }),
+  body: JSON.stringify({ message: '我想每月存2000元。', history: [], consent: true }),
 });
 const started = Date.now();
 const response = await handleAgent(request, { fetchImpl: async (...args) => {
@@ -37,7 +37,7 @@ const response = await handleAgent(request, { fetchImpl: async (...args) => {
 } });
 const payload = await response.json();
 const plan = payload.data?.plan;
-const matches = plan?.monthlySavingFen === 200000 && plan?.saveRateBps === 500 && plan?.category === '餐饮';
+const matches = plan?.monthlySavingFen === 200000 && !('saveRateBps' in plan) && !('category' in plan);
 console.log(JSON.stringify({ status: response.status, code: payload.code, attempted, providerStatus, networkCode, elapsedMs: Date.now() - started,
   ...(response.ok ? { intent: payload.data.intent, plan, usage: payload.data.usage, expectedParametersMatch: matches } : { message: payload.message }),
 }));

@@ -3,7 +3,7 @@
   "title": "Card action fragment carried by ParsedIntentEnvelope v1.1.0",
   "oneOf": [
     { "$ref": "#/$defs/get" },
-    { "$ref": "#/$defs/setLimit" },
+    { "$ref": "#/$defs/setBudget" },
     { "$ref": "#/$defs/freeze" },
     { "$ref": "#/$defs/unfreeze" }
   ],
@@ -50,19 +50,18 @@
       "required": ["action", "slots"],
       "properties": { "action": { "const": "card.unfreeze" }, "slots": { "$ref": "#/$defs/referenceSlots" } }
     },
-    "setLimit": {
+    "setBudget": {
       "type": "object",
       "additionalProperties": false,
       "required": ["action", "slots"],
       "properties": {
-        "action": { "const": "card.set_limit" },
+        "action": { "const": "card.set_budget" },
         "slots": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["card_ref", "limit_type", "amount"],
+          "required": ["card_ref", "amount"],
           "properties": {
             "card_ref": { "$ref": "#/$defs/cardRef" },
-            "limit_type": { "const": "monthly_total" },
             "amount": { "$ref": "#/$defs/amount" }
           }
         }

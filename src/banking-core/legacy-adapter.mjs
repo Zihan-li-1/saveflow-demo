@@ -46,6 +46,7 @@ export async function legacyRequest(action, input, operationId, core = bankingCo
     return { totalExpenseFen: context.totalExpenseFen, subscriptionCount: context.subscriptionCount, momIncreaseFen: context.expenseIncreaseFen, categories: context.categoryChanges, asOf: context.asOf, currentMonth: context.currentMonth, previousMonth: context.previousMonth, dataSource: context.dataSource };
   }
   if (action === 'create-plan') {
+    if ('saveRateBps' in input || 'savingRate' in input || 'category' in input) throw new BankingError('VALIDATION_ERROR', '消费比例储蓄规则已不支持');
     const receipt = await core.createLegacyPlan(operationId, input);
     return { operationId, status: receipt.status, message: receipt.message };
   }

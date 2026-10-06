@@ -15,5 +15,8 @@ export function resolveChoice(answer, choices) {
   const text = typeof answer === 'string' ? answer.trim() : '';
   const index = ordinal(text);
   if (index !== null) return choices[index] ?? null;
-  return choices.find(choice => choice.label === text) ?? null;
+  const label = choices.find(choice => choice.label === text);
+  if (label) return label;
+  const rawMatches = choices.filter(choice => choice.rawValue === text);
+  return rawMatches.length === 1 ? rawMatches[0] : null;
 }

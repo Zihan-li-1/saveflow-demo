@@ -50,6 +50,6 @@ export function verifyContinuationToken(token, secret, now = Date.now()) {
     decipher.setAuthTag(tag);
     payload = JSON.parse(Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8'));
   } catch { throw new Error('续接凭据无效'); }
-  if (!payload || payload.v !== VERSION || !['transfer.create', 'bill.summary'].includes(payload.action) || !payload.slots || !Array.isArray(payload.choices) || !Number.isSafeInteger(payload.expiresAt) || payload.expiresAt <= now) throw new Error('续接凭据已过期或无效');
+  if (!payload || payload.v !== VERSION || !['transfer.create', 'bill.summary', 'card.get', 'card.set_budget', 'card.freeze', 'card.unfreeze'].includes(payload.action) || !payload.slots || !Array.isArray(payload.choices) || !Number.isSafeInteger(payload.expiresAt) || payload.expiresAt <= now) throw new Error('续接凭据已过期或无效');
   return payload;
 }

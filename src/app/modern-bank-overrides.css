@@ -20,3 +20,5 @@
 .banking-preview-card > div span { color: #d19435; }
 .banking-preview-card strong { display: block; color: #2e4050; font-size: 22px; margin-top: 12px; }
 .banking-preview-card p { margin: 5px 0 0; color: #536171; font-size: 12px; }
+.card-action-preview .secondary-button { margin-top: 12px; }
+.card-action-preview .secondary-button:disabled { opacity: .75; cursor: default; }

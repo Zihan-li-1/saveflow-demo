@@ -3,6 +3,10 @@ import { validateParsedIntent } from '../validate-parsed-intent.mjs';
 const required = {
   'transfer.create': ['payee_ref', 'amount', 'source_account_ref'],
   'bill.summary': ['month'],
+  'card.get': ['card_ref'],
+  'card.set_budget': ['card_ref', 'amount'],
+  'card.freeze': ['card_ref'],
+  'card.unfreeze': ['card_ref'],
 };
 
 export function buildParsedIntent(action, slots) {

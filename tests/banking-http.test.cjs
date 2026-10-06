@@ -41,6 +41,27 @@ test('B HTTP: real handler and typed client run reads, preview, confirmation, ex
   assert.equal(core.repository.getAccount(input.fromAccountId).balanceFen, 450000);
 });
 
+test('B HTTP: card budget, freeze and unfreeze require the dedicated decision and execute calls', async () => {
+  const { client } = await setup();
+  const before = await client.request('card.get', { id: 'CARD-ENT' });
+  const budget = await client.request('card.set_budget', { cardId: 'CARD-ENT', monthlyBudgetFen: 10000 });
+  assert.equal((await client.request('card.get', { id: 'CARD-ENT' })).monthlyBudgetFen, before.monthlyBudgetFen);
+  assert.match(budget.preview.warnings.join(' '), /当前已超预算/);
+  await client.request('action.decide', { operationId: budget.operationId, previewHash: budget.preview.previewHash, decision: 'confirm', confirmedStepIds: budget.preview.stepIds });
+  const saved = await client.request('action.execute', { operationId: budget.operationId, previewHash: budget.preview.previewHash });
+  assert.equal(saved.status, 'succeeded');
+  assert.equal((await client.request('card.get', { id: 'CARD-ENT' })).monthlyBudgetFen, 10000);
+  const freeze = await client.request('card.freeze', { cardId: 'CARD-ENT' });
+  await client.request('action.decide', { operationId: freeze.operationId, previewHash: freeze.preview.previewHash, decision: 'confirm', confirmedStepIds: freeze.preview.stepIds });
+  await client.request('action.execute', { operationId: freeze.operationId, previewHash: freeze.preview.previewHash });
+  assert.equal((await client.request('card.get', { id: 'CARD-ENT' })).status, 'frozen');
+  const thaw = await client.request('card.unfreeze', { cardId: 'CARD-ENT' });
+  await client.request('action.decide', { operationId: thaw.operationId, previewHash: thaw.preview.previewHash, decision: 'confirm', confirmedStepIds: thaw.preview.stepIds });
+  await client.request('action.execute', { operationId: thaw.operationId, previewHash: thaw.preview.previewHash });
+  assert.equal((await client.request('card.get', { id: 'CARD-ENT' })).status, 'active');
+  assert.equal((await client.request('card.get', { id: 'CARD-ENT' })).version, before.version + 3);
+});
+
 test('B HTTP: lost execute response is uncertain, no retry; original ID lookup recovers single debit', async () => {
   const { client, core, fetchImpl } = await setup(); const p = await confirmed(client);
   let calls = 0;
@@ -90,7 +111,7 @@ test('B HTTP: client timeout does not retry writes; legacy HTTP shares the Core 
   await assert.rejects(client.request('action.execute', { operationId: 'op_test', previewHash: 'hash' }), { code: 'TIMEOUT', uncertain: true });
   assert.equal(calls, 1);
   const { handleBanking, core } = await setup();
-  const response = await handleBanking(new Request('https://demo.example/api/saveflow', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Saveflow-Access': env.SAVEFLOW_ACCESS_CODE, 'Idempotency-Key': 'legacy_http' }, body: JSON.stringify({ action: 'create-plan', confirmed: true, monthlySavingFen: 250000, saveRateBps: 500 }) }), { env, core });
+  const response = await handleBanking(new Request('https://demo.example/api/saveflow', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Saveflow-Access': env.SAVEFLOW_ACCESS_CODE, 'Idempotency-Key': 'legacy_http' }, body: JSON.stringify({ action: 'create-plan', confirmed: true, monthlySavingFen: 250000 }) }), { env, core });
   assert.equal(response.status, 200);
   const payload = await response.json(); assert.equal(payload.data.status, 'succeeded');
   assert.equal((await core.getOperation('legacy_http')).data.receipt.action, 'legacy.create-plan');

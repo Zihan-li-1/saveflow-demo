@@ -2,7 +2,7 @@
 
 export const CARD_ACTIONS = Object.freeze([
   'card.get',
-  'card.set_limit',
+  'card.set_budget',
   'card.freeze',
   'card.unfreeze',
 ]);
@@ -59,15 +59,14 @@ export function validateCardIntent(value) {
   }
   if (!isObject(value.slots)) throw new CardSkillError('VALIDATION_ERROR', 'slots 必须是对象');
   const slots = value.slots;
-  requireExactKeys(slots, value.action === 'card.set_limit' ? ['card_ref', 'limit_type', 'amount'] : ['card_ref']);
+  requireExactKeys(slots, value.action === 'card.set_budget' ? ['card_ref', 'amount'] : ['card_ref']);
   if (typeof slots.card_ref !== 'string' || !slots.card_ref.trim() || slots.card_ref.length > 128) {
     throw new CardSkillError('VALIDATION_ERROR', 'card_ref 必须是非空卡片称谓');
   }
   if (/^card[_-][a-z0-9_-]+$/i.test(slots.card_ref.trim())) {
     throw new CardSkillError('VALIDATION_ERROR', '模型 slots 应保留用户称谓，不能编造卡片实体 ID');
   }
-  if (value.action === 'card.set_limit') {
-    if (slots.limit_type !== 'monthly_total') throw new CardSkillError('VALIDATION_ERROR', '当前只支持 monthly_total');
+  if (value.action === 'card.set_budget') {
     validateAmount(slots.amount);
   }
   return value;
@@ -89,12 +88,11 @@ export function validateResolvedCardIntent(value) {
   }
   if (!isObject(value.resolved_slots)) throw new CardSkillError('VALIDATION_ERROR', 'resolved_slots 必须是对象');
   const slots = value.resolved_slots;
-  requireExactKeys(slots, value.action === 'card.set_limit' ? ['card_id', 'limit_type', 'amount'] : ['card_id']);
+  requireExactKeys(slots, value.action === 'card.set_budget' ? ['card_id', 'amount'] : ['card_id']);
   if (typeof slots.card_id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(slots.card_id)) {
     throw new CardSkillError('VALIDATION_ERROR', 'card_id 格式无效');
   }
-  if (value.action === 'card.set_limit') {
-    if (slots.limit_type !== 'monthly_total') throw new CardSkillError('VALIDATION_ERROR', '当前只支持 monthly_total');
+  if (value.action === 'card.set_budget') {
     validateAmount(slots.amount);
   }
   if (!Array.isArray(value.references) || value.references.length !== 1 || !isObject(value.references[0])) {
@@ -158,13 +156,13 @@ export async function resolveCardReference(repository, rawReference) {
  * E-owned Skill boundary. Reads are answered from the existing repository. Writes are
  * converted to B's camelCase/Fen naming and returned as action requests. This function
  * cannot confirm, execute, or mutate a card.
- * @param {{getCards:()=>Array<{id:string,name:string,accountId:string,status:'active'|'frozen',monthlyLimitFen:number,monthlySpentFen:number}>|Promise<Array<{id:string,name:string,accountId:string,status:'active'|'frozen',monthlyLimitFen:number,monthlySpentFen:number}>>,getContextInfo:()=>Record<string,unknown>|Promise<Record<string,unknown>>}} repository
+ * @param {{getCards:()=>Array<{id:string,name:string,accountId:string,status:'active'|'frozen',monthlyBudgetFen:number,monthlySpentFen:number}>|Promise<Array<{id:string,name:string,accountId:string,status:'active'|'frozen',monthlyBudgetFen:number,monthlySpentFen:number}>>,getContextInfo:()=>Record<string,unknown>|Promise<Record<string,unknown>>}} repository
  * @param {unknown} value
  */
 export async function runResolvedCardIntent(repository, value) {
   try {
     const intent = validateResolvedCardIntent(value);
-    const slots = /** @type {{card_id:string,limit_type?:'monthly_total',amount:{amount_minor:number,currency:'CNY'}}} */ (intent.resolved_slots);
+    const slots = /** @type {{card_id:string,amount:{amount_minor:number,currency:'CNY'}}} */ (intent.resolved_slots);
     const cards = await repository.getCards();
     const card = cards.find(candidate => candidate.id === slots.card_id);
     if (!card) throw new CardSkillError('CARD_NOT_FOUND', '当前用户无法访问该卡片');
@@ -174,19 +172,18 @@ export async function runResolvedCardIntent(repository, value) {
       return { ok: true, data: { kind: 'query', card: structuredClone(card), context: structuredClone(context) } };
     }
 
-    if (intent.action === 'card.set_limit') {
+    if (intent.action === 'card.set_budget') {
       const amountFen = slots.amount.amount_minor;
-      if (card.status !== 'active') throw new CardSkillError('INVALID_STATE', '冻结卡不能调整限额');
-      if (amountFen < card.monthlySpentFen) throw new CardSkillError('LIMIT_EXCEEDED', '新限额不能低于本月已消费金额');
-      if (amountFen === card.monthlyLimitFen) throw new CardSkillError('INVALID_STATE', '新限额与当前限额相同');
+      if (amountFen === card.monthlyBudgetFen) throw new CardSkillError('INVALID_STATE', '新预算与当前预算相同');
       return {
         ok: true,
         data: {
           kind: 'action_request',
           request: {
-            action: 'card.set_limit',
-            input: { cardId: card.id, limitType: 'monthly_total', amountFen, currency: 'CNY' },
+            action: 'card.set_budget',
+            input: { cardId: card.id, monthlyBudgetFen: amountFen },
           },
+          warnings: amountFen < card.monthlySpentFen ? [`当前已超预算 ¥${((card.monthlySpentFen - amountFen) / 100).toFixed(2)}；预算不会阻止消费。`] : [],
           requirements: { minimumRiskLevel: 'L2', explicitUserConfirmation: true, executionOwner: 'banking_core' },
         },
       };
