@@ -4,6 +4,10 @@ export const PARSED_INTENT_SCHEMA_VERSION = "1.0.0" as const;
 export const PARSED_INTENT_ACTIONS = [
   "transfer.create",
   "bill.summary",
+  "card.get",
+  "card.set_budget",
+  "card.freeze",
+  "card.unfreeze",
   "clarify",
   "unsupported",
 ] as const;
@@ -17,6 +21,7 @@ export type ParsedIntentStatus =
 export type TransferSlotName = "payee_ref" | "amount" | "source_account_ref";
 /** The model-facing bill slot is the time filter; account IDs are resolver output. */
 export type BillSlotName = "month";
+export type CardSlotName = "card_ref" | "amount";
 
 export interface ParsedAmount {
   /** Integer minor units (fen). No boundary may multiply or divide this value by 100. */
@@ -37,6 +42,15 @@ export interface BillSummarySlots {
   month?: string;
 }
 
+export interface CardReferenceSlots {
+  /** Raw user wording; the resolver supplies card_id. */
+  card_ref?: string;
+}
+
+export interface CardBudgetSlots extends CardReferenceSlots {
+  amount?: ParsedAmount;
+}
+
 export type ParsedIntent =
   | {
       schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
@@ -50,6 +64,20 @@ export type ParsedIntent =
       action: "bill.summary";
       slots: BillSummarySlots;
       missingSlots: BillSlotName[];
+      status: "ready_for_resolution" | "needs_clarification";
+    }
+  | {
+      schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
+      action: "card.get" | "card.freeze" | "card.unfreeze";
+      slots: CardReferenceSlots;
+      missingSlots: ["card_ref"] | [];
+      status: "ready_for_resolution" | "needs_clarification";
+    }
+  | {
+      schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
+      action: "card.set_budget";
+      slots: CardBudgetSlots;
+      missingSlots: CardSlotName[];
       status: "ready_for_resolution" | "needs_clarification";
     }
   | {

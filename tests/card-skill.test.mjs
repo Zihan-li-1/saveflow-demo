@@ -17,8 +17,8 @@ const context = Object.freeze({
 });
 
 const seedCards = Object.freeze([
-  Object.freeze({ id: 'CARD-MAIN', name: '日常虚拟卡', accountId: 'ACC-CHECKING', status: 'active', monthlyLimitFen: 500000, monthlySpentFen: 0 }),
-  Object.freeze({ id: 'CARD-ENT', name: '娱乐虚拟卡', accountId: 'ACC-CHECKING', status: 'active', monthlyLimitFen: 80000, monthlySpentFen: 76000 }),
+  Object.freeze({ id: 'CARD-MAIN', name: '日常虚拟卡', accountId: 'ACC-CHECKING', status: 'active', monthlyBudgetFen: 500000, monthlySpentFen: 0 }),
+  Object.freeze({ id: 'CARD-ENT', name: '娱乐虚拟卡', accountId: 'ACC-CHECKING', status: 'active', monthlyBudgetFen: 80000, monthlySpentFen: 76000 }),
 ]);
 
 const repository = (cards = seedCards) => ({
@@ -55,16 +55,16 @@ test('raw schema blocks padded service IDs and keeps the money object closed', (
   assert.equal(schema.$defs.amount.properties.amount_minor.type, 'integer');
 
   assert.doesNotThrow(() => validateCardIntent({
-    action: 'card.set_limit',
-    slots: { card_ref: '娱乐虚拟卡', limit_type: 'monthly_total', amount: { amount_minor: 0, currency: 'CNY' } },
+    action: 'card.set_budget',
+    slots: { card_ref: '娱乐虚拟卡', amount: { amount_minor: 0, currency: 'CNY' } },
   }));
   assert.doesNotThrow(() => validateCardIntent({
-    action: 'card.set_limit',
-    slots: { card_ref: '娱乐虚拟卡', limit_type: 'monthly_total', amount: { amount_minor: 10000000, currency: 'CNY' } },
+    action: 'card.set_budget',
+    slots: { card_ref: '娱乐虚拟卡', amount: { amount_minor: 10000000, currency: 'CNY' } },
   }));
   assert.throws(() => validateCardIntent({
-    action: 'card.set_limit',
-    slots: { card_ref: '娱乐虚拟卡', limit_type: 'monthly_total', amount: { amount_minor: 100000, currency: 'CNY', confirmed: true } },
+    action: 'card.set_budget',
+    slots: { card_ref: '娱乐虚拟卡', amount: { amount_minor: 100000, currency: 'CNY', confirmed: true } },
   }));
 });
 
@@ -72,6 +72,7 @@ test('raw action contract rejects legacy intents, IDs and authorization fields',
   assert.deepEqual(validateCardIntent({ action: 'card.get', slots: { card_ref: '娱乐虚拟卡' } }).slots, { card_ref: '娱乐虚拟卡' });
   for (const value of [
     { action: 'create_plan', slots: { card_ref: '娱乐虚拟卡' } },
+    { action: 'card.set_limit', slots: { card_ref: '娱乐虚拟卡', amount: { amount_minor: 100000, currency: 'CNY' } } },
     { action: 'card.get', slots: { card_ref: 'CARD-ENT' } },
     { action: 'card.get', slots: { card_ref: '娱乐虚拟卡' }, confirmed: true },
     { action: 'card.freeze', slots: { card_ref: '娱乐虚拟卡', risk_level: 'L0' } },
@@ -120,7 +121,7 @@ test('uses the repository card IDs, names and Fen fields without a second Mock s
       name: result.data.card.name,
       accountId: result.data.card.accountId,
       status: result.data.card.status,
-      monthlyLimitFen: result.data.card.monthlyLimitFen,
+      monthlyBudgetFen: result.data.card.monthlyBudgetFen,
       monthlySpentFen: result.data.card.monthlySpentFen,
     },
     {
@@ -128,7 +129,7 @@ test('uses the repository card IDs, names and Fen fields without a second Mock s
       name: '娱乐虚拟卡',
       accountId: 'ACC-CHECKING',
       status: 'active',
-      monthlyLimitFen: 80000,
+      monthlyBudgetFen: 80000,
       monthlySpentFen: 76000,
     },
   );
@@ -139,27 +140,28 @@ test('card.get returns defensive project-shaped data without mutation', async ()
   const result = await runResolvedCardIntent(repo, resolved('card.get'));
   assert.equal(result.ok, true);
   assert.equal(result.data.kind, 'query');
-  assert.equal(result.data.card.monthlyLimitFen, 80000);
-  result.data.card.monthlyLimitFen = 1;
-  assert.equal(repo.getCards()[1].monthlyLimitFen, 80000);
+  assert.equal(result.data.card.monthlyBudgetFen, 80000);
+  result.data.card.monthlyBudgetFen = 1;
+  assert.equal(repo.getCards()[1].monthlyBudgetFen, 80000);
 });
 
-test('card.set_limit maps snake_case/minor to camelCase/Fen without conversion', async () => {
-  const value = resolved('card.set_limit', 'CARD-ENT', {
-    limit_type: 'monthly_total',
+test('card.set_budget maps snake_case/minor to camelCase/Fen without conversion', async () => {
+  const value = resolved('card.set_budget', 'CARD-ENT', {
     amount: { amount_minor: 100000, currency: 'CNY' },
   });
   const result = await runResolvedCardIntent(repository(), value);
   assert.equal(result.ok, true);
   assert.deepEqual(result.data.request, {
-    action: 'card.set_limit',
-    input: { cardId: 'CARD-ENT', limitType: 'monthly_total', amountFen: 100000, currency: 'CNY' },
+    action: 'card.set_budget',
+    input: { cardId: 'CARD-ENT', monthlyBudgetFen: 100000 },
   });
   assert.deepEqual(result.data.requirements, { minimumRiskLevel: 'L2', explicitUserConfirmation: true, executionOwner: 'banking_core' });
-  const belowSpent = await runResolvedCardIntent(repository(), resolved('card.set_limit', 'CARD-ENT', {
-    limit_type: 'monthly_total', amount: { amount_minor: 75999, currency: 'CNY' },
+  const belowSpent = await runResolvedCardIntent(repository(), resolved('card.set_budget', 'CARD-ENT', {
+    amount: { amount_minor: 75999, currency: 'CNY' },
   }));
-  assert.equal(belowSpent.error.code, 'LIMIT_EXCEEDED');
+  assert.equal(belowSpent.ok, true);
+  assert.equal(belowSpent.data.request.input.monthlyBudgetFen, 75999);
+  assert.match(belowSpent.data.warnings.join(' '), /当前已超预算/);
 });
 
 test('freeze and unfreeze create requests but never mutate repository state', async () => {
@@ -179,8 +181,8 @@ test('freeze and unfreeze create requests but never mutate repository state', as
 test('unknown card and malformed limits fail without effects', async () => {
   assert.equal((await runResolvedCardIntent(repository(), resolved('card.get', 'CARD-NONE'))).error.code, 'CARD_NOT_FOUND');
   for (const amount_minor of [-1, 1.5, 10000001]) {
-    const result = await runResolvedCardIntent(repository(), resolved('card.set_limit', 'CARD-ENT', {
-      limit_type: 'monthly_total', amount: { amount_minor, currency: 'CNY' },
+    const result = await runResolvedCardIntent(repository(), resolved('card.set_budget', 'CARD-ENT', {
+      amount: { amount_minor, currency: 'CNY' },
     }));
     assert.equal(result.error.code, 'VALIDATION_ERROR');
   }

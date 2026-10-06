@@ -4,10 +4,12 @@ import type { DispatchResult } from "./dispatch-result";
 
 export type BillSummaryIntent = Extract<ParsedIntent, { action: "bill.summary" }>;
 export type TransferCreateIntent = Extract<ParsedIntent, { action: "transfer.create" }>;
+export type CardIntent = Extract<ParsedIntent, { action: `card.${string}` }>;
 
 export type DispatcherDependencies = {
   billHandler: (intent: BillSummaryIntent) => Promise<DispatchResult>;
   transferHandler: (intent: TransferCreateIntent) => Promise<DispatchResult>;
+  cardHandler?: (intent: CardIntent) => Promise<DispatchResult>;
 };
 
 function clarificationResult(intent: ParsedIntent): DispatchResult {
@@ -43,6 +45,11 @@ export async function dispatchParsedIntent(
         return await dependencies.transferHandler(intent);
       case "bill.summary":
         return await dependencies.billHandler(intent);
+      case "card.get":
+      case "card.set_budget":
+      case "card.freeze":
+      case "card.unfreeze":
+        return dependencies.cardHandler ? await dependencies.cardHandler(intent) : { ok: false, kind: "unsupported" };
     }
   } catch (error) {
     return skillError(intent.action, error);

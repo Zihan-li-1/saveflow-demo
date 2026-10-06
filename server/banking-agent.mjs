@@ -2,11 +2,11 @@ import { timingSafeEqual } from 'node:crypto';
 import { getConfiguredBankingCore } from '../src/banking-core/postgres-store.mjs';
 import { BankingIntentParserError, parseBankingIntent as defaultParseBankingIntent } from './banking-intent-parser.mjs';
 import { ParsedIntentValidationError } from '../src/agent/validate-parsed-intent.mjs';
-import { dispatchParsedIntent, handleBillSummary, handleTransfer, prepareTransferPreview, transferRepository } from '../src/agent/runtime.mjs';
+import { dispatchParsedIntent, handleBillSummary, handleCard, handleTransfer, prepareTransferPreview, transferRepository } from '../src/agent/runtime.mjs';
 import { issueContinuationToken, verifyContinuationToken } from '../src/agent/clarification/continuation-token.mjs';
 import { resolveChoice } from '../src/agent/clarification/choice-resolver.mjs';
 import { buildParsedIntent, mergeSlots } from '../src/agent/clarification/merge-intent.mjs';
-import { isBillTask, isTransferTask, parseClarificationAnswer } from './banking-clarification-parser.mjs';
+import { isBillTask, isCardTask, isTransferTask, parseClarificationAnswer } from './banking-clarification-parser.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const RATE_LIMIT = 10;
@@ -28,6 +28,9 @@ function statusFor(code) {
   if (code === 'UNAUTHORIZED') return 401;
   if (code === 'FORBIDDEN') return 403;
   if (code === 'REQUEST_TOO_LARGE') return 413;
+  if (code === 'CARD_NOT_FOUND') return 404;
+  if (code === 'CARD_AMBIGUOUS' || code === 'INVALID_STATE') return 409;
+  if (code === 'LIMIT_EXCEEDED') return 422;
   if (code === 'MODEL_TIMEOUT') return 504;
   if (code === 'MODEL_RATE_LIMIT') return 429;
   if (['MODEL_AUTH_ERROR', 'MODEL_UPSTREAM_ERROR', 'MODEL_UNAVAILABLE', 'SKILL_ERROR'].includes(code)) return 502;
@@ -79,7 +82,14 @@ const clarificationQuestions = {
   month: '想看哪个月的账单？例如 2026 年 8 月。',
   source_account_ref: '要从哪个账户转出？',
   payee_ref: '要转给谁？',
+  card_ref: '请选择要查看或操作的卡片。',
 };
+
+function questionFor(action, slot) {
+  return slot === 'amount' && action === 'card.set_budget'
+    ? '新的月消费预算是多少元？例如 1000 元。'
+    : clarificationQuestions[slot] || '请补充必要信息。';
+}
 
 function continuationSecret(env) {
   return env.CONTINUATION_TOKEN_SECRET;
@@ -111,6 +121,15 @@ function payeeChoices(candidates) {
   }));
 }
 
+function cardChoices(cards) {
+  return cards.map((card, index) => ({
+    optionId: `opt_${crypto.randomUUID()}`,
+    label: `${card.name}（卡片 ${index + 1}）`,
+    entityId: card.id,
+    rawValue: card.name,
+  }));
+}
+
 function clarificationResponse(reply, { action, slot, question, choices = [], slots, selections = {}, env, now, message, source }) {
   const token = issueState({ action, slots, pendingSlot: slot, choices, selections, env, now });
   return reply(200, 'NEEDS_CLARIFICATION', question, {
@@ -122,8 +141,20 @@ function clarificationResponse(reply, { action, slot, question, choices = [], sl
 function nextMissingSlot(intent) {
   const order = intent.action === 'transfer.create'
     ? ['source_account_ref', 'payee_ref', 'amount']
-    : ['month'];
+    : intent.action.startsWith('card.') ? ['card_ref', 'amount'] : ['month'];
   return order.find(slot => intent.missingSlots?.includes(slot)) || intent.missingSlots?.[0];
+}
+
+function switchesTask(message, continuation) {
+  if (isBillTask(message) && continuation.action !== 'bill.summary') return true;
+  if (isTransferTask(message) && continuation.action !== 'transfer.create') return true;
+  if (!isCardTask(message)) return false;
+  if (!continuation.action.startsWith('card.')) return true;
+  if (/解冻|解除冻结/.test(message)) return continuation.action !== 'card.unfreeze';
+  if (/冻结|锁卡/.test(message)) return continuation.action !== 'card.freeze';
+  if (/预算/.test(message) && /调整|修改|设置|改成/.test(message)) return continuation.action !== 'card.set_budget';
+  if (/查(?:询|看)?.{0,4}(?:银行卡|卡片)|卡片?信息/.test(message)) return continuation.action !== 'card.get';
+  return false;
 }
 
 /** Banking Agent: Parser -> Dispatcher -> Skill -> Core formal preview. */
@@ -175,11 +206,11 @@ export async function handleBankingAgent(
     if (continuing) {
       try { continuation = verifyContinuationToken(body.continuationToken, continuationSecret(env), now()); }
       catch (error) { throw tokenError(error); }
-      if (body.message && ((isBillTask(body.message) && continuation.action === 'transfer.create') || (isTransferTask(body.message) && continuation.action === 'bill.summary'))) {
+      if (body.message && switchesTask(body.message, continuation)) {
         parsed = await parseIntent(body.message, { history, env, fetchImpl, requestId });
       } else {
         if (body.choice && !resolveChoice(body.choice, continuation.choices)) throw Object.assign(new Error('选项不存在或已失效'), { code: 'INVALID_CHOICE', status: 400 });
-        const answer = parseClarificationAnswer(body.message || '', { slot: continuation.pendingSlot, choices: continuation.choices, choice: body.choice, now: now() });
+        const answer = parseClarificationAnswer(body.message || '', { action: continuation.action, slot: continuation.pendingSlot, choices: continuation.choices, choice: body.choice, now: now() });
         if (answer.kind === 'choice') {
           const selected = resolveChoice(body.choice || body.message, continuation.choices);
           if (!selected) throw Object.assign(new Error('选项不存在或已失效'), { code: 'INVALID_CHOICE', status: 400 });
@@ -193,7 +224,7 @@ export async function handleBankingAgent(
           return clarificationResponse(reply, {
             action: continuation.action,
             slot: continuation.pendingSlot,
-            question: clarificationQuestions[continuation.pendingSlot] || '请补充必要信息。',
+            question: questionFor(continuation.action, continuation.pendingSlot),
             choices: continuation.choices,
             slots: continuation.slots,
             selections: continuation.selections || {},
@@ -209,6 +240,7 @@ export async function handleBankingAgent(
     const dependencies = {
       billHandler: intent => handleBillSummary(intent, repository),
       transferHandler: intent => handleTransfer(intent, transferRepository(repository, selections)),
+      cardHandler: intent => handleCard(intent, repository, selections),
     };
     const dispatched = await dispatchParsedIntent(parsed, dependencies);
     const prepareTransfer = typeof core.prepare === 'function'
@@ -217,6 +249,12 @@ export async function handleBankingAgent(
     const result = await prepareTransferPreview(dispatched, prepareTransfer);
 
     if (result.ok && result.kind === 'bill_result') return reply(200, 'OK', '账单统计已生成', { status: 'bill_result', action: result.action, data: { ...result.data, month: parsed.slots.month }, evidence: result.evidence });
+    if (result.ok && result.kind === 'card_result') return reply(200, 'OK', '卡片信息已查询', { status: 'card_result', action: result.action, data: result.data, evidence: result.evidence });
+    if (result.ok && result.kind === 'card_action_request') {
+      const prepared = await core.prepare(result.data.request);
+      if (!prepared.ok) return reply(statusFor(prepared.error.code), prepared.error.code, prepared.error.message, { status: 'core_error', action: result.action, ...(prepared.operationId ? { operationId: prepared.operationId } : {}), error: prepared.error });
+      return reply(200, 'OK', '卡片正式预览已生成，等待页面确认', { status: 'awaiting_confirmation', action: result.action, operationId: prepared.data.operationId, preview: prepared.data.preview, risk: prepared.data.risk, evidence: result.data.evidence });
+    }
     if (result.ok && result.kind === 'transfer_preview') {
       const continuationToken = issueState({ action: 'transfer.create', slots: parsed.slots, pendingSlot: 'amount', selections, env, now });
       return reply(200, 'OK', '转账正式预览已生成，等待用户确认', { status: result.data.state, action: result.action, operationId: result.data.operationId, preview: result.data.preview, risk: result.data.risk, continuationToken });
@@ -225,11 +263,11 @@ export async function handleBankingAgent(
       const action = result.action || parsed.action;
       const slots = parsed.slots || {};
       const slot = result.slot || nextMissingSlot(parsed) || (result.candidates ? 'payee_ref' : undefined);
-      const choices = result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' ? await accountChoices(repository) : slot === 'payee_ref' && !slots.payee_ref ? payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active')) : [];
+      const choices = slot === 'card_ref' ? cardChoices(result.candidates?.length ? result.candidates : await repository.getCards()) : result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' ? await accountChoices(repository) : slot === 'payee_ref' && !slots.payee_ref ? payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active')) : [];
       return clarificationResponse(reply, {
         action,
         slot,
-        question: result.question || clarificationQuestions[slot] || '请补充必要信息。',
+        question: result.question || questionFor(action, slot),
         choices,
         slots,
         selections,
@@ -239,6 +277,7 @@ export async function handleBankingAgent(
     }
     if (result.kind === 'unsupported') return reply(200, 'UNSUPPORTED', '暂不支持该请求', { status: result.kind });
     if (result.kind === 'skill_error') return reply(502, 'SKILL_ERROR', 'Skill 处理失败，请稍后重试。', errorData('SKILL_ERROR', 'Skill 处理失败，请稍后重试。'));
+    if (result.kind === 'card_error') return reply(statusFor(result.error.code), result.error.code, result.error.message, { status: 'card_error', action: result.action, error: result.error });
     if (result.kind === 'core_error') return reply(statusFor(result.error.code), result.error.code, result.error.message, { status: 'core_error', action: result.action, ...(result.operationId ? { operationId: result.operationId } : {}), error: result.error });
     return reply(500, 'INTERNAL_ERROR', '未取得可靠结果', errorData('INTERNAL_ERROR', '未取得可靠结果'));
   } catch (error) {

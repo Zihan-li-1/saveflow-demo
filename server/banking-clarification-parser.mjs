@@ -1,12 +1,12 @@
 import { resolveChoice } from '../src/agent/clarification/choice-resolver.mjs';
 
-function amount(message) {
+function amount(message, allowZero = false) {
   const match = message.replaceAll(',', '').match(/(-?\d+(?:\.\d+)?)/);
   if (!match) return null;
   const yuan = Number(match[1]);
-  if (!Number.isFinite(yuan) || yuan <= 0 || (match[1].includes('.') && match[1].split('.')[1].length > 2)) return null;
+  if (!Number.isFinite(yuan) || yuan < (allowZero ? 0 : Number.EPSILON) || (match[1].includes('.') && match[1].split('.')[1].length > 2)) return null;
   const minor = Math.round(yuan * 100);
-  return Number.isSafeInteger(minor) && minor > 0 && Math.abs(yuan * 100 - minor) < 0.000001 ? { amount_minor: minor, currency: 'CNY' } : null;
+  return Number.isSafeInteger(minor) && minor >= (allowZero ? 0 : 1) && Math.abs(yuan * 100 - minor) < 0.000001 ? { amount_minor: minor, currency: 'CNY' } : null;
 }
 
 function month(message, now) {
@@ -25,9 +25,12 @@ function month(message, now) {
   return `${year}-${String(value).padStart(2, '0')}`;
 }
 
-export function parseClarificationAnswer(message, { slot, choices = [], now = Date.now(), choice } = {}) {
+export function parseClarificationAnswer(message, { action, slot, choices = [], now = Date.now(), choice } = {}) {
   // Explicit edits replace the old resolution as well as the visible draft.
   if (!choice) {
+    const card = message.trim().match(/^(?:卡片?改成|卡片?换成|改成|改为|换成|改选)\s*(.+卡)[。！]?$/);
+    if (card) return { kind: 'slot', updates: { card_ref: card[1] } };
+    if (/^(?:重新选择|改选|更换|换)(?:卡|卡片)[。！]?$/.test(message.trim())) return { kind: 'slot', updates: { card_ref: undefined } };
     const payee = message.trim().match(/^(?:收款人改成|收款人换成|改为给|改给|换成给|换给)\s*(.+?)[。！]?$/);
     if (payee) return { kind: 'slot', updates: { payee_ref: payee[1] } };
     if (/^(?:重新选择|改选|更换)(?:付款)?账户[。！]?$/.test(message.trim())) return { kind: 'slot', updates: { source_account_ref: undefined } };
@@ -39,9 +42,10 @@ export function parseClarificationAnswer(message, { slot, choices = [], now = Da
     if (choice || message.trim()) return { kind: 'unrecognized' };
   }
   if (slot === 'amount') {
-    const value = /^(?:(?:金额)?改成|改为)?\s*-?\d[\d,]*(?:\.\d+)?\s*(?:元|块钱?|人民币)?[。！]?$/.test(message.trim()) ? amount(message) : null;
-    return value ? { kind: 'slot', updates: { amount: value } } : { kind: 'unrecognized' };
+    const value = /^(?:(?:金额|预算)?改成|改为)?\s*-?\d[\d,]*(?:\.\d+)?\s*(?:元|块钱?|人民币)?[。！]?$/.test(message.trim()) ? amount(message, action === 'card.set_budget') : null;
+    return value && (action !== 'card.set_budget' || value.amount_minor <= 10_000_000) ? { kind: 'slot', updates: { amount: value } } : { kind: 'unrecognized' };
   }
+  if (slot === 'card_ref' && message.trim()) return { kind: 'slot', updates: { card_ref: message.trim() } };
   if (slot === 'payee_ref' && message.trim()) return { kind: 'slot', updates: { payee_ref: message.trim() } };
   if (slot === 'month') {
     const value = month(message, now);
@@ -51,9 +55,13 @@ export function parseClarificationAnswer(message, { slot, choices = [], now = Da
 }
 
 export function isBillTask(message) {
-  return /账单|查账|消费|支出|流水/.test(message);
+  return /账单|查账|支出|流水|消费(?!限额|预算)/.test(message);
 }
 
 export function isTransferTask(message) {
-  return /转账|转|付款|汇款/.test(message);
+  return /转账|转\s*\d|付款|汇款|转给|转钱/.test(message);
+}
+
+export function isCardTask(message) {
+  return /冻结|解冻|解除冻结|锁卡|卡片?预算|月预算|查(?:询|看)?.{0,4}(?:银行卡|卡片)|卡片?信息/.test(message);
 }

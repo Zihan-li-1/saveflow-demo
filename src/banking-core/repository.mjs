@@ -18,6 +18,8 @@ export function createFinancialContext(source = seed) {
   ];
   /** @type {import('./contracts').Transaction[]} */
   const transactions = raw.transactions.map(t => ({ id: t.id, accountId: t.accountId, occurredAt: `${t.date}T00:00:00+08:00`, type: t.type === 'income' ? 'income' : 'expense', category: t.category, merchant: t.merchant, amountFen: seedYuanToFen(t.amount), currency: 'CNY', status: 'posted', source: 'synthetic_seed' }));
+  /** @type {import('./contracts').Card[]} */
+  const cards = raw.cards.map(c => ({ id: c.id, name: c.name, accountId: c.linkedAccountId, status: c.status === 'active' ? 'active' : 'frozen', monthlyBudgetFen: seedYuanToFen(c.monthlyBudget), monthlySpentFen: seedYuanToFen(c.monthlySpent), version: 0, previewGeneration: 0 }));
   /** @type {import('./contracts').InvestmentProduct[]} */
   const products = [
     { id: 'product_001', name: '模拟灵活现金 A', riskLevel: 'R1', expectedYield: 150, liquidity: 'T+0', minimumAmountFen: 100, durationDays: 0, currency: 'CNY', isSynthetic: true },
@@ -33,7 +35,8 @@ export function createFinancialContext(source = seed) {
     getPayees: () => structuredClone(payees),
     getPayee: id => structuredClone(payees.find(p => p.id === id)),
     getTransactions: (filter = {}) => structuredClone(transactions.filter(t => (!filter.accountId || t.accountId === filter.accountId) && (!filter.month || t.occurredAt.startsWith(`${filter.month}-`)))),
-    getCards: () => raw.cards.map(c => ({ id: c.id, name: c.name, accountId: c.linkedAccountId, status: c.status === 'active' ? 'active' : 'frozen', monthlyLimitFen: seedYuanToFen(c.monthlyLimit), monthlySpentFen: seedYuanToFen(c.monthlySpent) })),
+    getCards: () => structuredClone(cards),
+    getCard: id => structuredClone(cards.find(c => c.id === id)),
     getSubscriptions: () => raw.subscriptions.map(s => ({ id: s.id, name: s.name, monthlyFeeFen: seedYuanToFen(s.monthlyFee), status: s.status === 'active' ? 'active' : 'cancelled', lastUsedDate: s.lastUsedDate, isPotentiallyUnused: s.isPotentiallyUnused, mandateId: null })),
     getInvestmentProducts: () => structuredClone(products),
     getSavingGoal: () => ({ id: raw.savingGoals[0].id, targetAmountFen: seedYuanToFen(raw.savingGoals[0].targetAmount), currentAmountFen: seedYuanToFen(raw.savingGoals[0].currentAmount), targetDate: raw.savingGoals[0].targetDate, proposedMonthlySavingFen: seedYuanToFen(raw.savingGoals[0].proposedMonthlySaving) }),
@@ -57,5 +60,22 @@ export function createFinancialContext(source = seed) {
     revision++;
     return structuredClone(transaction);
   }
-  return { repository: Object.freeze(repository), commitTransfer, ownerId: raw.user.id };
+  /** @param {import('./contracts').CardEffect} effect */
+  function commitCard(effect) {
+    const card = cards.find(c => c.id === effect.cardId);
+    if (!card || card.version !== effect.cardVersion || card.previewGeneration !== effect.previewGeneration || card.status !== effect.before.status || card.monthlyBudgetFen !== effect.before.monthlyBudgetFen) throw new BankingError('PREVIEW_STALE', '卡片已变化，请重新预览并确认');
+    card.status = effect.after.status;
+    card.monthlyBudgetFen = effect.after.monthlyBudgetFen;
+    card.version++;
+    revision++;
+    return structuredClone(card);
+  }
+  /** @param {string} cardId */
+  function reserveCardPreview(cardId) {
+    const card = cards.find(c => c.id === cardId);
+    if (!card) throw new BankingError('CARD_NOT_FOUND', '当前用户无法访问该卡片');
+    card.previewGeneration++;
+    return card.previewGeneration;
+  }
+  return { repository: Object.freeze(repository), commitTransfer, commitCard, reserveCardPreview, ownerId: raw.user.id };
 }

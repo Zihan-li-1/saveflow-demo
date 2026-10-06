@@ -2,7 +2,7 @@
 
 日期：2026-09-22。依据工作区《建骨架.md》的 B 分工及《intent-contracts.md》v1.1。
 
-B 已实现统一数据仓库、公共类型、转账 Risk/Preview/Confirm/Execute/Receipt、用户作用域幂等、待核实查询、Mock/HTTP 适配和回归测试。A 的 Qwen 新意图路由、C 的完整账单 Skill、D 的收款人消歧及聊天转账确认卡、E 的工作流仍由各自模块接入。本次不会让旧储蓄助手声称已经完成自然语言转账。
+B 已实现统一数据仓库、公共类型、转账及卡片操作的 Risk/Preview/Confirm/Execute/Receipt、用户作用域幂等、待核实查询、Mock/HTTP 适配和回归测试。Banking Agent 已接入卡片查询、月消费预算、冻结及解冻；其他规划能力仍以各自模块的实现状态为准。
 
 ## 1. 唯一入口与版本
 
@@ -15,7 +15,7 @@ TypeScript 模块统一从 `src/banking-core/index.ts` 引入类型和底座；�
 | 意图适配 | `transfer.create` → `transfer_money`；只在 `wire.mjs` 适配已经唯一解析的账户/收款人引用 |
 | 旧接口 v1 | `analyze/create-plan/operation-status` 原字段保留，不自动升级为转账或理财指令 |
 
-新增可选字段升小版本；改单位、含义、必填字段或枚举升大版本。金额换算只允许在原始元种子导入和 UI 展示处发生；HTTP/意图边界只改字段名，不乘除 100。禁止把 `monthlySavingFen` 当转账金额，把 `saveRateBps` 当卡限额。
+新增可选字段升小版本；改单位、含义、必填字段或枚举升大版本。金额换算只允许在原始元种子导入和 UI 展示处发生；HTTP/意图边界只改字段名，不乘除 100。禁止把 `monthlySavingFen` 当转账金额；旧消费比例储蓄字段在 `create-plan` 边界被拒绝。
 
 ## 2. 公共类型
 
@@ -26,10 +26,10 @@ TypeScript 模块统一从 `src/banking-core/index.ts` 引入类型和底座；�
 | Account | id、name、checking/saving、currency、balanceFen、availableBalanceFen、version、status |
 | Payee | id、name、可选 phone、aliases、accountNoMasked、currency、status；当前只有脱敏账号，无真实手机号 |
 | Transaction | id、accountId、可选 payeeId/operationId、occurredAt、type、amountFen、currency、status、source；金额为正数，方向由 type 表达 |
-| Card | id、name、accountId、status、monthlyLimitFen、monthlySpentFen |
+| Card | id、name、accountId、status、monthlyBudgetFen、monthlySpentFen、version、previewGeneration |
 | Subscription | id、name、monthlyFeeFen、status、lastUsedDate、isPotentiallyUnused、mandateId；当前 mandateId=null，不支持解除代扣 |
 | InvestmentProduct | id、name、R1/R2/R3、expectedYield、liquidity、minimumAmountFen、durationDays、currency、isSynthetic |
-| ActionRequest | 注册动作 + input，可带服务端 planId/stepId/origin；当前仅 `transfer_money` |
+| ActionRequest | 注册动作 + input；转账可带服务端 planId/stepId/origin，卡片动作使用 cardId 和可选 monthlyBudgetFen |
 | ActionResult<T> | `{ok:true,data:T}` 或 `{ok:false,error,operationId?}`；不能只检查 HTTP 200 |
 | ActionReceipt | receiptId、operationId、action、planId、stepId、status、executedAt、transactionIds、effects、dataSource；失败/取消不含已执行效果 |
 | ToolCall/ToolResult | toolCallId、tool、arguments/result、evidence；证据带 source/asOf/entityIds，写结果带具体步骤回执 |
@@ -154,7 +154,7 @@ npm run demo:banking
 
 Netlify 的 `/api/banking`、`/api/saveflow` 与 `/api/banking-agent` 在配置 `DATABASE_URL` 后共用 PostgreSQL 持久层。首次部署前运行 `npm run db:migrate`；连接串仅配置为服务端环境变量。Netlify 未配置数据库时写接口返回 `DATABASE_NOT_CONFIGURED`，不会静默退回实例内存。浏览器 `mock` 模式仍是单标签页内存演示，不与 PostgreSQL HTTP 模式共享状态。
 
-跨实例验收：将独立测试数据库连接串设为 `BANKING_TEST_DATABASE_URL`，先运行迁移，再执行 `npm test`。PostgreSQL 测试创建独立测试用户，检查两个 Core 实例并发重复执行只扣一次、新实例重启后能按原编号查到回执，并在结束后删除该测试用户数据。
+跨实例验收：将独立测试数据库连接串设为 `BANKING_TEST_DATABASE_URL`，先运行迁移，再执行 `npm test`。PostgreSQL 测试创建独立测试用户，检查转账和卡片操作在两个 Core 实例之间共享状态、重复执行只修改一次，且新实例启动后仍读到回执和已修改的卡片数据，最后清理该测试用户数据。
 
 默认 `NEXT_PUBLIC_SAVEFLOW_API_MODE=mock` 使用浏览器内存底座。HTTP 本地联调设置 `NEXT_PUBLIC_SAVEFLOW_API_MODE=http`、`NEXT_PUBLIC_SAVEFLOW_API_BASE_URL=`（留空，同源），运行 `npm run dev:qwen`。该命令同时提供 Next、`/api/agent`、`/api/banking`、旧 POST `/api/saveflow`；只有主动请求 `/api/agent` 才可能调用 Qwen。普通 `next dev` 不提供这些 POST 服务。
 

@@ -3,7 +3,7 @@
   "title": "Resolved Card Skill handoff aligned with ResolvedIntent v1.1.0",
   "oneOf": [
     { "$ref": "#/$defs/get" },
-    { "$ref": "#/$defs/setLimit" },
+    { "$ref": "#/$defs/setBudget" },
     { "$ref": "#/$defs/freeze" },
     { "$ref": "#/$defs/unfreeze" }
   ],
@@ -83,23 +83,22 @@
         "missing_slots": { "$ref": "#/$defs/missingSlots" }
       }
     },
-    "setLimit": {
+    "setBudget": {
       "type": "object",
       "additionalProperties": false,
       "required": ["intent_id", "action", "state", "resolved_slots", "references", "missing_slots"],
       "properties": {
         "intent_id": { "$ref": "#/$defs/intentId" },
-        "action": { "const": "card.set_limit" },
+        "action": { "const": "card.set_budget" },
         "state": { "const": "ready_for_planning" },
         "references": { "$ref": "#/$defs/references" },
         "missing_slots": { "$ref": "#/$defs/missingSlots" },
         "resolved_slots": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["card_id", "limit_type", "amount"],
+          "required": ["card_id", "amount"],
           "properties": {
             "card_id": { "$ref": "#/$defs/cardId" },
-            "limit_type": { "const": "monthly_total" },
             "amount": { "$ref": "#/$defs/amount" }
           }
         }

@@ -2,6 +2,10 @@ export const PARSED_INTENT_SCHEMA_VERSION = '1.0.0';
 export const PARSED_INTENT_ACTIONS = Object.freeze([
   'transfer.create',
   'bill.summary',
+  'card.get',
+  'card.set_budget',
+  'card.freeze',
+  'card.unfreeze',
   'clarify',
   'unsupported',
 ]);
@@ -9,6 +13,7 @@ export const PARSED_INTENT_ACTIONS = Object.freeze([
 const TOP_LEVEL_KEYS = ['schemaVersion', 'action', 'slots', 'missingSlots', 'status'];
 const TRANSFER_SLOT_KEYS = ['payee_ref', 'amount', 'source_account_ref'];
 const BILL_SLOT_KEYS = ['month'];
+const CARD_SLOT_KEYS = ['card_ref', 'amount'];
 
 export class ParsedIntentValidationError extends Error {
   constructor(message) {
@@ -45,11 +50,14 @@ function requireNonEmptyString(value, path) {
 
 function requireRawReference(value, path) {
   const reference = requireNonEmptyString(value, path);
-  if (path === 'slots.payee_ref' && /^payee[_-][a-z0-9_-]+$/i.test(reference)) {
+  if (path === 'slots.payee_ref' && /^payee[_-][a-z0-9_-]+$/i.test(reference.trim())) {
     fail(`${path} must be a raw user reference, not a payee entity ID`);
   }
-  if (path === 'slots.source_account_ref' && /^(acc|account)[_-][a-z0-9_-]+$/i.test(reference)) {
+  if (path === 'slots.source_account_ref' && /^(acc|account)[_-][a-z0-9_-]+$/i.test(reference.trim())) {
     fail(`${path} must be a raw user reference, not an account entity ID`);
+  }
+  if (path === 'slots.card_ref' && /^card[_-][a-z0-9_-]+$/i.test(reference.trim())) {
+    fail(`${path} must be a raw user reference, not a card entity ID`);
   }
   return reference;
 }
@@ -69,13 +77,29 @@ function requireStatus(value, expected) {
   if (value !== expected) fail(`status must be ${expected}`);
 }
 
-function validateAmount(value) {
+function validateAmount(value, { allowZero = false, maximum = Number.MAX_SAFE_INTEGER } = {}) {
   const amount = requireRecord(value, 'slots.amount');
   rejectUnknownKeys(amount, ['amount_minor', 'currency'], 'slots.amount');
-  if (!Number.isSafeInteger(amount.amount_minor) || amount.amount_minor <= 0) {
-    fail('slots.amount.amount_minor must be a positive safe integer in minor units');
+  if (!Number.isSafeInteger(amount.amount_minor) || amount.amount_minor < (allowZero ? 0 : 1) || amount.amount_minor > maximum) {
+    fail('slots.amount.amount_minor is outside the allowed integer minor-unit range');
   }
   if (amount.currency !== 'CNY') fail('slots.amount.currency must be CNY');
+}
+
+function validateCard(input, slots) {
+  const isLimit = input.action === 'card.set_budget';
+  rejectUnknownKeys(slots, isLimit ? CARD_SLOT_KEYS : ['card_ref'], 'slots');
+  if ('card_ref' in slots) {
+    requireRawReference(slots.card_ref, 'slots.card_ref');
+    if (slots.card_ref.length > 128) fail('slots.card_ref must be at most 128 characters');
+  }
+  if (isLimit) {
+    if ('amount' in slots) validateAmount(slots.amount, { allowZero: true, maximum: 10_000_000 });
+  }
+  const required = isLimit ? CARD_SLOT_KEYS : ['card_ref'];
+  const missing = required.filter(slot => !(slot in slots));
+  requireMissingSlots(input.missingSlots, missing);
+  requireStatus(input.status, missing.length === 0 ? 'ready_for_resolution' : 'needs_clarification');
 }
 
 function validateTransfer(input, slots) {
@@ -116,6 +140,12 @@ export function validateParsedIntent(value) {
       break;
     case 'bill.summary':
       validateBill(input, slots);
+      break;
+    case 'card.get':
+    case 'card.set_budget':
+    case 'card.freeze':
+    case 'card.unfreeze':
+      validateCard(input, slots);
       break;
     case 'clarify':
       rejectUnknownKeys(slots, [], 'slots');

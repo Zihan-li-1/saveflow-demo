@@ -12,8 +12,9 @@ export async function dispatchBanking(action, value, core = bankingCore) {
     /** @type {Record<string, string[]>} */
     const fields = {
       'context.get': [], 'account.list': [], 'account.get': ['id'], 'payee.list': [], 'payee.get': ['id'],
-      'transaction.list': ['accountId', 'month'], 'product.list': [], 'card.list': [], 'subscription.list': [],
+      'transaction.list': ['accountId', 'month'], 'product.list': [], 'card.list': [], 'card.get': ['id'], 'subscription.list': [],
       'transfer.prepare': ['fromAccountId', 'payeeId', 'amountFen', 'currency', 'memo'],
+      'card.set_budget': ['cardId', 'monthlyBudgetFen'], 'card.freeze': ['cardId'], 'card.unfreeze': ['cardId'],
       'action.decide': ['operationId', 'previewHash', 'decision', 'confirmedStepIds'],
       'action.execute': ['operationId', 'previewHash'], 'action.status': ['operationId'],
     };
@@ -38,8 +39,14 @@ export async function dispatchBanking(action, value, core = bankingCore) {
         data = await repo.getTransactions(/** @type {{accountId?: string, month?: string}} */(input)); break;
       case 'product.list': data = await repo.getInvestmentProducts(); break;
       case 'card.list': data = await repo.getCards(); break;
+      case 'card.get':
+        assertId(input.id); data = await repo.getCard(input.id);
+        if (!data) throw new BankingError('CARD_NOT_FOUND', '当前用户无法访问该卡片'); break;
       case 'subscription.list': data = await repo.getSubscriptions(); break;
       case 'transfer.prepare': return core.prepare({ action: 'transfer_money', input: /** @type {import('./contracts').TransferInput} */(input) });
+      case 'card.set_budget':
+      case 'card.freeze':
+      case 'card.unfreeze': return core.prepare({ action, input: /** @type {import('./contracts').CardInput} */(input) });
       case 'action.decide': return core.decide(/** @type {string} */(input.operationId), /** @type {import('./contracts').DecisionInput} */({ previewHash: input.previewHash, decision: input.decision, confirmedStepIds: input.confirmedStepIds }));
       case 'action.execute': return core.execute(/** @type {string} */(input.operationId), /** @type {string} */(input.previewHash));
       case 'action.status': return core.getOperation(/** @type {string} */(input.operationId));
