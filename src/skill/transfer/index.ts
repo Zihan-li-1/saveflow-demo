@@ -47,7 +47,7 @@ export async function resolveTransferIntent(
     return needsClarification({
       reason: "invalid_amount",
       slot: "amount",
-      question: "转账金额必须为大于 0 的整数分，请重新输入。",
+      question: "转账金额必须是大于 0 的整数分。",
     });
   }
   if (amount.currency !== "CNY") {

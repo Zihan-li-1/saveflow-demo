@@ -25,7 +25,7 @@ export async function prepareTransfer(
       clarification: {
         reason: "source_account_not_found",
         slot: "source_account_ref",
-        question: `转出账户 ${input.source_account_id} 不存在，请确认。`,
+        question: `转出账户 ${input.source_account_id} 不存在。`,
       },
     };
   }

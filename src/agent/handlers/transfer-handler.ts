@@ -16,6 +16,8 @@ export async function handleTransfer(
       action: "transfer.create",
       source: "resolver",
       question: resolved.clarification.question,
+      slot: resolved.clarification.slot,
+      reason: resolved.clarification.reason,
       ...(resolved.clarification.candidates
         ? { candidates: resolved.clarification.candidates }
         : {}),
