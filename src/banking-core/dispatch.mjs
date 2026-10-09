@@ -12,8 +12,11 @@ export async function dispatchBanking(action, value, core = bankingCore) {
     /** @type {Record<string, string[]>} */
     const fields = {
       'context.get': [], 'account.list': [], 'account.get': ['id'], 'payee.list': [], 'payee.get': ['id'],
-      'transaction.list': ['accountId', 'month'], 'product.list': [], 'card.list': [], 'subscription.list': [],
+      'transaction.list': ['accountId', 'month'], 'product.list': [], 'card.list': [], 'subscription.list': [], 'holding.list': [],
       'transfer.prepare': ['fromAccountId', 'payeeId', 'amountFen', 'currency', 'memo'],
+      'card-limit.prepare': ['cardId', 'monthlyLimitFen'],
+      'subscription-cancel.prepare': ['subscriptionId'],
+      'investment-purchase.prepare': ['fromAccountId', 'productId', 'amountFen', 'currency'],
       'action.decide': ['operationId', 'previewHash', 'decision', 'confirmedStepIds'],
       'action.execute': ['operationId', 'previewHash'], 'action.status': ['operationId'],
     };
@@ -39,7 +42,11 @@ export async function dispatchBanking(action, value, core = bankingCore) {
       case 'product.list': data = await repo.getInvestmentProducts(); break;
       case 'card.list': data = await repo.getCards(); break;
       case 'subscription.list': data = await repo.getSubscriptions(); break;
-      case 'transfer.prepare': return core.prepare({ action: 'transfer_money', input: /** @type {import('./contracts').TransferInput} */(input) });
+      case 'holding.list': data = await repo.getHoldings(); break;
+      case 'transfer.prepare': return core.prepare({ action: 'transfer_money', input: /** @type {import('./contracts').TransferInput} */ (input) });
+      case 'card-limit.prepare': return core.prepare({ action: 'card.set_limit', input: /** @type {import('./contracts').CardLimitInput} */ (input) });
+      case 'subscription-cancel.prepare': return core.prepare({ action: 'subscription.cancel_debit', input: /** @type {import('./contracts').CancelSubscriptionInput} */ (input) });
+      case 'investment-purchase.prepare': return core.prepare({ action: 'wealth.subscribe', input: /** @type {import('./contracts').InvestmentPurchaseInput} */ (input) });
       case 'action.decide': return core.decide(/** @type {string} */(input.operationId), /** @type {import('./contracts').DecisionInput} */({ previewHash: input.previewHash, decision: input.decision, confirmedStepIds: input.confirmedStepIds }));
       case 'action.execute': return core.execute(/** @type {string} */(input.operationId), /** @type {string} */(input.previewHash));
       case 'action.status': return core.getOperation(/** @type {string} */(input.operationId));

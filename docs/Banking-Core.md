@@ -27,11 +27,12 @@ TypeScript 模块统一从 `src/banking-core/index.ts` 引入类型和底座；�
 | Payee | id、name、可选 phone、aliases、accountNoMasked、currency、status；当前只有脱敏账号，无真实手机号 |
 | Transaction | id、accountId、可选 payeeId/operationId、occurredAt、type、amountFen、currency、status、source；金额为正数，方向由 type 表达 |
 | Card | id、name、accountId、status、monthlyLimitFen、monthlySpentFen |
-| Subscription | id、name、monthlyFeeFen、status、lastUsedDate、isPotentiallyUnused、mandateId；当前 mandateId=null，不支持解除代扣 |
+| Subscription | id、name、monthlyFeeFen、status、lastUsedDate、isPotentiallyUnused、mandateId、version；种子授权 ID 是模拟值，仅支持合成代扣状态变更 |
+| Holding | id、accountId、productId、amountFen、acquiredAt、status；仅记录合成产品申购 |
 | InvestmentProduct | id、name、R1/R2/R3、expectedYield、liquidity、minimumAmountFen、durationDays、currency、isSynthetic |
-| ActionRequest | 注册动作 + input，可带服务端 planId/stepId/origin；当前仅 `transfer_money` |
+| ActionRequest | 注册动作 + input，可带服务端 planId/stepId/origin；当前支持 `transfer_money`、`card.set_limit`、`subscription.cancel_debit`、`wealth.subscribe` |
 | ActionResult<T> | `{ok:true,data:T}` 或 `{ok:false,error,operationId?}`；不能只检查 HTTP 200 |
-| ActionReceipt | receiptId、operationId、action、planId、stepId、status、executedAt、transactionIds、effects、dataSource；失败/取消不含已执行效果 |
+| ActionReceipt | receiptId、operationId、action、planId、stepId、status、executedAt、transactionIds、effects、dataSource；效果为带 kind 的联合类型，失败/取消不含已执行效果 |
 | ToolCall/ToolResult | toolCallId、tool、arguments/result、evidence；证据带 source/asOf/entityIds，写结果带具体步骤回执 |
 
 `InvestmentProduct.expectedYield` 明确为整数基点，例如 150=1.50% 的模拟年化展示值，HTTP 字段为 `expected_yield_bps`；不是承诺收益。产品为三个自造合成样例，分别 T+0、T+1、30 天到期。
@@ -49,6 +50,7 @@ repo.getTransactions({ month: "2026-08" });
 repo.getCards();
 repo.getSubscriptions();
 repo.getInvestmentProducts();
+repo.getHoldings();
 repo.getContextInfo();
 ```
 
@@ -72,9 +74,9 @@ executing → unknown → checking → succeeded / failed / unknown
 
 `prepare()` 生成服务端 operationId/planId/stepId，校验参数、实体、余额、限额；产出风险结果及预览，不扣款。L3 风险和零手续费由 Mock 策略确定，模型不能覆盖。SHA-256 绑定用户、操作编号、步骤、来源、精确效果、数据版本、有效期和策略。有效期默认 5 分钟，单笔 Mock 上限默认 ¥100,000；两者都不是银行官方参数。
 
-`decide()` 只能由 UI 确认适配器调用，必须提交原 previewHash 和精确 stepIds；服务器记录确认方式、时刻和幂等键。裸 `confirmed:true` 对新动作无效。确认不会扣款，`reject` 形成取消回执。
+`decide()` 只能由 UI 确认适配器调用，必须提交原 previewHash 和精确 stepIds；服务器记录确认方式、时刻和幂等键。裸 `confirmed:true` 对新动作无效。确认不会修改业务数据，`reject` 形成取消回执。调卡限额与解除模拟代扣为 L2；转账和合成产品申购为 L3。所有动作均生成专属 exact effect 并绑定预览哈希。
 
-`execute()` 只接受原 operationId 和 previewHash，不接受新的金额或收款人；执行前再次检查有效期、账户版本、收款人、余额和限额。余额不足/预览过期/版本变化会形成标准失败回执；必须重新预览确认。**相同操作成功后重放返回原回执，不因后来余额变化重新扣款。**
+`execute()` 只接受原 operationId 和 previewHash，不接受新的业务参数；执行前再次检查有效期、账户/卡/订阅版本、关联实体、余额和策略。余额不足/预览过期/版本变化会形成标准失败回执；必须重新预览确认。**相同操作成功后重放返回原回执，不会重复扣款或重复修改规则。**卡片调额只修改模拟月限额；解除代扣只清除模拟 mandate，不代表商户会员已取消；申购会扣减合成账户余额并生成合成交易和持仓。
 
 `action-machine.mjs` 是执行/待核实状态的共同规则来源；旧 `flow-machine.ts` 仅将 succeeded/failed 映射为旧 UI 的 success/error。未取得可靠回执只允许查原编号，不允许自动重试写入或重置。未知编号返回 `state=unknown,status=pending`，尤其不能把进程重启后的查无记录当成“没有扣款”。
 
@@ -116,7 +118,11 @@ const executed = bankingCore.execute(operationId, preview.previewHash);
 | account.get / payee.get | `{id}` | 单个实体，找不到为标准错误 |
 | transaction.list | 可选 account_id、month（YYYY-MM） | 原始交易数组 |
 | product.list / card.list / subscription.list | `{}` | 合成产品/卡/订阅数组 |
+| holding.list | `{}` | 合成产品持仓数组 |
 | transfer.prepare | source_account_id、payee_id、amount_minor、currency，可选 memo | operation_id、state、preview、risk |
+| card-limit.prepare | card_id、monthly_limit_minor | 调额精确预览，风险 L2 |
+| subscription-cancel.prepare | subscription_id | 模拟代扣解除预览，风险 L2 |
+| investment-purchase.prepare | source_account_id、product_id、amount_minor、currency | 合成申购预览，风险 L3 |
 | action.decide | operation_id、preview_hash、decision、confirmed_step_ids | 该操作状态；拒绝时 step_ids 传空数组 |
 | action.execute | operation_id、preview_hash | ActionReceipt |
 | action.status | operation_id | state、status、可选 receipt/preview/error |
@@ -166,4 +172,4 @@ Netlify 的 `/api/banking`、`/api/saveflow` 与 `/api/banking-agent` 在配置 
 
 `netlify/functions/banking.mjs` 与 `saveflow.mjs` 是完整项目部署时的模拟处理器，不代表已更新线上站点；`out/` 自身不包含 POST 能力。PostgreSQL 持久层仍只处理合成演示数据，不应用于真实资金。演示访问码 + mock_explicit 只是私人 Mock 的确认门，不是银行 L3 强认证。
 
-新增 cancel_subscription/update_card_limit/purchase_product 时，向同一引擎增加 action 专属校验、风险、精确效果和原子提交适配器，复用状态机、确认、OperationStore、ActionReceipt 和审计。当前这些动作明确拒绝，不能用假成功占位。真实后端还需替换为用户身份/强认证、持久化幂等唯一约束与账务事务、银行状态查询/对账及审计存储；未来异步银行调用不能直接套用当前同步内存提交假设。
+卡片调额、解除模拟代扣、合成理财申购已接入统一状态机、确认、OperationStore、ActionReceipt 和审计；Postgres 在同一 owner 事务中锁操作及对应卡/授权/账户行。它们只是合成演示动作，不触达银行、商户或真实理财产品。新增写动作仍须定义动作专属校验、风险、精确效果和原子提交适配器。真实后端还需替换为用户身份/强认证、持久化幂等唯一约束与账务事务、银行状态查询/对账及审计存储；未来异步银行调用不能直接套用当前同步内存提交假设。

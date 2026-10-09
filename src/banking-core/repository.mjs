@@ -18,6 +18,12 @@ export function createFinancialContext(source = seed) {
   ];
   /** @type {import('./contracts').Transaction[]} */
   const transactions = raw.transactions.map(t => ({ id: t.id, accountId: t.accountId, occurredAt: `${t.date}T00:00:00+08:00`, type: t.type === 'income' ? 'income' : 'expense', category: t.category, merchant: t.merchant, amountFen: seedYuanToFen(t.amount), currency: 'CNY', status: 'posted', source: 'synthetic_seed' }));
+  /** @type {import('./contracts').Card[]} */
+  const cards = raw.cards.map(c => ({ id: c.id, name: c.name, accountId: c.linkedAccountId, status: c.status === 'active' ? 'active' : 'frozen', monthlyLimitFen: seedYuanToFen(c.monthlyLimit), monthlySpentFen: seedYuanToFen(c.monthlySpent), version: 0 }));
+  /** @type {import('./contracts').Subscription[]} */
+  const subscriptions = raw.subscriptions.map(s => ({ id: s.id, name: s.name, monthlyFeeFen: seedYuanToFen(s.monthlyFee), status: s.status === 'active' ? 'active' : 'cancelled', lastUsedDate: s.lastUsedDate, isPotentiallyUnused: s.isPotentiallyUnused, mandateId: s.status === 'active' ? `mock_mandate_${s.id}` : null, version: 0 }));
+  /** @type {import('./contracts').Holding[]} */
+  const holdings = [];
   /** @type {import('./contracts').InvestmentProduct[]} */
   const products = [
     { id: 'product_001', name: '模拟灵活现金 A', riskLevel: 'R1', expectedYield: 150, liquidity: 'T+0', minimumAmountFen: 100, durationDays: 0, currency: 'CNY', isSynthetic: true },
@@ -33,16 +39,51 @@ export function createFinancialContext(source = seed) {
     getPayees: () => structuredClone(payees),
     getPayee: id => structuredClone(payees.find(p => p.id === id)),
     getTransactions: (filter = {}) => structuredClone(transactions.filter(t => (!filter.accountId || t.accountId === filter.accountId) && (!filter.month || t.occurredAt.startsWith(`${filter.month}-`)))),
-    getCards: () => raw.cards.map(c => ({ id: c.id, name: c.name, accountId: c.linkedAccountId, status: c.status === 'active' ? 'active' : 'frozen', monthlyLimitFen: seedYuanToFen(c.monthlyLimit), monthlySpentFen: seedYuanToFen(c.monthlySpent) })),
-    getSubscriptions: () => raw.subscriptions.map(s => ({ id: s.id, name: s.name, monthlyFeeFen: seedYuanToFen(s.monthlyFee), status: s.status === 'active' ? 'active' : 'cancelled', lastUsedDate: s.lastUsedDate, isPotentiallyUnused: s.isPotentiallyUnused, mandateId: null })),
+    getCards: () => structuredClone(cards),
+    getSubscriptions: () => structuredClone(subscriptions),
     getInvestmentProducts: () => structuredClone(products),
+    getHoldings: () => structuredClone(holdings),
     getSavingGoal: () => ({ id: raw.savingGoals[0].id, targetAmountFen: seedYuanToFen(raw.savingGoals[0].targetAmount), currentAmountFen: seedYuanToFen(raw.savingGoals[0].currentAmount), targetDate: raw.savingGoals[0].targetDate, proposedMonthlySavingFen: seedYuanToFen(raw.savingGoals[0].proposedMonthlySaving) }),
     // Original goal requires 5000/month, above demo cap: expose it honestly; draft defaults to 2500.
     getDemoSettings: () => ({ monthlyIncomeFen: seedYuanToFen(raw.user.monthlyIncome), defaultMonthlySavingFen: 250000, monthlySavingCapFen: 300000 }),
   };
   /** Synchronous compare-and-swap: no await between checks, debit and transaction append.
-   * @param {import('./contracts').TransferEffect} effect @param {string} operationId @param {string} at */
-  function commitTransfer(effect, operationId, at) {
+  * @param {import('./contracts').ActionEffect} effect @param {string} operationId @param {string} at */
+  function commitAction(effect, operationId, at) {
+    if (effect.kind === 'card_limit_change') {
+      const card = cards.find(item => item.id === effect.cardId);
+      if (!card || card.status !== 'active' || card.version !== effect.version || card.monthlyLimitFen !== effect.monthlyLimitBeforeFen || card.monthlySpentFen !== effect.monthlySpentFen) throw new BankingError('PREVIEW_STALE', '卡片状态已变化，请重新预览并确认');
+      card.monthlyLimitFen = effect.monthlyLimitAfterFen;
+      card.version++;
+      revision++;
+      return undefined;
+    }
+    if (effect.kind === 'subscription_cancel') {
+      const subscription = subscriptions.find(item => item.id === effect.subscriptionId);
+      if (!subscription || subscription.status !== 'active' || subscription.version !== effect.version || subscription.mandateId !== effect.mandateId) throw new BankingError('PREVIEW_STALE', '代扣授权状态已变化，请重新查询');
+      subscription.status = 'cancelled';
+      subscription.mandateId = null;
+      subscription.version++;
+      revision++;
+      return undefined;
+    }
+    if (effect.kind === 'investment_purchase') {
+      const account = accounts.find(item => item.id === effect.fromAccountId);
+      if (!account || account.version !== effect.accountVersion || account.balanceFen !== effect.balanceBeforeFen) throw new BankingError('PREVIEW_STALE', '账户已变化，请重新预览并确认');
+      assertFen(effect.amountFen);
+      if (account.availableBalanceFen < effect.amountFen) throw new BankingError('INSUFFICIENT_BALANCE', '可用余额不足');
+      const product = products.find(item => item.id === effect.productId);
+      if (!product) throw new BankingError('PREVIEW_STALE', '理财产品已不可用');
+      const transaction = /** @type {import('./contracts').Transaction} */ ({ id: `txn_${operationId}`, operationId, accountId: account.id, occurredAt: at, type: 'investment_purchase', category: '理财申购', merchant: effect.productName, amountFen: effect.amountFen, currency: 'CNY', status: 'posted', source: 'mock_execution' });
+      const holding = /** @type {import('./contracts').Holding} */ ({ id: effect.holdingId, accountId: account.id, productId: product.id, amountFen: effect.amountFen, acquiredAt: at, status: 'active' });
+      account.balanceFen -= effect.amountFen;
+      account.availableBalanceFen -= effect.amountFen;
+      account.version++;
+      transactions.push(transaction);
+      holdings.push(holding);
+      revision++;
+      return structuredClone(transaction);
+    }
     const existing = transactions.find(t => t.operationId === operationId);
     if (existing) throw new BankingError('IDEMPOTENCY_CONFLICT', '账务已存在此操作，请查询回执', true);
     const account = accounts.find(a => a.id === effect.fromAccountId);
@@ -57,5 +98,5 @@ export function createFinancialContext(source = seed) {
     revision++;
     return structuredClone(transaction);
   }
-  return { repository: Object.freeze(repository), commitTransfer, ownerId: raw.user.id };
+  return { repository: Object.freeze(repository), commitAction, ownerId: raw.user.id };
 }

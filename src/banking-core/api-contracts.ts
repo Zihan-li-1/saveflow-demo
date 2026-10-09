@@ -1,4 +1,4 @@
-import type { Account, ActionReceipt, ContextInfo, DecisionInput, OperationStatus, Payee, PreparedAction, Transaction, TransferInput, InvestmentProduct, Card, Subscription } from "./contracts";
+import type { Account, ActionReceipt, CardLimitInput, CancelSubscriptionInput, ContextInfo, DecisionInput, InvestmentPurchaseInput, OperationStatus, Payee, PreparedAction, Transaction, TransferInput, InvestmentProduct, Card, Subscription, Holding } from "./contracts";
 export type BankingRequestMap = {
   "context.get": Record<string, never>;
   "account.list": Record<string, never>;
@@ -10,6 +10,9 @@ export type BankingRequestMap = {
   "card.list": Record<string, never>;
   "subscription.list": Record<string, never>;
   "transfer.prepare": TransferInput;
+  "card-limit.prepare": CardLimitInput;
+  "subscription-cancel.prepare": CancelSubscriptionInput;
+  "investment-purchase.prepare": InvestmentPurchaseInput;
   "action.decide": DecisionInput & { operationId: string };
   "action.execute": { operationId: string; previewHash: string };
   "action.status": { operationId: string };
@@ -24,7 +27,11 @@ export type BankingResultMap = {
   "product.list": InvestmentProduct[];
   "card.list": Card[];
   "subscription.list": Subscription[];
+  "holding.list": Holding[];
   "transfer.prepare": PreparedAction;
+  "card-limit.prepare": PreparedAction;
+  "subscription-cancel.prepare": PreparedAction;
+  "investment-purchase.prepare": PreparedAction;
   "action.decide": OperationStatus;
   "action.execute": ActionReceipt;
   "action.status": OperationStatus;

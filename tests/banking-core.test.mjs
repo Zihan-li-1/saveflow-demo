@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import seed from '../src/data/saveflow_mock_data.json' with { type: 'json' };
 import { createBankingCore } from '../src/banking-core/core.mjs';
+import { getConfiguredBankingCore } from '../src/banking-core/postgres-store.mjs';
 import { OperationStore } from '../src/banking-core/operation-store.mjs';
 import { getLegacyContext, legacyRequest } from '../src/banking-core/legacy-adapter.mjs';
 import { canTransitionAction, transitionAction } from '../src/banking-core/action-machine.mjs';
@@ -75,6 +76,40 @@ test('B input: reject fractional fen, unsupported currency, hidden confirmation 
   assert.equal((await core.prepare({ action: 'purchase_product', input })).error.code, 'UNKNOWN_ACTION');
   assert.equal((await core.prepare({ action: 'transfer_money', input, confirmed: true })).ok, false);
   assert.equal(balance(core), 500000);
+});
+
+test('B shared write gate: card, subscription and investment actions require preview and confirmation', async () => {
+  const core = createBankingCore();
+  const card = core.repository.getCards()[0];
+  const subscription = core.repository.getSubscriptions()[0];
+  const actions = [
+    { action: 'card.set_limit', input: { cardId: card.id, monthlyLimitFen: card.monthlyLimitFen + 10000 }, effect: 'card_limit_change', risk: 'L2' },
+    { action: 'subscription.cancel_debit', input: { subscriptionId: subscription.id }, effect: 'subscription_cancel', risk: 'L2' },
+    { action: 'wealth.subscribe', input: { fromAccountId: 'ACC-CHECKING', productId: 'product_001', amountFen: 10000, currency: 'CNY' }, effect: 'investment_purchase', risk: 'L3' },
+  ];
+
+  for (const item of actions) {
+    const beforeBalance = balance(core);
+    const prepared = unwrap(await core.prepare({ action: item.action, input: item.input }));
+    assert.equal(prepared.risk.riskLevel, item.risk);
+    assert.equal(prepared.preview.exactEffects[0].kind, item.effect);
+    assert.equal(balance(core), beforeBalance);
+    assert.equal((await core.execute(prepared.operationId, prepared.preview.previewHash)).error.code, 'CONFIRMATION_REQUIRED');
+    await confirm(core, prepared);
+    const [first, duplicate] = await Promise.all([
+      core.execute(prepared.operationId, prepared.preview.previewHash),
+      core.execute(prepared.operationId, prepared.preview.previewHash),
+    ]);
+    assert.deepEqual(unwrap(duplicate), unwrap(first));
+    assert.equal(first.data.effects[0].kind, item.effect);
+  }
+
+  assert.equal(core.repository.getCards()[0].version, 1);
+  assert.equal(core.repository.getSubscriptions()[0].status, 'cancelled');
+  assert.equal(core.repository.getSubscriptions()[0].mandateId, null);
+  assert.equal(core.repository.getHoldings().length, 1);
+  assert.equal(core.repository.getTransactions().filter(row => row.type === 'investment_purchase').length, 1);
+  assert.equal(balance(core), 490000);
 });
 
 test('B idempotency: 20 concurrent retries return the same receipt with one debit', async () => {
@@ -179,4 +214,26 @@ test('B v1.1 wire boundary preserves integers; resolved intent uses entity evide
   assert.deepEqual(transferFromResolvedIntent(resolved), { action: 'transfer_money', input });
   assert.throws(() => transferFromResolvedIntent({ ...resolved, references: [] }));
   assert.throws(() => transferFromResolvedIntent({ ...resolved, action: 'create_plan' }));
+});
+
+test('B Postgres startup: failed connection initialization can be retried in the same process', async () => {
+  const connectionString = `postgres://retry-${crypto.randomUUID()}`;
+  let attempts = 0;
+  await assert.rejects(
+    getConfiguredBankingCore({ DATABASE_URL: connectionString }, async () => {
+      attempts++;
+      throw new Error('temporary database outage');
+    }),
+    /temporary database outage/,
+  );
+
+  const recovered = { repository: {}, close: async () => {} };
+  assert.equal(
+    await getConfiguredBankingCore({ DATABASE_URL: connectionString }, async () => {
+      attempts++;
+      return recovered;
+    }),
+    recovered,
+  );
+  assert.equal(attempts, 2);
 });
