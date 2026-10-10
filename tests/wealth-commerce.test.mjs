@@ -15,7 +15,7 @@ const events = json('./fixtures/commerce/events.json');
 const capabilities = json('./fixtures/commerce/capabilities.json');
 
 test('large purchase becomes a short-term recommendation goal without subscribing', () => {
-  const result = planLargePurchase({ item: catalog[0], purchase_date: '2026-09-20', cashflow: { investable_amount_minor: 200000 } });
+  const result = planLargePurchase({ item: catalog[0], purchase_date: '2026-10-15', cashflow: { investable_amount_minor: 200000 } });
   assert.equal(result.action, 'wealth.recommend');
   assert.equal(result.suggested_slots.goal.kind, 'short_term_purchase');
   assert.equal(result.execution_allowed, false);

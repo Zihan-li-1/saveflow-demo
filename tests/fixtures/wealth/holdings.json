@@ -15,6 +15,6 @@
     "amount_fen": 300000,
     "units_milli": 300000,
     "currency": "CNY",
-    "lock_until": "2026-10-01T00:00:00+08:00"
+    "lock_until": "2026-11-01T00:00:00+08:00"
   }
 ]

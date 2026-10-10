@@ -178,7 +178,7 @@ export function validateResolvedWealthIntent(value) {
 }
 
 /** @param {string} expiresAt @param {string} asOf */
-function isExpired(expiresAt, asOf) { return !expiresAt || Date.parse(expiresAt) <= Date.parse(asOf); }
+function isExpired(expiresAt, asOf) { return !expiresAt || !Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= Date.parse(asOf); }
 
 /** @param {Record<string, unknown>} context @param {string[]} entityIds @param {Array<{source:string,as_of:string,entity_ids:string[]}>} [extraEvidence] */
 function metadata(context, entityIds, extraEvidence = []) {
@@ -226,23 +226,25 @@ export async function runResolvedWealthIntent(repository, ports, value) {
     const intent = validateResolvedWealthIntent(value);
     const slots = /** @type {Record<string, any>} */ (intent.resolved_slots);
     const [context, products] = await Promise.all([repository.getContextInfo(), repository.getInvestmentProducts()]);
+    const evaluationTime = typeof ports.now === 'function' ? ports.now() : new Date().toISOString();
+    if (typeof evaluationTime !== 'string' || !Number.isFinite(Date.parse(evaluationTime))) throw new WealthSkillError('CAPABILITY_UNAVAILABLE', '可信时钟不可用');
     const meta = metadata(context, []);
 
     if (intent.action === 'wealth.assess_risk') {
       const assessment = await ports.getRiskAssessment?.();
-      if (!validAssessment(assessment, context.asOf, slots.assessment_scope)) return { ok: true, data: { kind: 'questionnaire_required', questionnaire: trustedQuestionnaire(ports), ...meta } };
+      if (!validAssessment(assessment, evaluationTime, slots.assessment_scope)) return { ok: true, data: { kind: 'questionnaire_required', questionnaire: trustedQuestionnaire(ports), ...meta } };
       return { ok: true, data: { kind: 'risk_assessment', assessment: structuredClone(assessment), ...metadata(context, [], [{ source: 'trusted_ui', as_of: assessment.completed_at, entity_ids: [assessment.assessment_id] }]) } };
     }
 
     if (intent.action === 'wealth.recommend') {
       if (slots.goal.kind === 'capital_preservation') throw new WealthSkillError('NO_MATCHING_PRODUCT', '当前 Mock 没有可验证保本的产品');
-      if (slots.goal.target_date && slots.goal.target_date < String(context.asOf).slice(0, 10)) throw new WealthSkillError('VALIDATION_ERROR', '目标日期早于当前数据快照');
+      if (slots.goal.target_date && Date.parse(`${slots.goal.target_date}T23:59:59+08:00`) < Date.parse(evaluationTime)) throw new WealthSkillError('VALIDATION_ERROR', '目标日期已过');
       const assessment = await ports.getRiskAssessment?.();
-      if (!validAssessment(assessment, context.asOf, 'investment')) return { ok: true, data: { kind: 'questionnaire_required', questionnaire: trustedQuestionnaire(ports), ...meta } };
+      if (!validAssessment(assessment, evaluationTime, 'investment')) return { ok: true, data: { kind: 'questionnaire_required', questionnaire: trustedQuestionnaire(ports), ...meta } };
       const maxRisk = slots.goal.max_risk_level && riskRank(slots.goal.max_risk_level) < riskRank(assessment.risk_level) ? slots.goal.max_risk_level : assessment.risk_level;
       const maxSettlement = slots.constraints?.max_settlement_days ?? (slots.goal.kind === 'short_term_purchase' ? 1 : Number.POSITIVE_INFINITY);
       const investable = slots.constraints?.investable_amount?.amount_minor ?? Number.POSITIVE_INFINITY;
-      const targetDays = slots.goal.target_date ? Math.max(0, Math.ceil((Date.parse(`${slots.goal.target_date}T00:00:00+08:00`) - Date.parse(context.asOf)) / 86400000)) : Number.POSITIVE_INFINITY;
+      const targetDays = slots.goal.target_date ? Math.max(0, Math.ceil((Date.parse(`${slots.goal.target_date}T00:00:00+08:00`) - Date.parse(evaluationTime)) / 86400000)) : Number.POSITIVE_INFINITY;
       const matches = [];
       const excluded = [];
       const disclosureEvidence = [];
@@ -250,7 +252,7 @@ export async function runResolvedWealthIntent(repository, ports, value) {
         const disclosure = await ports.getDisclosure?.(product.id);
         if (disclosure) disclosureEvidence.push({ source: 'product_disclosure', as_of: `${disclosure.version}T00:00:00+08:00`, entity_ids: [product.id] });
         const reasons = [];
-        if (!disclosure || disclosure.status !== 'active' || isExpired(disclosure.expires_at, context.asOf)) reasons.push('DISCLOSURE_UNAVAILABLE');
+        if (!disclosure || disclosure.status !== 'active' || isExpired(disclosure.expires_at, evaluationTime)) reasons.push('DISCLOSURE_UNAVAILABLE');
         if (riskRank(product.riskLevel) > riskRank(maxRisk)) reasons.push('RISK_TOO_HIGH');
         if (LIQUIDITY_DAYS[product.liquidity] > maxSettlement) reasons.push('LIQUIDITY_TOO_SLOW');
         if (product.durationDays > targetDays) reasons.push('TERM_TOO_LONG');
@@ -276,9 +278,9 @@ export async function runResolvedWealthIntent(repository, ports, value) {
       const [assessment, disclosure, rule, account] = await Promise.all([
         ports.getRiskAssessment?.(), ports.getDisclosure?.(product.id), ports.getOperationRule?.(product.id), repository.getAccount(slots.source_account_id),
       ]);
-      if (!validAssessment(assessment, context.asOf, 'investment')) throw new WealthSkillError('RISK_ASSESSMENT_REQUIRED', '缺少有效风险测评');
+      if (!validAssessment(assessment, evaluationTime, 'investment')) throw new WealthSkillError('RISK_ASSESSMENT_REQUIRED', '缺少有效风险测评');
       if (riskRank(product.riskLevel) > riskRank(assessment.risk_level)) throw new WealthSkillError('SUITABILITY_FAILED', '产品风险高于用户测评等级');
-      if (!disclosure || disclosure.status !== 'active' || isExpired(disclosure.expires_at, context.asOf)) throw new WealthSkillError('DISCLOSURE_EXPIRED', '产品披露不存在或已过期');
+      if (!disclosure || disclosure.status !== 'active' || isExpired(disclosure.expires_at, evaluationTime)) throw new WealthSkillError('DISCLOSURE_EXPIRED', '产品披露不存在或已过期');
       if (!rule?.subscription_enabled) throw new WealthSkillError('CAPABILITY_UNAVAILABLE', '当前产品不支持 Mock 申购');
       if (slots.amount.amount_minor < product.minimumAmountFen) throw new WealthSkillError('BELOW_MINIMUM_AMOUNT', '申购金额低于产品最低金额');
       if (!account) throw new WealthSkillError('ACCOUNT_NOT_FOUND', '来源账户不存在');
@@ -293,7 +295,7 @@ export async function runResolvedWealthIntent(repository, ports, value) {
     const product = products.find(item => item.id === holding.product_id);
     const rule = await ports.getOperationRule?.(holding.product_id);
     if (!product || !rule?.redemption_enabled) throw new WealthSkillError('CAPABILITY_UNAVAILABLE', '当前产品不支持 Mock 赎回');
-    if (holding.lock_until && Date.parse(holding.lock_until) > Date.parse(context.asOf)) throw new WealthSkillError('REDEMPTION_RESTRICTED', '持仓仍在锁定期');
+    if (holding.lock_until && Date.parse(holding.lock_until) > Date.parse(evaluationTime)) throw new WealthSkillError('REDEMPTION_RESTRICTED', '持仓仍在锁定期');
     const quantity = slots.quantity_or_amount;
     if (quantity.kind === 'amount' && quantity.amount_minor > holding.amount_fen) throw new WealthSkillError('INSUFFICIENT_HOLDING', '赎回金额超过持仓');
     if (quantity.kind === 'units' && quantity.units_milli > holding.units_milli) throw new WealthSkillError('INSUFFICIENT_HOLDING', '赎回份额超过持仓');

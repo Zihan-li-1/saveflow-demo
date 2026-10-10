@@ -22,6 +22,7 @@ function ports(overrides = {}) {
     getDisclosure: async productId => structuredClone(disclosures.find(item => item.product_id === productId)),
     getOperationRule: async productId => structuredClone(operationRules[productId]),
     questionnaire: { route: '/wealth/risk-assessment', source: 'trusted_ui' },
+    now: () => '2026-10-10T10:00:00+08:00',
     ...overrides,
   };
 }
@@ -45,7 +46,7 @@ test('five actions match both machine-readable schemas', () => {
 });
 
 test('raw contract rejects IDs, unknown fields, model risk and confirmation', () => {
-  assert.doesNotThrow(() => validateWealthIntent({ action: 'wealth.recommend', slots: { goal: { kind: 'short_term_purchase', target_date: '2026-09-20' } } }));
+  assert.doesNotThrow(() => validateWealthIntent({ action: 'wealth.recommend', slots: { goal: { kind: 'short_term_purchase', target_date: '2026-10-15' } } }));
   for (const value of [
     { action: 'wealth.compare', slots: { product_refs: ['product_001', '稳健产品'] } },
     { action: 'wealth.subscribe', slots: { product_ref: '稳健产品', amount: { amount_minor: 10000, currency: 'CNY' }, source_account_ref: 'ACC-CHECKING' } },
@@ -57,7 +58,7 @@ test('raw contract rejects IDs, unknown fields, model risk and confirmation', ()
 test('recommendation uses deterministic suitability and explains exclusions', async () => {
   const { repository } = createFinancialContext();
   const intent = resolved('wealth.recommend', {
-    goal: { kind: 'short_term_purchase', target_date: '2026-09-20', max_risk_level: 'R2' },
+    goal: { kind: 'short_term_purchase', target_date: '2026-10-15', max_risk_level: 'R2' },
     constraints: { investable_amount: { amount_minor: 200000, currency: 'CNY' }, max_settlement_days: 1 },
   });
   const result = await runResolvedWealthIntent(repository, ports(), intent);
@@ -81,7 +82,7 @@ test('trusted R2 assessment caps a user supplied R3 recommendation goal', async 
   assert.ok(result.data.excluded.find(item => item.product_id === 'product_003').reason_codes.includes('RISK_TOO_HIGH'));
 });
 
-test('capital preservation and a target before the snapshot are not presented as investable matches', async () => {
+test('capital preservation and a past target are not presented as investable matches', async () => {
   const { repository } = createFinancialContext();
   const run = goal => runResolvedWealthIntent(repository, ports(), resolved('wealth.recommend', { goal }));
   assert.equal((await run({ kind: 'capital_preservation' })).error.code, 'NO_MATCHING_PRODUCT');
@@ -112,6 +113,10 @@ test('missing or expired risk assessment returns only a trusted questionnaire', 
   assert.equal(missing.data.questionnaire.source, 'trusted_ui');
   const expired = await runResolvedWealthIntent(repository, ports({ getRiskAssessment: async () => ({ ...riskAssessments[0], expires_at: '2026-08-01T00:00:00+08:00' }) }), intent);
   assert.equal(expired.data.kind, 'questionnaire_required');
+  const expiredAfterSnapshot = await runResolvedWealthIntent(repository, ports({ getRiskAssessment: async () => ({ ...riskAssessments[0], expires_at: '2026-09-20T00:00:00+08:00' }) }), intent);
+  assert.equal(expiredAfterSnapshot.data.kind, 'questionnaire_required');
+  const invalidExpiry = await runResolvedWealthIntent(repository, ports({ getRiskAssessment: async () => ({ ...riskAssessments[0], expires_at: 'not-a-date' }) }), intent);
+  assert.equal(invalidExpiry.data.kind, 'questionnaire_required');
   const missingQuestionnaire = await runResolvedWealthIntent(repository, ports({ getRiskAssessment: async () => undefined, questionnaire: undefined }), intent);
   assert.equal(missingQuestionnaire.error.code, 'CAPABILITY_UNAVAILABLE');
   const wrongScope = await runResolvedWealthIntent(repository, ports(), resolved('wealth.assess_risk', { assessment_scope: 'portfolio' }));
@@ -130,6 +135,10 @@ test('subscribe validates minimum, balance, suitability and disclosure before re
   assert.equal((await runResolvedWealthIntent(repository, ports(), make('product_002', 600000))).error.code, 'INSUFFICIENT_BALANCE');
   const stale = ports({ getDisclosure: async id => ({ ...disclosures.find(item => item.product_id === id), expires_at: '2026-08-01T00:00:00+08:00' }) });
   assert.equal((await runResolvedWealthIntent(repository, stale, make('product_002'))).error.code, 'DISCLOSURE_EXPIRED');
+  const staleAfterSnapshot = ports({ getDisclosure: async id => ({ ...disclosures.find(item => item.product_id === id), expires_at: '2026-09-20T00:00:00+08:00' }) });
+  assert.equal((await runResolvedWealthIntent(repository, staleAfterSnapshot, make('product_002'))).error.code, 'DISCLOSURE_EXPIRED');
+  const invalidExpiry = ports({ getDisclosure: async id => ({ ...disclosures.find(item => item.product_id === id), expires_at: 'not-a-date' }) });
+  assert.equal((await runResolvedWealthIntent(repository, invalidExpiry, make('product_002'))).error.code, 'DISCLOSURE_EXPIRED');
   const result = await runResolvedWealthIntent(repository, ports(), make('product_002'));
   assert.equal(result.data.kind, 'action_request');
   assert.equal(result.data.requirements.minimumRiskLevel, 'L3');
