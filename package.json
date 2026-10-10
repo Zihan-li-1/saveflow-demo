@@ -11,7 +11,7 @@
     "start": "next start",
     "start:network": "next start --hostname 0.0.0.0",
     "lint": "eslint",
-    "test": "node --test tests/flow.test.cjs tests/qwen.test.cjs tests/banking-core.test.mjs tests/banking-http.test.cjs",
+    "test": "node --test tests/flow.test.cjs tests/qwen.test.cjs tests/banking-core.test.mjs tests/banking-http.test.cjs tests/bill-skill.test.mjs",
     "demo:banking": "node scripts/demo-banking.mjs",
     "typecheck": "tsc --noEmit"
   },
