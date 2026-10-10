@@ -6,7 +6,7 @@ Wealth Skill 只接收 A 解析并由服务端补全实体后的 `ResolvedIntent
 
 - A/E 跨模块合同：`snake_case`、`{ amount_minor, currency }`。E 返回给 B 的待执行请求与要求沿用 Card 的 `camelCase`。
 - 项目内部：沿用 `camelCase`、`Fen`、`expectedYield`（BPS）。
-- Repository 的 `MaybePromise<T>` 调用全部 `await`。
+- Repository 的 `MaybePromise<T>` 调用全部 `await`。测评、披露与锁定期按可信服务端时钟判断，不能用旧 Mock 快照日期代替当前时间。
 - 查询与适配规则是确定性的；LLM 不决定适当性，也不按收益率选“最佳产品”。
 - `expectedYield` 只是合成 BPS 展示值，必须展示“不保证收益”。
 - 申购、赎回只生成 L3 `action_request`。确认和执行归 B 的 Action Engine；当前测试端口不进入生产代码。
@@ -38,7 +38,7 @@ Wealth Skill 只接收 A 解析并由服务端补全实体后的 `ResolvedIntent
 {
   "goal": {
     "kind": "short_term_purchase",
-    "target_date": "2026-09-20",
+    "target_date": "2026-10-15",
     "max_risk_level": "R2"
   },
   "constraints": {
@@ -49,7 +49,7 @@ Wealth Skill 只接收 A 解析并由服务端补全实体后的 `ResolvedIntent
 ```
 
 筛选顺序：披露有效 → 风险等级 → 流动性 → 期限 → 最低金额。用户提出的风险上限只能收紧可信测评结果，不能把 R2 测评放宽到 R3。结果同时返回 `matches` 与 `excluded[].reason_codes`，避免只给结论不解释原因。
-当前三个 Mock 产品均没有可验证的本金保障；`capital_preservation` 不被解释成“低风险即可保本”，而是明确返回 `NO_MATCHING_PRODUCT`。目标日期若早于数据快照则拒绝。
+当前三个 Mock 产品均没有可验证的本金保障；`capital_preservation` 不被解释成“低风险即可保本”，而是明确返回 `NO_MATCHING_PRODUCT`。目标日期若已过则拒绝。
 
 ### 3.2 `wealth.compare`
 
@@ -125,7 +125,7 @@ Wealth Skill 只接收 A 解析并由服务端补全实体后的 `ResolvedIntent
 - `tests/fixtures/commerce/events.json`
 - `tests/fixtures/commerce/capabilities.json`
 
-沿用 Repository 的 `product_001`、`product_002`、`product_003`。测试专用 `wealth-test-port.mjs` 克隆账户与持仓，模拟 `prepare → confirm → execute → receipt`，不会写回正式 Repository。
+沿用 Repository 的 `product_001`、`product_002`、`product_003`。`src/skills/wealth/mock-ports.mjs` 提供单用户合成测评、披露与规则；持仓由 Banking Core 的 Mock Repository 或 PostgreSQL 保存。测试专用 `wealth-test-port.mjs` 仍只克隆账户与持仓，不写入正式 Repository。
 
 ## 6. 四条购物联动
 
@@ -139,16 +139,16 @@ Wealth Skill 只接收 A 解析并由服务端补全实体后的 `ResolvedIntent
 
 多步骤部分失败保留每一步真实回执。赎回成功而订单失败时，不宣称赎回已回滚。
 
-## 7. 交接
+## 7. 接口接入与部署
 
-- A：注册五个 Wealth action，并产生符合 Schema 的 `ParsedIntentEnvelope` / `ResolvedIntent`。
-- B：将两个 L3 请求接入正式 Action Engine，沿用预览过期、上下文快照、幂等和未知结果规则。
-- E：维护 Wealth 合同、确定性适配规则、独立 fixtures 与测试。
+当前 `/api/banking-agent` 使用项目现有的 `ParsedIntent` v1.0.0 单意图适配层：模型只输出原始称呼，服务端 Resolver 生成带 `references` 的 Wealth `ResolvedIntent`，再调用 Skill。五个 action 已在解析器、校验器与 dispatcher 注册；查询结果可在页面展示。`wealth.subscribe` 与 `wealth.redeem` 的请求交给 Banking Core 生成 L3 预览，再由已授权页面通过独立的 `action.decide` 与 `action.execute` 接口确认和执行。模型没有确认或执行权限。
 
-当前 B 的正式 Action Engine 尚不支持 Wealth 申赎；本 PR 只提交 Skill 请求与测试专用克隆端口。`as_of` 是 Mock 快照时间，接口接入时必须重新读取最新账户、产品、测评、披露和持仓，风险检查与确认均由服务端重新执行。
+部署 PostgreSQL 前必须应用 `migrations/003_wealth_holdings.sql`。适配器在同一事务中更新 Mock 账户或持仓及操作回执；再次执行同一操作只返回原回执。赎回仅减少模拟持仓，**不承诺即时到账，也不把赎回金额直接加到活期余额**。`as_of` 是 Mock 快照时间；正式预览与执行前会重新读取账户、测评、披露和持仓。购物联动仍只生成候选或分步建议，没有外部购物平台下单接口。
+
+`ParsedIntentEnvelope` v1.1 的统一生产者仍由 A 负责；本适配层不将旧 Qwen 枚举直接交给 Wealth Skill。真实银行或真实投资接入、风险问卷完成接口和真实风控不在此演示范围内。当前测评是明确标记为合成数据的单用户演示状态，不可作为实际投资适当性依据。
 
 专项验证：
 
 ```bash
-node --test tests/wealth-skill.test.mjs tests/wealth-commerce.test.mjs
+node --test tests/wealth-skill.test.mjs tests/wealth-commerce.test.mjs tests/wealth-agent-integration.test.mjs
 ```

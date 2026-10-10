@@ -25,6 +25,12 @@ export type DispatchResult =
       data: unknown;
     }
   | {
+      ok: true;
+      kind: "wealth_result" | "wealth_action_request";
+      action: string;
+      data: unknown;
+    }
+  | {
       ok: false;
       kind: "needs_clarification";
       action: string;
@@ -51,6 +57,12 @@ export type DispatchResult =
   | {
       ok: false;
       kind: "card_error";
+      action: string;
+      error: { code: string; message: string; uncertain?: boolean };
+    }
+  | {
+      ok: false;
+      kind: "wealth_error";
       action: string;
       error: { code: string; message: string; uncertain?: boolean };
     };

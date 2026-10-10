@@ -7,6 +7,7 @@ import { issueContinuationToken, verifyContinuationToken } from '../src/agent/cl
 import { resolveChoice } from '../src/agent/clarification/choice-resolver.mjs';
 import { buildParsedIntent, mergeSlots } from '../src/agent/clarification/merge-intent.mjs';
 import { isBillTask, isCardTask, isTransferTask, parseClarificationAnswer } from './banking-clarification-parser.mjs';
+import { handleWealth } from '../src/agent/handlers/wealth-handler.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const RATE_LIMIT = 10;
@@ -29,12 +30,13 @@ function statusFor(code) {
   if (code === 'FORBIDDEN') return 403;
   if (code === 'REQUEST_TOO_LARGE') return 413;
   if (code === 'CARD_NOT_FOUND') return 404;
+  if (code === 'PRODUCT_NOT_FOUND' || code === 'HOLDING_NOT_FOUND') return 404;
   if (code === 'CARD_AMBIGUOUS' || code === 'INVALID_STATE') return 409;
   if (code === 'LIMIT_EXCEEDED') return 422;
   if (code === 'MODEL_TIMEOUT') return 504;
   if (code === 'MODEL_RATE_LIMIT') return 429;
   if (['MODEL_AUTH_ERROR', 'MODEL_UPSTREAM_ERROR', 'MODEL_UNAVAILABLE', 'SKILL_ERROR'].includes(code)) return 502;
-  if (['ACCESS_NOT_CONFIGURED', 'MODEL_NOT_CONFIGURED', 'MODEL_CONFIG_ERROR', 'CONTINUATION_CONFIG_ERROR'].includes(code)) return 503;
+  if (['ACCESS_NOT_CONFIGURED', 'MODEL_NOT_CONFIGURED', 'MODEL_CONFIG_ERROR', 'CONTINUATION_CONFIG_ERROR', 'CAPABILITY_UNAVAILABLE'].includes(code)) return 503;
   return 400;
 }
 
@@ -83,6 +85,12 @@ const clarificationQuestions = {
   source_account_ref: '要从哪个账户转出？',
   payee_ref: '要转给谁？',
   card_ref: '请选择要查看或操作的卡片。',
+  product_ref: '请说出要申购的模拟理财产品名称。',
+  product_refs: '请提供两到五个要比较的模拟理财产品名称。',
+  holding_ref: '请说出要赎回的持仓对应产品名称。',
+  quantity_or_amount: '请明确赎回金额或份额，例如“赎回 100 元”。',
+  goal: '请说明理财目标，例如短期购物或稳健增长。',
+  assessment_scope: '请说明投资风险测评或组合测评。',
 };
 
 function questionFor(action, slot) {
@@ -130,6 +138,15 @@ function cardChoices(cards) {
   }));
 }
 
+function wealthChoices(items) {
+  return items.map(item => ({ optionId: `opt_${crypto.randomUUID()}`, label: item.name, entityId: item.id, rawValue: item.name }));
+}
+
+async function wealthHoldingCandidates(repository, ports) {
+  const [holdings, products] = await Promise.all([ports?.getHoldings?.() ?? [], repository.getInvestmentProducts()]);
+  return holdings.map(item => ({ ...item, name: products.find(product => product.id === item.product_id)?.name ?? item.id }));
+}
+
 function clarificationResponse(reply, { action, slot, question, choices = [], slots, selections = {}, env, now, message, source }) {
   const token = issueState({ action, slots, pendingSlot: slot, choices, selections, env, now });
   return reply(200, 'NEEDS_CLARIFICATION', question, {
@@ -141,7 +158,8 @@ function clarificationResponse(reply, { action, slot, question, choices = [], sl
 function nextMissingSlot(intent) {
   const order = intent.action === 'transfer.create'
     ? ['source_account_ref', 'payee_ref', 'amount']
-    : intent.action.startsWith('card.') ? ['card_ref', 'amount'] : ['month'];
+    : intent.action.startsWith('card.') ? ['card_ref', 'amount']
+    : intent.action.startsWith('wealth.') ? ['product_ref', 'product_refs', 'holding_ref', 'source_account_ref', 'amount', 'quantity_or_amount', 'goal', 'assessment_scope'] : ['month'];
   return order.find(slot => intent.missingSlots?.includes(slot)) || intent.missingSlots?.[0];
 }
 
@@ -241,6 +259,7 @@ export async function handleBankingAgent(
       billHandler: intent => handleBillSummary(intent, repository),
       transferHandler: intent => handleTransfer(intent, transferRepository(repository, selections)),
       cardHandler: intent => handleCard(intent, repository, selections),
+      wealthHandler: intent => handleWealth(intent, repository, core.wealthPorts, selections),
     };
     const dispatched = await dispatchParsedIntent(parsed, dependencies);
     const prepareTransfer = typeof core.prepare === 'function'
@@ -250,6 +269,12 @@ export async function handleBankingAgent(
 
     if (result.ok && result.kind === 'bill_result') return reply(200, 'OK', '账单统计已生成', { status: 'bill_result', action: result.action, data: { ...result.data, month: parsed.slots.month }, evidence: result.evidence });
     if (result.ok && result.kind === 'card_result') return reply(200, 'OK', '卡片信息已查询', { status: 'card_result', action: result.action, data: result.data, evidence: result.evidence });
+    if (result.ok && result.kind === 'wealth_result') return reply(200, 'OK', '模拟理财信息已生成', { status: 'wealth_result', action: result.action, data: result.data, evidence: result.data.evidence });
+    if (result.ok && result.kind === 'wealth_action_request') {
+      const prepared = await core.prepare(result.data.request);
+      if (!prepared.ok) return reply(statusFor(prepared.error.code), prepared.error.code, prepared.error.message, { status: 'core_error', action: result.action, ...(prepared.operationId ? { operationId: prepared.operationId } : {}), error: prepared.error });
+      return reply(200, 'OK', '模拟理财正式预览已生成，等待页面单独确认', { status: 'awaiting_confirmation', action: result.action, operationId: prepared.data.operationId, preview: prepared.data.preview, risk: prepared.data.risk, disclosure: result.data.disclosure, evidence: result.data.evidence });
+    }
     if (result.ok && result.kind === 'card_action_request') {
       const prepared = await core.prepare(result.data.request);
       if (!prepared.ok) return reply(statusFor(prepared.error.code), prepared.error.code, prepared.error.message, { status: 'core_error', action: result.action, ...(prepared.operationId ? { operationId: prepared.operationId } : {}), error: prepared.error });
@@ -263,7 +288,9 @@ export async function handleBankingAgent(
       const action = result.action || parsed.action;
       const slots = parsed.slots || {};
       const slot = result.slot || nextMissingSlot(parsed) || (result.candidates ? 'payee_ref' : undefined);
-      const choices = slot === 'card_ref' ? cardChoices(result.candidates?.length ? result.candidates : await repository.getCards()) : result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' ? await accountChoices(repository) : slot === 'payee_ref' && !slots.payee_ref ? payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active')) : [];
+      const choices = slot === 'card_ref' ? cardChoices(result.candidates?.length ? result.candidates : await repository.getCards())
+        : action.startsWith('wealth.') && ['product_ref', 'holding_ref', 'source_account_ref'].includes(slot) ? wealthChoices(result.candidates?.length ? result.candidates : slot === 'product_ref' ? await repository.getInvestmentProducts() : slot === 'holding_ref' ? await wealthHoldingCandidates(repository, core.wealthPorts) : await repository.getAccounts())
+        : result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' ? await accountChoices(repository) : slot === 'payee_ref' && !slots.payee_ref ? payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active')) : [];
       return clarificationResponse(reply, {
         action,
         slot,
@@ -278,6 +305,7 @@ export async function handleBankingAgent(
     if (result.kind === 'unsupported') return reply(200, 'UNSUPPORTED', '暂不支持该请求', { status: result.kind });
     if (result.kind === 'skill_error') return reply(502, 'SKILL_ERROR', 'Skill 处理失败，请稍后重试。', errorData('SKILL_ERROR', 'Skill 处理失败，请稍后重试。'));
     if (result.kind === 'card_error') return reply(statusFor(result.error.code), result.error.code, result.error.message, { status: 'card_error', action: result.action, error: result.error });
+    if (result.kind === 'wealth_error') return reply(statusFor(result.error.code), result.error.code, result.error.message, { status: 'wealth_error', action: result.action, error: result.error });
     if (result.kind === 'core_error') return reply(statusFor(result.error.code), result.error.code, result.error.message, { status: 'core_error', action: result.action, ...(result.operationId ? { operationId: result.operationId } : {}), error: result.error });
     return reply(500, 'INTERNAL_ERROR', '未取得可靠结果', errorData('INTERNAL_ERROR', '未取得可靠结果'));
   } catch (error) {

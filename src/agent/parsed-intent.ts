@@ -8,6 +8,11 @@ export const PARSED_INTENT_ACTIONS = [
   "card.set_budget",
   "card.freeze",
   "card.unfreeze",
+  "wealth.recommend",
+  "wealth.compare",
+  "wealth.assess_risk",
+  "wealth.subscribe",
+  "wealth.redeem",
   "clarify",
   "unsupported",
 ] as const;
@@ -51,6 +56,19 @@ export interface CardBudgetSlots extends CardReferenceSlots {
   amount?: ParsedAmount;
 }
 
+export type WealthAction = "wealth.recommend" | "wealth.compare" | "wealth.assess_risk" | "wealth.subscribe" | "wealth.redeem";
+export type WealthSlots = {
+  goal?: { kind: "capital_preservation" | "steady_growth" | "short_term_purchase"; target_date?: string; max_risk_level?: "R1" | "R2" | "R3" };
+  constraints?: { investable_amount?: ParsedAmount; max_settlement_days?: number };
+  product_refs?: string[];
+  assessment_scope?: "investment" | "portfolio";
+  product_ref?: string;
+  amount?: ParsedAmount;
+  source_account_ref?: string;
+  holding_ref?: string;
+  quantity_or_amount?: { kind: "amount"; amount_minor: number; currency: "CNY" } | { kind: "units"; units_milli: number };
+};
+
 export type ParsedIntent =
   | {
       schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
@@ -78,6 +96,13 @@ export type ParsedIntent =
       action: "card.set_budget";
       slots: CardBudgetSlots;
       missingSlots: CardSlotName[];
+      status: "ready_for_resolution" | "needs_clarification";
+    }
+  | {
+      schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
+      action: WealthAction;
+      slots: WealthSlots;
+      missingSlots: string[];
       status: "ready_for_resolution" | "needs_clarification";
     }
   | {

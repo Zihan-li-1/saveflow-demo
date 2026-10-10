@@ -43,6 +43,7 @@ test('Postgres B: independent Core instances share preview, confirmation, receip
       await tx.unsafe('DELETE FROM banking_transactions WHERE owner_id = $1', [source.user.id]);
       await tx.unsafe('DELETE FROM banking_operations WHERE owner_id = $1', [source.user.id]);
       await tx.unsafe('DELETE FROM banking_cards WHERE owner_id = $1', [source.user.id]);
+      await tx.unsafe('DELETE FROM banking_wealth_holdings WHERE owner_id = $1', [source.user.id]);
       await tx.unsafe('DELETE FROM banking_accounts WHERE owner_id = $1', [source.user.id]);
     });
     await sql.end({ timeout: 5 });
@@ -89,10 +90,40 @@ test('Postgres cards: a second instance and restart see the committed budget and
       await tx.unsafe('DELETE FROM banking_transactions WHERE owner_id = $1', [source.user.id]);
       await tx.unsafe('DELETE FROM banking_operations WHERE owner_id = $1', [source.user.id]);
       await tx.unsafe('DELETE FROM banking_cards WHERE owner_id = $1', [source.user.id]);
+      await tx.unsafe('DELETE FROM banking_wealth_holdings WHERE owner_id = $1', [source.user.id]);
       await tx.unsafe('DELETE FROM banking_accounts WHERE owner_id = $1', [source.user.id]);
     });
     await sql.end({ timeout: 5 });
     if (!firstClosed) await first.close();
     await second.close();
+  }
+});
+
+test('Postgres Wealth: separate instances share confirmed Mock subscription and one receipt', { skip: !connectionString }, async () => {
+  const source = structuredClone(seed);
+  source.user.id = `test_${randomUUID()}`;
+  const first = await createPostgresBankingCore({ connectionString, source });
+  const second = await createPostgresBankingCore({ connectionString, source });
+  try {
+    const account = await first.repository.getAccount('ACC-CHECKING');
+    const prepared = value(await first.prepare({ action: 'wealth.subscribe', input: { productId: 'product_001', amountFen: 10000, currency: 'CNY', sourceAccountId: account.id } }));
+    assert.equal((await second.repository.getAccount(account.id)).availableBalanceFen, account.availableBalanceFen);
+    value(await second.decide(prepared.operationId, { previewHash: prepared.preview.previewHash, decision: 'confirm', confirmedStepIds: prepared.preview.stepIds }));
+    const receipt = value(await second.execute(prepared.operationId, prepared.preview.previewHash));
+    assert.deepEqual(value(await first.execute(prepared.operationId, prepared.preview.previewHash)), receipt);
+    assert.equal((await first.repository.getAccount(account.id)).availableBalanceFen, account.availableBalanceFen - 10000);
+    assert.equal((await first.wealthPorts.getHoldings()).find(item => item.product_id === 'product_001').amount_fen, 10000);
+  } finally {
+    const postgres = await import('postgres');
+    const sql = postgres.default(connectionString, { max: 1 });
+    await sql.begin(async tx => {
+      await tx.unsafe('DELETE FROM banking_operations WHERE owner_id = $1', [source.user.id]);
+      await tx.unsafe('DELETE FROM banking_wealth_holdings WHERE owner_id = $1', [source.user.id]);
+      await tx.unsafe('DELETE FROM banking_cards WHERE owner_id = $1', [source.user.id]);
+      await tx.unsafe('DELETE FROM banking_transactions WHERE owner_id = $1', [source.user.id]);
+      await tx.unsafe('DELETE FROM banking_accounts WHERE owner_id = $1', [source.user.id]);
+    });
+    await sql.end({ timeout: 5 });
+    await first.close(); await second.close();
   }
 });

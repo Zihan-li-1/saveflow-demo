@@ -14,6 +14,7 @@ export async function dispatchParsedIntent(value, dependencies) {
     if (intent.action === 'transfer.create') return await dependencies.transferHandler(intent);
     if (intent.action === 'bill.summary') return await dependencies.billHandler(intent);
     if (intent.action.startsWith('card.')) return dependencies.cardHandler ? await dependencies.cardHandler(intent) : { ok: false, kind: 'unsupported' };
+    if (intent.action.startsWith('wealth.')) return dependencies.wealthHandler ? await dependencies.wealthHandler(intent) : { ok: false, kind: 'unsupported' };
     return { ok: false, kind: 'unsupported' };
   } catch (error) {
     return { ok: false, kind: 'skill_error', action: intent.action, error: { code: 'SKILL_ERROR', message: error instanceof Error && error.message.trim() ? error.message : 'Skill 处理失败，请稍后重试。' } };

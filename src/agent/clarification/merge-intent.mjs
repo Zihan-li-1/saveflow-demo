@@ -7,6 +7,11 @@ const required = {
   'card.set_budget': ['card_ref', 'amount'],
   'card.freeze': ['card_ref'],
   'card.unfreeze': ['card_ref'],
+  'wealth.recommend': ['goal'],
+  'wealth.compare': ['product_refs'],
+  'wealth.assess_risk': ['assessment_scope'],
+  'wealth.subscribe': ['product_ref', 'amount', 'source_account_ref'],
+  'wealth.redeem': ['holding_ref', 'quantity_or_amount'],
 };
 
 export function buildParsedIntent(action, slots) {
