@@ -1,0 +1,5 @@
+[
+  { "event_id": "refund_pending_001", "type": "refund.updated", "status": "pending", "amount_minor": 59900, "currency": "CNY", "source": "commerce_mock" },
+  { "event_id": "refund_settled_001", "type": "refund.settled", "status": "settled", "amount_minor": 59900, "currency": "CNY", "source": "commerce_mock" },
+  { "event_id": "txn_posted_001", "type": "transaction.posted", "status": "posted", "amount_minor": 1234, "currency": "CNY", "source": "financial_context" }
+]

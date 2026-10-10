@@ -1,0 +1,23 @@
+[
+  {
+    "product_id": "product_001",
+    "status": "active",
+    "version": "2026-09-01",
+    "expires_at": "2027-01-01T00:00:00+08:00",
+    "risk_disclosure": "Synthetic demo product. Principal and displayed yield are not guaranteed."
+  },
+  {
+    "product_id": "product_002",
+    "status": "active",
+    "version": "2026-09-01",
+    "expires_at": "2027-01-01T00:00:00+08:00",
+    "risk_disclosure": "Synthetic demo product. Principal and displayed yield are not guaranteed."
+  },
+  {
+    "product_id": "product_003",
+    "status": "active",
+    "version": "2026-09-01",
+    "expires_at": "2027-01-01T00:00:00+08:00",
+    "risk_disclosure": "Synthetic demo product. Principal and displayed yield are not guaranteed."
+  }
+]

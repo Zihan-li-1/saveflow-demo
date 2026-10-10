@@ -1,0 +1,20 @@
+[
+  {
+    "id": "holding_001",
+    "owner_id": "user_001",
+    "product_id": "product_002",
+    "amount_fen": 200000,
+    "units_milli": 200000,
+    "currency": "CNY",
+    "lock_until": null
+  },
+  {
+    "id": "holding_003",
+    "owner_id": "user_001",
+    "product_id": "product_003",
+    "amount_fen": 300000,
+    "units_milli": 300000,
+    "currency": "CNY",
+    "lock_until": "2026-10-01T00:00:00+08:00"
+  }
+]

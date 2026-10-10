@@ -1,0 +1,7 @@
+{
+  "commerce.quote": true,
+  "commerce.inventory": true,
+  "commerce.order.preview": true,
+  "commerce.order.execute": false,
+  "commerce.refund.events": true
+}
