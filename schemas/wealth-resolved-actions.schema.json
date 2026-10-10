@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Resolved Wealth Skill handoff aligned with ResolvedIntent v1.1.0",
+  "$comment": "Cross-field equality between resolved IDs and references is enforced by validateResolvedWealthIntent.",
+  "oneOf": [
+    { "$ref": "#/$defs/recommend" },
+    { "$ref": "#/$defs/compare" },
+    { "$ref": "#/$defs/assessRisk" },
+    { "$ref": "#/$defs/subscribe" },
+    { "$ref": "#/$defs/redeem" }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_-]+$" },
+    "money": { "type": "object", "additionalProperties": false, "required": ["amount_minor", "currency"], "properties": { "amount_minor": { "type": "integer", "minimum": 1, "maximum": 1000000000 }, "currency": { "const": "CNY" } } },
+    "goal": { "type": "object", "additionalProperties": false, "required": ["kind"], "properties": { "kind": { "enum": ["capital_preservation", "steady_growth", "short_term_purchase"] }, "target_date": { "type": "string", "format": "date" }, "max_risk_level": { "enum": ["R1", "R2", "R3"] } } },
+    "constraints": { "type": "object", "additionalProperties": false, "properties": { "investable_amount": { "$ref": "#/$defs/money" }, "max_settlement_days": { "type": "integer", "minimum": 0, "maximum": 365 } } },
+    "quantity": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["kind", "amount_minor", "currency"], "properties": { "kind": { "const": "amount" }, "amount_minor": { "type": "integer", "minimum": 1, "maximum": 1000000000 }, "currency": { "const": "CNY" } } },
+        { "type": "object", "additionalProperties": false, "required": ["kind", "units_milli"], "properties": { "kind": { "const": "units" }, "units_milli": { "type": "integer", "minimum": 1, "maximum": 1000000000 } } }
+      ]
+    },
+    "reference": { "type": "object", "additionalProperties": false, "required": ["slot", "entity_type", "entity_id", "source"], "properties": { "slot": { "type": "string" }, "entity_type": { "enum": ["investment_product", "investment_holding", "account"] }, "entity_id": { "$ref": "#/$defs/id" }, "source": { "enum": ["financial_context", "user_selection", "tool_result"] } } },
+    "base": { "type": "object", "additionalProperties": false, "required": ["intent_id", "action", "state", "resolved_slots", "references", "missing_slots"] },
+    "recommend": { "type": "object", "additionalProperties": false, "required": ["intent_id", "action", "state", "resolved_slots", "references", "missing_slots"], "properties": { "intent_id": { "$ref": "#/$defs/id" }, "action": { "const": "wealth.recommend" }, "state": { "const": "ready_for_planning" }, "resolved_slots": { "type": "object", "additionalProperties": false, "required": ["goal"], "properties": { "goal": { "$ref": "#/$defs/goal" }, "constraints": { "$ref": "#/$defs/constraints" } } }, "references": { "type": "array", "maxItems": 0 }, "missing_slots": { "type": "array", "maxItems": 0 } } },
+    "compare": { "type": "object", "additionalProperties": false, "required": ["intent_id", "action", "state", "resolved_slots", "references", "missing_slots"], "properties": { "intent_id": { "$ref": "#/$defs/id" }, "action": { "const": "wealth.compare" }, "state": { "const": "ready_for_planning" }, "resolved_slots": { "type": "object", "additionalProperties": false, "required": ["product_ids"], "properties": { "product_ids": { "type": "array", "minItems": 2, "maxItems": 5, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } } } }, "references": { "type": "array", "minItems": 2, "maxItems": 5, "items": { "$ref": "#/$defs/reference" } }, "missing_slots": { "type": "array", "maxItems": 0 } } },
+    "assessRisk": { "type": "object", "additionalProperties": false, "required": ["intent_id", "action", "state", "resolved_slots", "references", "missing_slots"], "properties": { "intent_id": { "$ref": "#/$defs/id" }, "action": { "const": "wealth.assess_risk" }, "state": { "const": "ready_for_planning" }, "resolved_slots": { "type": "object", "additionalProperties": false, "required": ["assessment_scope"], "properties": { "assessment_scope": { "enum": ["investment", "portfolio"] } } }, "references": { "type": "array", "maxItems": 0 }, "missing_slots": { "type": "array", "maxItems": 0 } } },
+    "subscribe": { "type": "object", "additionalProperties": false, "required": ["intent_id", "action", "state", "resolved_slots", "references", "missing_slots"], "properties": { "intent_id": { "$ref": "#/$defs/id" }, "action": { "const": "wealth.subscribe" }, "state": { "const": "ready_for_planning" }, "resolved_slots": { "type": "object", "additionalProperties": false, "required": ["product_id", "amount", "source_account_id"], "properties": { "product_id": { "$ref": "#/$defs/id" }, "amount": { "$ref": "#/$defs/money" }, "source_account_id": { "$ref": "#/$defs/id" } } }, "references": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/reference" } }, "missing_slots": { "type": "array", "maxItems": 0 } } },
+    "redeem": { "type": "object", "additionalProperties": false, "required": ["intent_id", "action", "state", "resolved_slots", "references", "missing_slots"], "properties": { "intent_id": { "$ref": "#/$defs/id" }, "action": { "const": "wealth.redeem" }, "state": { "const": "ready_for_planning" }, "resolved_slots": { "type": "object", "additionalProperties": false, "required": ["holding_id", "quantity_or_amount"], "properties": { "holding_id": { "$ref": "#/$defs/id" }, "quantity_or_amount": { "$ref": "#/$defs/quantity" } } }, "references": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "$ref": "#/$defs/reference" } }, "missing_slots": { "type": "array", "maxItems": 0 } } }
+  }
+}

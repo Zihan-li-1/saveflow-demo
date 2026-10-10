@@ -1,0 +1,11 @@
+[
+  {
+    "assessment_id": "risk_001",
+    "owner_id": "user_001",
+    "risk_level": "R2",
+    "assessment_scope": "investment",
+    "completed_at": "2026-08-15T09:00:00+08:00",
+    "expires_at": "2027-08-15T09:00:00+08:00",
+    "source": "trusted_ui"
+  }
+]

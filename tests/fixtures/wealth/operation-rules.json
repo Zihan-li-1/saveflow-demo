@@ -1,0 +1,5 @@
+{
+  "product_001": { "subscription_enabled": true, "redemption_enabled": true, "settlement": "T+0" },
+  "product_002": { "subscription_enabled": true, "redemption_enabled": true, "settlement": "T+1" },
+  "product_003": { "subscription_enabled": true, "redemption_enabled": true, "settlement": "AT_MATURITY" }
+}

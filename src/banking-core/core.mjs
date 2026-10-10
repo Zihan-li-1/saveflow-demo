@@ -3,6 +3,7 @@ import { createFinancialContext } from './repository.mjs';
 import { BankingError, assertFen, assertId, canonical } from './errors.mjs';
 import { OperationStore } from './operation-store.mjs';
 import { canTransitionAction, transitionAction } from './action-machine.mjs';
+import { createWealthMockPorts } from '../skills/wealth/mock-ports.mjs';
 
 /** @param {unknown} input @returns {import('./contracts').TransferInput} */
 function validateTransfer(input) {
@@ -16,6 +17,7 @@ function validateTransfer(input) {
 }
 
 const cardActions = new Set(['card.set_budget', 'card.freeze', 'card.unfreeze']);
+const wealthActions = new Set(['wealth.subscribe', 'wealth.redeem']);
 /** @param {string} action @param {unknown} input @returns {import('./contracts').CardInput} */
 function validateCardInput(action, input) {
   if (!cardActions.has(action) || !input || typeof input !== 'object' || Array.isArray(input)) throw new BankingError('VALIDATION_ERROR', '卡片操作参数无效');
@@ -29,16 +31,20 @@ function validateCardInput(action, input) {
 
 /** One isolated Mock banking session. Never feed model output to decide()/execute().
  * Future write actions must use this engine and a transaction adapter, not per-Skill Maps.
- * @param {{source?: Parameters<typeof createFinancialContext>[0], now?: () => number, store?: import('./contracts').BankingOperationStore, repository?: import('./contracts').FinancialContextRepository, ownerId?: string, policy?: {version: string, maxTransferFen: number, previewTtlMs: number}}} [options] */
+ * @param {{source?: Parameters<typeof createFinancialContext>[0], now?: () => number, store?: import('./contracts').BankingOperationStore, repository?: import('./contracts').FinancialContextRepository, wealthPorts?: ReturnType<typeof createWealthMockPorts>, ownerId?: string, policy?: {version: string, maxTransferFen: number, previewTtlMs: number}}} [options] */
 export function createBankingCore(options = {}) {
   const context = createFinancialContext(options.source);
   const repository = options.repository ?? context.repository;
   const commitTransfer = context.commitTransfer;
   const commitCard = context.commitCard;
+  const commitWealth = context.commitWealth;
   const ownerId = options.ownerId ?? context.ownerId;
   /** @type {import('./contracts').BankingOperationStore} */
   const store = options.store ?? new OperationStore();
   const now = options.now ?? Date.now;
+  // The synthetic Wealth write port is only valid for this in-memory context.
+  // A configured database must supply its own transactional adapter before enabling writes.
+  const wealthPorts = options.wealthPorts ?? (options.repository || options.store ? undefined : createWealthMockPorts({ getHoldings: context.getWealthHoldings, now }));
   const policy = Object.freeze({ version: 'mock-transfer-v1', maxTransferFen: 10000000, previewTtlMs: 300000, ...options.policy });
   assertFen(policy.maxTransferFen); assertFen(policy.previewTtlMs);
   /** @type {import('./contracts').AuditEvent[]} */
@@ -102,6 +108,43 @@ export function createBankingCore(options = {}) {
     if (action === 'card.set_budget' && card.monthlyBudgetFen === input.monthlyBudgetFen) throw new BankingError('INVALID_STATE', '新预算与当前预算相同');
     return { kind: 'card_change', action, cardId: card.id, cardName: card.name, cardVersion: card.version, previewGeneration: card.previewGeneration, before: { status: card.status, monthlyBudgetFen: card.monthlyBudgetFen }, after: { status: action === 'card.freeze' ? 'frozen' : action === 'card.unfreeze' ? 'active' : card.status, monthlyBudgetFen: action === 'card.set_budget' ? /** @type {number} */ (input.monthlyBudgetFen) : card.monthlyBudgetFen }, monthlySpentFen: card.monthlySpentFen };
   }
+  /** @param {import('./contracts').WealthAction} action @param {Record<string, any>} input @returns {Promise<import('./contracts').WealthEffect>} */
+  async function wealthEffectFor(action, input) {
+    if (!wealthPorts) throw new BankingError('CAPABILITY_UNAVAILABLE', '当前持久化环境未配置 Wealth 事务适配器');
+    const keys = action === 'wealth.subscribe' ? ['productId', 'amountFen', 'currency', 'sourceAccountId'] : ['holdingId', 'quantityKind', 'amountFen', 'currency', 'unitsMilli'];
+    if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !keys.includes(key))) throw new BankingError('VALIDATION_ERROR', 'Wealth 请求字段无效');
+    if (action === 'wealth.subscribe') {
+      if (Object.keys(input).sort().join() !== ['productId', 'amountFen', 'currency', 'sourceAccountId'].sort().join()) throw new BankingError('VALIDATION_ERROR', '申购字段不完整');
+      assertId(input.productId); assertId(input.sourceAccountId); assertFen(input.amountFen);
+      if (input.currency !== 'CNY') throw new BankingError('VALIDATION_ERROR', '当前 Mock 仅支持 CNY');
+      const products = await repository.getInvestmentProducts();
+      const product = products.find(item => item.id === input.productId);
+      const account = await repository.getAccount(input.sourceAccountId);
+      const assessment = await wealthPorts.getRiskAssessment();
+      const disclosure = await wealthPorts.getDisclosure(input.productId);
+      const rule = await wealthPorts.getOperationRule(input.productId);
+      if (!product || !account || account.status !== 'active') throw new BankingError('VALIDATION_ERROR', '产品或来源账户不可用');
+      if (!assessment || assessment.source !== 'trusted_ui' || Date.parse(assessment.expires_at) <= now() || Number(assessment.risk_level.slice(1)) < Number(product.riskLevel.slice(1))) throw new BankingError('SUITABILITY_FAILED', '风险测评不匹配或已过期');
+      if (!disclosure || disclosure.status !== 'active' || Date.parse(disclosure.expires_at) <= now() || !rule?.subscription_enabled) throw new BankingError('CAPABILITY_UNAVAILABLE', '产品披露或申购规则不可用');
+      if (input.amountFen < product.minimumAmountFen) throw new BankingError('BELOW_MINIMUM_AMOUNT', '申购金额低于产品最低金额');
+      if (account.availableBalanceFen < input.amountFen) throw new BankingError('INSUFFICIENT_BALANCE', '账户余额不足');
+      const holding = (await wealthPorts.getHoldings()).find(/** @param {any} item */ item => item.product_id === product.id);
+      return { kind: 'wealth_change', action, productId: product.id, productName: product.name, holdingId: holding?.id ?? `holding_${product.id}`, holdingVersion: holding?.version ?? null, fundingAccountId: account.id, accountVersion: account.version, amountFen: input.amountFen, unitsMilli: input.amountFen, disclosureVersion: disclosure.version, assessmentId: assessment.assessment_id };
+    }
+    if (!['amount', 'units'].includes(input.quantityKind) || (input.quantityKind === 'amount' ? Object.keys(input).sort().join() !== ['holdingId', 'quantityKind', 'amountFen', 'currency'].sort().join() : Object.keys(input).sort().join() !== ['holdingId', 'quantityKind', 'unitsMilli'].sort().join())) throw new BankingError('VALIDATION_ERROR', '赎回数量单位无效');
+    assertId(input.holdingId);
+    if (input.quantityKind === 'amount') { assertFen(input.amountFen); if (input.currency !== 'CNY') throw new BankingError('VALIDATION_ERROR', '仅支持 CNY'); }
+    else assertFen(input.unitsMilli);
+    const holding = (await wealthPorts.getHoldings()).find(/** @param {any} item */ item => item.id === input.holdingId);
+    if (!holding) throw new BankingError('HOLDING_NOT_FOUND', '持仓不存在');
+    const product = (await repository.getInvestmentProducts()).find(item => item.id === holding.product_id);
+    const rule = await wealthPorts.getOperationRule(holding.product_id);
+    if (!product || !rule?.redemption_enabled || (holding.lock_until && Date.parse(holding.lock_until) > now())) throw new BankingError('REDEMPTION_RESTRICTED', '产品当前不能赎回');
+    const amountFen = input.quantityKind === 'amount' ? input.amountFen : input.unitsMilli;
+    const unitsMilli = input.quantityKind === 'units' ? input.unitsMilli : input.amountFen;
+    if (holding.amount_fen < amountFen || holding.units_milli < unitsMilli) throw new BankingError('INSUFFICIENT_HOLDING', '持仓不足');
+    return { kind: 'wealth_change', action, productId: product.id, productName: product.name, holdingId: holding.id, holdingVersion: holding.version, amountFen, unitsMilli, settlement: rule.settlement };
+  }
   /** @param {import('./contracts').CardEffect} effect @returns {import('./contracts').RiskResult} */
   function cardRisk(effect) {
     const warnings = ['合成数据模拟卡片操作，不接真实银行。'];
@@ -130,6 +173,12 @@ export function createBankingCore(options = {}) {
       const request = /** @type {{action:import('./contracts').CardAction,input:import('./contracts').CardInput}} */ (record.request);
       const effect = await cardEffectFor(request.action, request.input);
       if (record.risk?.policyVersion !== policy.version || canonical(effect) !== canonical(record.preview.exactEffects[0])) throw new BankingError('PREVIEW_STALE', '卡片状态、版本或预览已变化，请重新预览并确认');
+      return;
+    }
+    if (wealthActions.has(record.action)) {
+      const request = /** @type {{action:import('./contracts').WealthAction,input:Record<string,any>}} */ (record.request);
+      const effect = await wealthEffectFor(request.action, request.input);
+      if (record.risk?.policyVersion !== policy.version || canonical(effect) !== canonical(record.preview.exactEffects[0])) throw new BankingError('PREVIEW_STALE', '账户、持仓或产品条件已变化，请重新预览');
       return;
     }
     const transferRequest = /** @type {{action:'transfer_money',input:import('./contracts').TransferInput}} */ (record.request);
@@ -174,18 +223,47 @@ export function createBankingCore(options = {}) {
     }
   }
 
+  /** @param {{action:import('./contracts').WealthAction,input:import('./contracts').WealthInput}} request @param {string} operationId */
+  async function prepareWealth(request, operationId) {
+    /** @type {import('./contracts').OperationRecord | undefined} */
+    let record;
+    try {
+      if (!wealthActions.has(request.action) || Object.keys(request).some(key => !['action', 'input'].includes(key))) throw new BankingError('VALIDATION_ERROR', 'Wealth 请求含未注册字段');
+      const effect = await wealthEffectFor(request.action, /** @type {Record<string,any>} */ (request.input));
+      record = { operationId, action: request.action, fingerprint: store.fingerprint(request.action, request.input), state: 'preparing', request: structuredClone(request) };
+      await save(record); await move(record, 'PREPARED');
+      const risk = /** @type {import('./contracts').RiskResult} */ ({ allowed: true, riskLevel: 'L3', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', warnings: ['仅限合成数据演示；本金与展示收益不保证；此预览不代表真实申赎。'] });
+      record.risk = risk;
+      const expiresAt = new Date(now() + policy.previewTtlMs).toISOString();
+      const contextSnapshotId = (await repository.getContextInfo()).snapshotId;
+      const planId = `plan_${crypto.randomUUID()}`, stepId = `step_${crypto.randomUUID()}`;
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical({ ownerId, operationId, planId, stepId, effect, expiresAt, contextSnapshotId, policy })));
+      const previewHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+      const summary = `${effect.productName}模拟${request.action === 'wealth.subscribe' ? '申购' : '赎回'} ¥${(effect.amountFen / 100).toFixed(2)}；需单独确认。`;
+      record.preview = { planId, stepIds: [stepId], summary, exactEffects: [effect], riskLevel: 'L3', warnings: risk.warnings, expiresAt, previewHash, contextSnapshotId };
+      await move(record, 'PREVIEWED');
+      return /** @type {import('./contracts').ActionResult<import('./contracts').PreparedAction>} */ ({ ok: true, data: { operationId, state: 'awaiting_confirmation', preview: structuredClone(record.preview), risk: structuredClone(risk) } });
+    } catch (error) {
+      const data = errorData(error);
+      if (record) await fail(record, data);
+      return /** @type {import('./contracts').ActionResult<import('./contracts').PreparedAction>} */ ({ ok: false, operationId, error: data });
+    }
+  }
+
   return Object.freeze({
     repository,
+    wealthPorts,
     close: async () => { if (typeof store.close === 'function') await store.close(); },
     riskCheck,
     /** @param {import('./contracts').ActionRequest} request @returns {Promise<import('./contracts').ActionResult<import('./contracts').PreparedAction>>} */
     async prepare(request) {
       const operationId = `op_${crypto.randomUUID()}`;
       if (request && cardActions.has(request.action)) return prepareCard(request, operationId);
+      if (request && wealthActions.has(request.action)) return prepareWealth(/** @type {{action:import('./contracts').WealthAction,input:import('./contracts').WealthInput}} */ (request), operationId);
       /** @type {import('./contracts').OperationRecord | undefined} */
       let record;
       try {
-        if (!request || request.action !== 'transfer_money') throw new BankingError('UNKNOWN_ACTION', '当前写操作仅注册 transfer_money');
+        if (!request || request.action !== 'transfer_money') throw new BankingError('UNKNOWN_ACTION', '当前写操作未注册');
         if (Object.keys(request).some(k => !['action', 'input', 'planId', 'stepId', 'origin'].includes(k))) throw new BankingError('VALIDATION_ERROR', '不接受模型提供的风险等级或确认标记');
         const input = validateTransfer(request.input);
         const planId = request.planId ?? `plan_${crypto.randomUUID()}`;
@@ -227,7 +305,7 @@ export function createBankingCore(options = {}) {
           try { await recheck(record); } catch (error) { await fail(record, errorData(error)); throw error; }
         }
         record.decision = { ...structuredClone(decision), planId: record.preview.planId, confirmationMethod: 'mock_explicit', idempotencyKey: operationId, decidedAt: new Date(now()).toISOString() };
-        if (decision.decision === 'reject') record.receipt = receiptFor(record, 'cancelled', cardActions.has(record.action) ? '已取消卡片操作，卡片未变更' : '已取消模拟转账，未扣款');
+        if (decision.decision === 'reject') record.receipt = receiptFor(record, 'cancelled', wealthActions.has(record.action) ? '已取消模拟申赎，账户与持仓未变更' : cardActions.has(record.action) ? '已取消卡片操作，卡片未变更' : '已取消模拟转账，未扣款');
         await move(record, decision.decision === 'confirm' ? 'CONFIRM' : 'CANCEL');
         return statusFor(record);
       }, operationId);
@@ -239,7 +317,7 @@ export function createBankingCore(options = {}) {
       if (running) return running;
       const execution = guard(async () => {
         const record = await lookup(operationId);
-        if (record.action !== 'transfer_money' && !cardActions.has(record.action)) throw new BankingError('UNKNOWN_ACTION', '此执行入口不接受该动作');
+        if (record.action !== 'transfer_money' && !cardActions.has(record.action) && !wealthActions.has(record.action)) throw new BankingError('UNKNOWN_ACTION', '此执行入口不接受该动作');
         verifyHash(record, previewHash);
         if (!record.preview) throw new BankingError('INVALID_STATE', '缺少预览');
         if (record.receipt) return record.receipt;
@@ -248,7 +326,18 @@ export function createBankingCore(options = {}) {
         try {
           await recheck(record); await move(record, 'EXECUTE');
           const at = new Date(now()).toISOString();
-          if (cardActions.has(record.action)) {
+          if (wealthActions.has(record.action)) {
+            if (!wealthPorts) throw new BankingError('CAPABILITY_UNAVAILABLE', '当前环境不能安全提交 Wealth Mock');
+            const effect = /** @type {import('./contracts').WealthEffect} */ (record.preview.exactEffects[0]);
+            if (typeof store.commitWealth === 'function') {
+              record.receipt = await store.commitWealth(ownerId, record, effect, () => receiptFor(record, 'succeeded', '模拟理财操作成功；不涉及真实资产'));
+              record.state = transitionAction(record.state, 'SUCCEEDED');
+            } else {
+              commitWealth(effect);
+              record.receipt = receiptFor(record, 'succeeded', '模拟理财操作成功；不涉及真实资产');
+              await move(record, 'SUCCEEDED');
+            }
+          } else if (cardActions.has(record.action)) {
             const effect = /** @type {import('./contracts').CardEffect} */ (record.preview.exactEffects[0]);
             if (typeof store.commitCard === 'function') {
               record.receipt = await store.commitCard(ownerId, record, effect, () => receiptFor(record, 'succeeded', '模拟卡片操作成功'));

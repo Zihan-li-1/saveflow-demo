@@ -1,3 +1,5 @@
+import { validateWealthIntent } from '../skills/wealth/wealth-skill.mjs';
+
 export const PARSED_INTENT_SCHEMA_VERSION = '1.0.0';
 export const PARSED_INTENT_ACTIONS = Object.freeze([
   'transfer.create',
@@ -6,6 +8,11 @@ export const PARSED_INTENT_ACTIONS = Object.freeze([
   'card.set_budget',
   'card.freeze',
   'card.unfreeze',
+  'wealth.recommend',
+  'wealth.compare',
+  'wealth.assess_risk',
+  'wealth.subscribe',
+  'wealth.redeem',
   'clarify',
   'unsupported',
 ]);
@@ -14,6 +21,13 @@ const TOP_LEVEL_KEYS = ['schemaVersion', 'action', 'slots', 'missingSlots', 'sta
 const TRANSFER_SLOT_KEYS = ['payee_ref', 'amount', 'source_account_ref'];
 const BILL_SLOT_KEYS = ['month'];
 const CARD_SLOT_KEYS = ['card_ref', 'amount'];
+const WEALTH_SLOTS = {
+  'wealth.recommend': ['goal', 'constraints'],
+  'wealth.compare': ['product_refs'],
+  'wealth.assess_risk': ['assessment_scope'],
+  'wealth.subscribe': ['product_ref', 'amount', 'source_account_ref'],
+  'wealth.redeem': ['holding_ref', 'quantity_or_amount'],
+};
 
 export class ParsedIntentValidationError extends Error {
   constructor(message) {
@@ -59,6 +73,9 @@ function requireRawReference(value, path) {
   if (path === 'slots.card_ref' && /^card[_-][a-z0-9_-]+$/i.test(reference.trim())) {
     fail(`${path} must be a raw user reference, not a card entity ID`);
   }
+  if (path === 'slots.product_ref' && /^product[_-][a-z0-9_-]+$/i.test(reference.trim())) fail(`${path} must be a raw user reference`);
+  if (path === 'slots.holding_ref' && /^holding[_-][a-z0-9_-]+$/i.test(reference.trim())) fail(`${path} must be a raw user reference`);
+  if (path === 'slots.product_refs' && /^product[_-][a-z0-9_-]+$/i.test(reference.trim())) fail(`${path} must be a raw user reference`);
   return reference;
 }
 
@@ -123,6 +140,30 @@ function validateBill(input, slots) {
   requireStatus(input.status, missing.length === 0 ? 'ready_for_resolution' : 'needs_clarification');
 }
 
+function validateWealth(input, slots) {
+  const action = input.action;
+  const allowed = WEALTH_SLOTS[action];
+  rejectUnknownKeys(slots, allowed, 'slots');
+  // Use the Skill's strict validator only when all required slots are present.
+  // This preserves the existing multi-turn parser contract for incomplete requests.
+  const required = action === 'wealth.recommend' ? ['goal'] : action === 'wealth.compare' ? ['product_refs'] : allowed;
+  const missing = required.filter(slot => !(slot in slots));
+  requireMissingSlots(input.missingSlots, missing);
+  requireStatus(input.status, missing.length ? 'needs_clarification' : 'ready_for_resolution');
+  for (const [key, value] of Object.entries(slots)) {
+    if (['product_ref', 'holding_ref', 'source_account_ref'].includes(key)) requireRawReference(value, `slots.${key}`);
+    if (key === 'product_refs') {
+      if (!Array.isArray(value) || value.length < 2 || value.length > 5 || new Set(value).size !== value.length) fail('slots.product_refs requires 2–5 unique references');
+      value.forEach(item => requireRawReference(item, 'slots.product_refs'));
+    }
+    if (key === 'amount') validateAmount(value, { maximum: 1_000_000_000 });
+  }
+  if (!missing.length) {
+    try { validateWealthIntent({ action, slots }); }
+    catch (error) { fail(error instanceof Error ? error.message : 'invalid Wealth intent'); }
+  }
+}
+
 export function validateParsedIntent(value) {
   const input = requireRecord(value, 'ParsedIntent');
   rejectUnknownKeys(input, TOP_LEVEL_KEYS, 'ParsedIntent');
@@ -146,6 +187,13 @@ export function validateParsedIntent(value) {
     case 'card.freeze':
     case 'card.unfreeze':
       validateCard(input, slots);
+      break;
+    case 'wealth.recommend':
+    case 'wealth.compare':
+    case 'wealth.assess_risk':
+    case 'wealth.subscribe':
+    case 'wealth.redeem':
+      validateWealth(input, slots);
       break;
     case 'clarify':
       rejectUnknownKeys(slots, [], 'slots');

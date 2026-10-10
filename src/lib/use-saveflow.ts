@@ -10,7 +10,7 @@ import { createBankingClient } from "./api/banking-client";
 import type { ActionReceipt } from "../banking-core/contracts";
 import { ApiError, validatePlan, type Analysis, type Receipt } from "./api/contracts";
 
-export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview"; analysis?: Analysis; banking?: BankingAgentData; errorHint?: string };
+export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_wealth" | "banking_wealth_preview"; analysis?: Analysis; banking?: BankingAgentData; errorHint?: string };
 const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。可以查询模拟账单，或生成转账正式预览，例如：给张三转 500 元。" }];
 const pendingKey = "saveflow.pending-operation.v1";
 
@@ -69,7 +69,7 @@ export function useSaveflow() {
     lastBankingRequest.current = { text, choice };
     setValidation("");
     if (!choice) setInput("");
-    setMessages(current => current.filter(message => message.kind !== "banking_preview").map(message => message.kind === "banking_clarification" ? { ...message, banking: { ...message.banking!, choices: [] } } : message));
+    setMessages(current => current.filter(message => !["banking_preview", "banking_wealth_preview"].includes(message.kind || "")).map(message => message.kind === "banking_clarification" ? { ...message, banking: { ...message.banking!, choices: [] } } : message));
     setActiveCardOperationId(null);
     addMessage({ role: "user", text: choice?.label || text });
     const version = ++generation.current;
@@ -92,11 +92,19 @@ export function useSaveflow() {
         setBankingContinuation(null);
         addMessage({ role: "agent", kind: "banking_card", text: "卡片信息已查询。", banking: answer });
         send("ANSWER");
+      } else if (answer.status === "wealth_result") {
+        setBankingContinuation(null);
+        addMessage({ role: "agent", kind: "banking_wealth", text: "模拟理财信息已生成。", banking: answer });
+        send("ANSWER");
       } else if (answer.status === "awaiting_confirmation") {
         if (answer.action?.startsWith("card.")) {
           setBankingContinuation(null);
           setActiveCardOperationId(answer.operationId || null);
           addMessage({ role: "agent", kind: "banking_card_preview", text: "卡片操作正式预览已生成；点击预览中的确认按钮后才会执行。", banking: answer });
+        } else if (answer.action?.startsWith("wealth.")) {
+          setBankingContinuation(null);
+          setActiveCardOperationId(answer.operationId || null);
+          addMessage({ role: "agent", kind: "banking_wealth_preview", text: "模拟理财预览已生成；单独确认后才会执行。", banking: answer });
         } else addMessage({ role: "agent", kind: "banking_preview", text: "转账正式预览已生成，资金未变；确认与执行尚未开放。可继续修改金额或收款人。", banking: answer });
         send("ANSWER");
       } else {
@@ -114,6 +122,13 @@ export function useSaveflow() {
   const showCardOutcome = async (data: BankingAgentData, receipt: ActionReceipt) => {
     if (receipt.status !== "succeeded") {
       addMessage({ role: "agent", kind: "error", text: receipt.message });
+      setActiveCardOperationId(current => current === data.operationId ? null : current);
+      return;
+    }
+    if (data.action?.startsWith("wealth.")) {
+      const checked = await cardClient().request("action.status", { operationId: data.operationId! });
+      if (checked.receipt?.receiptId !== receipt.receiptId) throw new ApiError("INVALID_RESPONSE", "理财回执无法核实，请查询原操作");
+      addMessage({ role: "agent", text: `${receipt.message}；已核对操作回执。合成数据仅供演示。` });
       setActiveCardOperationId(current => current === data.operationId ? null : current);
       return;
     }

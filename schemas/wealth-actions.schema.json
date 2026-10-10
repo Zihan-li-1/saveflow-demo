@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Wealth action fragment carried by ParsedIntentEnvelope v1.1.0",
+  "oneOf": [
+    { "$ref": "#/$defs/recommend" },
+    { "$ref": "#/$defs/compare" },
+    { "$ref": "#/$defs/assessRisk" },
+    { "$ref": "#/$defs/subscribe" },
+    { "$ref": "#/$defs/redeem" }
+  ],
+  "$defs": {
+    "money": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amount_minor", "currency"],
+      "properties": {
+        "amount_minor": { "type": "integer", "minimum": 1, "maximum": 1000000000 },
+        "currency": { "const": "CNY" }
+      }
+    },
+    "productRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "not": { "pattern": "^\\s*[Pp][Rr][Oo][Dd][Uu][Cc][Tt][_-][a-zA-Z0-9_-]+\\s*$" }
+    },
+    "holdingRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "not": { "pattern": "^\\s*[Hh][Oo][Ll][Dd][Ii][Nn][Gg][_-][a-zA-Z0-9_-]+\\s*$" }
+    },
+    "accountRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "not": { "pattern": "^\\s*[Aa][Cc][Cc][_-][a-zA-Z0-9_-]+\\s*$" }
+    },
+    "goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["capital_preservation", "steady_growth", "short_term_purchase"] },
+        "target_date": { "type": "string", "format": "date" },
+        "max_risk_level": { "enum": ["R1", "R2", "R3"] }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "investable_amount": { "$ref": "#/$defs/money" },
+        "max_settlement_days": { "type": "integer", "minimum": 0, "maximum": 365 }
+      }
+    },
+    "quantity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "amount_minor", "currency"],
+          "properties": { "kind": { "const": "amount" }, "amount_minor": { "type": "integer", "minimum": 1, "maximum": 1000000000 }, "currency": { "const": "CNY" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "units_milli"],
+          "properties": { "kind": { "const": "units" }, "units_milli": { "type": "integer", "minimum": 1, "maximum": 1000000000 } }
+        }
+      ]
+    },
+    "recommend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "slots"],
+      "properties": {
+        "action": { "const": "wealth.recommend" },
+        "slots": { "type": "object", "additionalProperties": false, "required": ["goal"], "properties": { "goal": { "$ref": "#/$defs/goal" }, "constraints": { "$ref": "#/$defs/constraints" } } }
+      }
+    },
+    "compare": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "slots"],
+      "properties": {
+        "action": { "const": "wealth.compare" },
+        "slots": { "type": "object", "additionalProperties": false, "required": ["product_refs"], "properties": { "product_refs": { "type": "array", "minItems": 2, "maxItems": 5, "uniqueItems": true, "items": { "$ref": "#/$defs/productRef" } } } }
+      }
+    },
+    "assessRisk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "slots"],
+      "properties": { "action": { "const": "wealth.assess_risk" }, "slots": { "type": "object", "additionalProperties": false, "required": ["assessment_scope"], "properties": { "assessment_scope": { "enum": ["investment", "portfolio"] } } } }
+    },
+    "subscribe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "slots"],
+      "properties": { "action": { "const": "wealth.subscribe" }, "slots": { "type": "object", "additionalProperties": false, "required": ["product_ref", "amount", "source_account_ref"], "properties": { "product_ref": { "$ref": "#/$defs/productRef" }, "amount": { "$ref": "#/$defs/money" }, "source_account_ref": { "$ref": "#/$defs/accountRef" } } } }
+    },
+    "redeem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "slots"],
+      "properties": { "action": { "const": "wealth.redeem" }, "slots": { "type": "object", "additionalProperties": false, "required": ["holding_ref", "quantity_or_amount"], "properties": { "holding_ref": { "$ref": "#/$defs/holdingRef" }, "quantity_or_amount": { "$ref": "#/$defs/quantity" } } } }
+    }
+  }
+}

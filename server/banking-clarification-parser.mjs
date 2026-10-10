@@ -46,6 +46,25 @@ export function parseClarificationAnswer(message, { action, slot, choices = [], 
     return value && (action !== 'card.set_budget' || value.amount_minor <= 10_000_000) ? { kind: 'slot', updates: { amount: value } } : { kind: 'unrecognized' };
   }
   if (slot === 'card_ref' && message.trim()) return { kind: 'slot', updates: { card_ref: message.trim() } };
+  if (slot === 'product_ref' && message.trim()) return { kind: 'slot', updates: { product_ref: message.trim() } };
+  if (slot === 'holding_ref' && message.trim()) return { kind: 'slot', updates: { holding_ref: message.trim() } };
+  if (slot === 'source_account_ref' && message.trim()) return { kind: 'slot', updates: { source_account_ref: message.trim() } };
+  if (slot === 'product_refs') {
+    const refs = message.split(/[、,，和与]/).map(item => item.trim()).filter(Boolean);
+    return refs.length >= 2 && refs.length <= 5 ? { kind: 'slot', updates: { product_refs: refs } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'quantity_or_amount') {
+    const value = amount(message);
+    return value && /元|人民币/.test(message) ? { kind: 'slot', updates: { quantity_or_amount: { kind: 'amount', ...value } } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'goal') {
+    const kind = /购物|短期|消费/.test(message) ? 'short_term_purchase' : /稳健|增长/.test(message) ? 'steady_growth' : /保本/.test(message) ? 'capital_preservation' : null;
+    return kind ? { kind: 'slot', updates: { goal: { kind } } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'assessment_scope') {
+    const scope = /组合/.test(message) ? 'portfolio' : /投资|理财/.test(message) ? 'investment' : null;
+    return scope ? { kind: 'slot', updates: { assessment_scope: scope } } : { kind: 'unrecognized' };
+  }
   if (slot === 'payee_ref' && message.trim()) return { kind: 'slot', updates: { payee_ref: message.trim() } };
   if (slot === 'month') {
     const value = month(message, now);

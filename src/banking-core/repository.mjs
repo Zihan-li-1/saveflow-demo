@@ -26,6 +26,10 @@ export function createFinancialContext(source = seed) {
     { id: 'product_002', name: '模拟稳健现金 B', riskLevel: 'R2', expectedYield: 210, liquidity: 'T+1', minimumAmountFen: 10000, durationDays: 0, currency: 'CNY', isSynthetic: true },
     { id: 'product_003', name: '模拟定期组合 C', riskLevel: 'R3', expectedYield: 300, liquidity: 'AT_MATURITY', minimumAmountFen: 100000, durationDays: 30, currency: 'CNY', isSynthetic: true },
   ];
+  const holdings = [
+    { id: 'holding_001', product_id: 'product_002', amount_fen: 200000, units_milli: 200000, currency: 'CNY', lock_until: null, version: 0 },
+    { id: 'holding_003', product_id: 'product_003', amount_fen: 300000, units_milli: 300000, currency: 'CNY', lock_until: '2026-11-01T00:00:00+08:00', version: 0 },
+  ];
   let revision = 0;
   /** @type {import('./contracts').SyncFinancialContextRepository} */
   const repository = {
@@ -77,5 +81,21 @@ export function createFinancialContext(source = seed) {
     card.previewGeneration++;
     return card.previewGeneration;
   }
-  return { repository: Object.freeze(repository), commitTransfer, commitCard, reserveCardPreview, ownerId: raw.user.id };
+  /** Atomic in-memory Mock mutation; the caller has already verified the confirmed preview. */
+  /** @param {import('./contracts').WealthEffect} effect */
+  function commitWealth(effect) {
+    const holding = holdings.find(item => item.id === effect.holdingId);
+    if (effect.action === 'wealth.subscribe') {
+      const account = accounts.find(item => item.id === effect.fundingAccountId);
+      if (!account || account.version !== effect.accountVersion || account.availableBalanceFen < effect.amountFen) throw new BankingError('PREVIEW_STALE', '账户余额或版本已变化');
+      account.balanceFen -= effect.amountFen; account.availableBalanceFen -= effect.amountFen; account.version++;
+      if (holding) { holding.amount_fen += effect.amountFen; holding.units_milli += effect.amountFen; holding.version++; }
+      else holdings.push({ id: effect.holdingId, product_id: effect.productId, amount_fen: effect.amountFen, units_milli: effect.amountFen, currency: 'CNY', lock_until: null, version: 0 });
+    } else {
+      if (!holding || holding.version !== effect.holdingVersion || holding.amount_fen < effect.amountFen || holding.units_milli < effect.unitsMilli) throw new BankingError('PREVIEW_STALE', '持仓已变化');
+      holding.amount_fen -= effect.amountFen; holding.units_milli -= effect.unitsMilli; holding.version++;
+    }
+    revision++;
+  }
+  return { repository: Object.freeze(repository), getWealthHoldings: () => structuredClone(holdings), commitTransfer, commitCard, commitWealth, reserveCardPreview, ownerId: raw.user.id };
 }
