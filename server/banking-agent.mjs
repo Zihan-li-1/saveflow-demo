@@ -257,7 +257,16 @@ export async function handleBankingAgent(
     }
     if (result.ok && result.kind === 'transfer_preview') {
       const continuationToken = issueState({ action: 'transfer.create', slots: parsed.slots, pendingSlot: 'amount', selections, env, now });
-      return reply(200, 'OK', '转账正式预览已生成，等待用户确认', { status: result.data.state, action: result.action, operationId: result.data.operationId, preview: result.data.preview, risk: result.data.risk, continuationToken });
+      const settings = await repository.getDemoSettings();
+      const currentMonth = (await repository.getContextInfo()).currentMonth;
+      const amountMinor = result.data.preview.exactEffects[0]?.amountFen ?? 0;
+      const monthExpenseCount = (await repository.getTransactions({ month: currentMonth })).filter(transaction => transaction.type === 'expense' || transaction.type === 'transfer_out').length;
+      const context = {
+        monthlyIncomeFen: settings.monthlyIncomeFen,
+        incomeRatioPercent: settings.monthlyIncomeFen > 0 ? Math.round((amountMinor / settings.monthlyIncomeFen) * 1000) / 10 : 0,
+        expenseCountThisMonth: monthExpenseCount + 1,
+      };
+      return reply(200, 'OK', '转账正式预览已生成，等待用户确认', { status: result.data.state, action: result.action, operationId: result.data.operationId, preview: result.data.preview, risk: result.data.risk, context, continuationToken });
     }
     if (result.kind === 'needs_clarification') {
       const action = result.action || parsed.action;
