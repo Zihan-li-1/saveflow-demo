@@ -1,4 +1,4 @@
-export type PlanInput = { monthlySavingFen: number; saveRateBps: number; confirmed: true; category?: string; targetAmountFen?: number | null };
+export type PlanInput = { monthlySavingFen: number; confirmed: true; targetAmountFen?: number | null };
 export type Receipt = { operationId: string; status: "succeeded" | "failed" | "pending"; message: string };
 export type Analysis = {
   asOf?: string;
@@ -24,9 +24,9 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
-export function validatePlan(input: Pick<PlanInput, "monthlySavingFen" | "saveRateBps">): string | null {
+export function validatePlan(input: Pick<PlanInput, "monthlySavingFen" | "targetAmountFen">): string | null {
   if (!Number.isSafeInteger(input.monthlySavingFen) || input.monthlySavingFen <= 0 || input.monthlySavingFen > 300000) return "每月储蓄须为 0.01–3,000 元，最多两位小数。";
-  if (!Number.isInteger(input.saveRateBps) || input.saveRateBps < 0 || input.saveRateBps > 10000) return "储蓄比例须为 0–100%，最多两位小数。";
+  if (input.targetAmountFen != null && (!Number.isSafeInteger(input.targetAmountFen) || input.targetAmountFen <= 0)) return "目标金额须为正整数分。";
   return null;
 }
 export function isReceipt(value: unknown): value is Receipt {

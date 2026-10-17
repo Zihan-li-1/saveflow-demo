@@ -1,5 +1,6 @@
 import { validateParsedIntent } from './validate-parsed-intent.mjs';
 import { transferFromResolvedIntent } from '../banking-core/wire.mjs';
+import { handleCard } from './handlers/card-handler.mjs';
 
 function clarification(intent) {
   return { ok: false, kind: 'needs_clarification', action: intent.action, source: 'parser', ...(intent.missingSlots.length ? { missingSlots: [...intent.missingSlots] } : {}) };
@@ -12,6 +13,7 @@ export async function dispatchParsedIntent(value, dependencies) {
   try {
     if (intent.action === 'transfer.create') return await dependencies.transferHandler(intent);
     if (intent.action === 'bill.summary') return await dependencies.billHandler(intent);
+    if (intent.action.startsWith('card.')) return dependencies.cardHandler ? await dependencies.cardHandler(intent) : { ok: false, kind: 'unsupported' };
     return { ok: false, kind: 'unsupported' };
   } catch (error) {
     return { ok: false, kind: 'skill_error', action: intent.action, error: { code: 'SKILL_ERROR', message: error instanceof Error && error.message.trim() ? error.message : 'Skill 处理失败，请稍后重试。' } };
@@ -115,4 +117,4 @@ export async function orchestrateTransferPreview(intent, dependencies, core) {
   return prepareTransferPreview(await dispatchParsedIntent(intent, dependencies), core);
 }
 
-export { transferRepository };
+export { handleCard, transferRepository };

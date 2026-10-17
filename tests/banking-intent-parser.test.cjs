@@ -148,6 +148,33 @@ test('maps Qwen rate limit, auth errors, timeout and upstream failures without l
   );
 });
 
+test('diagnostics record only schema rules and correlation ID, never model or user secrets', async () => {
+  const entries = [];
+  const requestId = '12345678-1234-1234-1234-123456789abc';
+  const secret = 'private-user-and-model-secret';
+  const invalid = { ...intent('clarify', {}, ['action'], 'needs_clarification'), [secret]: secret };
+  await assert.rejects(parseBankingIntent(secret, {
+    env, requestId, onDiagnostic: entry => entries.push(entry),
+    fetchImpl: async () => upstream(invalid),
+  }), { code: 'MODEL_FORMAT_ERROR' });
+  assert.deepEqual(entries, [{ event: 'banking_intent_validation_failed', schemaVersion: '1.0.0', reason: 'schema_validation_failed', validationRule: 'ParsedIntent contains unknown fields', requestId }]);
+  assert.equal(JSON.stringify(entries).includes(secret), false);
+  assert.equal(JSON.stringify(entries).includes(env.DASHSCOPE_API_KEY), false);
+  for (const [content, finish, reason] of [[secret, 'stop', 'invalid_json'], [secret, 'length', 'incomplete_response']]) {
+    entries.length = 0;
+    await assert.rejects(parseBankingIntent(secret, { env, onDiagnostic: entry => entries.push(entry), fetchImpl: async () => rawUpstream(content, finish) }), { code: 'MODEL_FORMAT_ERROR' });
+    assert.equal(entries[0].reason, reason);
+    assert.equal(JSON.stringify(entries).includes(secret), false);
+  }
+});
+
+test('diagnostic logger failure never replaces the parser error', async () => {
+  await assert.rejects(parseBankingIntent('测试消息', {
+    env, onDiagnostic: () => { throw new Error('logger failed'); },
+    fetchImpl: async () => rawUpstream('{broken'),
+  }), { code: 'MODEL_FORMAT_ERROR' });
+});
+
 test('validates input and model configuration before making a request', async () => {
   let calls = 0;
   await assert.rejects(

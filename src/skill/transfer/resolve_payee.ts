@@ -26,7 +26,7 @@ export async function resolvePayee(
       clarification: {
         reason: "missing_slot",
         slot: "payee_ref",
-        question: "请告诉我要转给谁（收款人姓名）。",
+        question: "请告诉我转给谁。",
       },
     };
   }
@@ -39,7 +39,7 @@ export async function resolvePayee(
       clarification: {
         reason: "payee_not_found",
         slot: "payee_ref",
-        question: `没有找到收款人「${query}」，请确认姓名是否正确。`,
+        question: `没有找到收款人「${query}」。`,
       },
     };
   }
@@ -51,7 +51,7 @@ export async function resolvePayee(
     clarification: {
       reason: "ambiguous_payee",
       slot: "payee_ref",
-      question: `「${query}」匹配到多位收款人，请确认是哪一位。`,
+      question: `「${query}」匹配到多位收款人，请确认。`,
       candidates,
     },
   };

@@ -1,0 +1,550 @@
+﻿
+> saveflow-demo@0.1.0 test
+> node --test tests/flow.test.cjs tests/qwen.test.cjs tests/banking-core.test.mjs tests/banking-http.test.cjs tests/parsed-intent.test.cjs tests/banking-intent-parser.test.cjs tests/agent-dispatcher.test.cjs tests/transfer-orchestrator.test.cjs tests/banking-agent-http.test.cjs tests/banking-clarification.test.cjs tests/banking-agent-integration.test.cjs
+
+TAP version 13
+# Subtest: routes transfer.create only to transferHandler
+ok 1 - routes transfer.create only to transferHandler
+  ---
+  duration_ms: 1.6569
+  type: 'test'
+  ...
+# Subtest: routes bill.summary only to billHandler
+ok 2 - routes bill.summary only to billHandler
+  ---
+  duration_ms: 0.299
+  type: 'test'
+  ...
+# Subtest: does not call handlers for parser clarification or unsupported intent
+ok 3 - does not call handlers for parser clarification or unsupported intent
+  ---
+  duration_ms: 0.2935
+  type: 'test'
+  ...
+# Subtest: rejects invalid intents before either handler is called
+ok 4 - rejects invalid intents before either handler is called
+  ---
+  duration_ms: 0.6041
+  type: 'test'
+  ...
+# Subtest: handler errors become skill_error and never fall through to the other handler
+ok 5 - handler errors become skill_error and never fall through to the other handler
+  ---
+  duration_ms: 0.3943
+  type: 'test'
+  ...
+# Subtest: real bill handler reads the shared repository and reflects changed transactions
+ok 6 - real bill handler reads the shared repository and reflects changed transactions
+  ---
+  duration_ms: 6.3195
+  type: 'test'
+  ...
+# Subtest: real transfer handler resolves raw account and payee references without executing Banking Core
+ok 7 - real transfer handler resolves raw account and payee references without executing Banking Core
+  ---
+  duration_ms: 0.9142
+  type: 'test'
+  ...
+# Subtest: ambiguous D resolution remains a resolver clarification
+ok 8 - ambiguous D resolution remains a resolver clarification
+  ---
+  duration_ms: 0.1844
+  type: 'test'
+  ...
+# Subtest: banking-agent returns real bill statistics and evidence
+ok 9 - banking-agent returns real bill statistics and evidence
+  ---
+  duration_ms: 28.8004
+  type: 'test'
+  ...
+# Subtest: banking-agent returns Core formal preview without decide or execute
+ok 10 - banking-agent returns Core formal preview without decide or execute
+  ---
+  duration_ms: 13.6692
+  type: 'test'
+  ...
+# Subtest: banking-agent returns resolver clarification without preparing Core
+ok 11 - banking-agent returns resolver clarification without preparing Core
+  ---
+  duration_ms: 3.2165
+  type: 'test'
+  ...
+# Subtest: banking-agent rejects illegal model output and request execution fields
+ok 12 - banking-agent rejects illegal model output and request execution fields
+  ---
+  duration_ms: 2.566
+  type: 'test'
+  ...
+# Subtest: banking-agent maps model timeout without leaking provider credentials
+ok 13 - banking-agent maps model timeout without leaking provider credentials
+  ---
+  duration_ms: 0.9357
+  type: 'test'
+  ...
+# Subtest: banking-agent maps Skill errors explicitly
+ok 14 - banking-agent maps Skill errors explicitly
+  ---
+  duration_ms: 1.2979
+  type: 'test'
+  ...
+# Subtest: old /api/agent handler remains available
+ok 15 - old /api/agent handler remains available
+  ---
+  duration_ms: 3.8105
+  type: 'test'
+  ...
+# Subtest: banking-agent enforces access code, same-origin, body size, and rate limit
+ok 16 - banking-agent enforces access code, same-origin, body size, and rate limit
+  ---
+  duration_ms: 5.6309
+  type: 'test'
+  ...
+# Subtest: real HTTP / local: independent processes continue account, payee, bill and edit flows
+ok 17 - real HTTP / local: independent processes continue account, payee, bill and edit flows
+  ---
+  duration_ms: 403.1777
+  type: 'test'
+  ...
+# {"adapter":"local","pid":28480,"input":"给张三转 500 元","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"3bc535af-1d5b-4d30-a44c-7a368c4d8eb0"}
+# {"adapter":"local","pid":30360,"input":"choice.optionId","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"6542493e-af58-40b9-8dd8-b4f31c6bbddb"}
+# {"adapter":"local","pid":28480,"input":"改成 600 元","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"8ddb7bd9-b883-4719-ada2-273a530e0a9d"}
+# {"adapter":"local","pid":30360,"input":"改给王先生","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"bbf5e547-9244-420f-b056-ac9fd88b37cb"}
+# {"adapter":"local","pid":28480,"input":"choice.optionId","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"be524ae3-140f-4f11-8199-1a6acf5f90b9"}
+# {"adapter":"local","pid":30360,"input":"收款人改成李四","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"0a1ea7a8-47d6-4c00-bffe-f6881024b5a6"}
+# {"adapter":"local","pid":28480,"input":"改选收款人","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"12e874bd-4b42-46cf-a84f-b1a54cf387a7"}
+# {"adapter":"local","pid":28480,"input":"从活期账户给王先生转 500 元","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"8e71cdf2-58ae-47a0-b52a-2f6a46bdc16a"}
+# {"adapter":"local","pid":30360,"input":"choice.optionId","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"914b6416-5657-4701-ba29-c9043b675e2c"}
+# {"adapter":"local","pid":30360,"input":"choice.optionId","http":400,"code":"INVALID_CHOICE","status":"error","requestId":"d813fe9c-2851-469c-ad9d-ee9c3f152a16"}
+# {"adapter":"local","pid":30360,"input":"choice.optionId","http":400,"code":"INVALID_REQUEST","requestId":"d40f742f-db2c-4e8e-a558-01c3f79a0e62"}
+# {"adapter":"local","pid":28480,"input":"查账单","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"8ddc38a2-7f49-4d51-824a-91951b4ccc33"}
+# {"adapter":"local","pid":30360,"input":"2026年8月","http":200,"code":"OK","status":"bill_result","requestId":"cd5e76d0-816d-4aa6-a460-ad9aa0c619eb"}
+# {"adapter":"local","pid":30360,"input":"查账单","http":401,"code":"UNAUTHORIZED","requestId":"8a3f115f-7fc8-451c-8281-46454123c207"}
+# {"adapter":"local","pid":30360,"input":"查账单","http":403,"code":"FORBIDDEN","requestId":"86399641-f9a5-4e21-9d36-625f0b9438f2"}
+# {"adapter":"local","pid":30360,"input":"invalid","http":400,"code":"INVALID_REQUEST","requestId":"1f7ec80c-2916-4ec7-bf64-1c44cf2f4934"}
+# Subtest: real HTTP / netlify: independent processes continue account, payee, bill and edit flows
+ok 18 - real HTTP / netlify: independent processes continue account, payee, bill and edit flows
+  ---
+  duration_ms: 282.1437
+  type: 'test'
+  ...
+# {"adapter":"netlify","pid":30032,"input":"给张三转 500 元","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"ebca2f40-3e2d-4c72-a898-5e8bf73911d9"}
+# {"adapter":"netlify","pid":3048,"input":"choice.optionId","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"6ca9abbf-e463-4c43-849c-3423f70b0b9c"}
+# {"adapter":"netlify","pid":30032,"input":"改成 600 元","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"83ed5943-5506-4888-acc5-20e1bc0e33f7"}
+# {"adapter":"netlify","pid":3048,"input":"改给王先生","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"fb1a84d4-6b12-4174-bad6-364558d37ae7"}
+# {"adapter":"netlify","pid":30032,"input":"choice.optionId","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"2b009499-5a64-47cb-982a-7300a25cafd7"}
+# {"adapter":"netlify","pid":3048,"input":"收款人改成李四","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"499da24d-a51c-4387-a5c1-98366c3abf23"}
+# {"adapter":"netlify","pid":30032,"input":"改选收款人","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"14cc255b-cbb4-4a41-bbdc-8d94bc14bf8a"}
+# {"adapter":"netlify","pid":30032,"input":"从活期账户给王先生转 500 元","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"df697f80-79b2-412e-b673-7fd1f5fd9151"}
+# {"adapter":"netlify","pid":3048,"input":"choice.optionId","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"6dd84855-d9dd-4cda-84f5-a9100481e2c1"}
+# {"adapter":"netlify","pid":3048,"input":"choice.optionId","http":400,"code":"INVALID_CHOICE","status":"error","requestId":"49133ce6-6b97-4cfd-a535-7318a0c4b382"}
+# {"adapter":"netlify","pid":3048,"input":"choice.optionId","http":400,"code":"INVALID_REQUEST","requestId":"d521a4b1-2574-4543-8a2c-b2b1833b1735"}
+# {"adapter":"netlify","pid":30032,"input":"查账单","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"1c92579d-484c-449a-a27b-6cfea5b771f4"}
+# {"adapter":"netlify","pid":3048,"input":"2026年8月","http":200,"code":"OK","status":"bill_result","requestId":"d61ecb88-2635-420c-87f0-2559ce3ffbe6"}
+# {"adapter":"netlify","pid":3048,"input":"查账单","http":401,"code":"UNAUTHORIZED","requestId":"17b1b13a-fc60-4aad-96ca-952f165b08a5"}
+# {"adapter":"netlify","pid":3048,"input":"查账单","http":403,"code":"FORBIDDEN","requestId":"bd38f27b-1773-484a-b76c-f0b7630edd67"}
+# {"adapter":"netlify","pid":3048,"input":"invalid","http":400,"code":"INVALID_REQUEST","requestId":"e932d916-3463-4366-9c73-a9e4bf8c4d96"}
+# Subtest: HTTP integration: account choice crosses two requests and returns Core preview only
+ok 19 - HTTP integration: account choice crosses two requests and returns Core preview only
+  ---
+  duration_ms: 15.8707
+  type: 'test'
+  ...
+# Subtest: 缺账户先展示真实账户选项，选择后返回 Core 正式预览
+ok 20 - 缺账户先展示真实账户选项，选择后返回 Core 正式预览
+  ---
+  duration_ms: 56.6465
+  type: 'test'
+  ...
+# Subtest: 未配置续接密钥时澄清入口明确报配置错误，不信任客户端草稿
+ok 21 - 未配置续接密钥时澄清入口明确报配置错误，不信任客户端草稿
+  ---
+  duration_ms: 1.2831
+  type: 'test'
+  ...
+# Subtest: 非法金额在 prepare 前被拦截，三种格式均明确保持 prepareCalls 为零
+ok 22 - 非法金额在 prepare 前被拦截，三种格式均明确保持 prepareCalls 为零
+  ---
+  duration_ms: 8.8559
+  type: 'test'
+  ...
+# Subtest: 缺金额可用自然语言补齐，金额转换为整数分
+ok 23 - 缺金额可用自然语言补齐，金额转换为整数分
+  ---
+  duration_ms: 6.2821
+  type: 'test'
+  ...
+# Subtest: 缺月份可补齐后返回真实账单统计和证据
+ok 24 - 缺月份可补齐后返回真实账单统计和证据
+  ---
+  duration_ms: 2.472
+  type: 'test'
+  ...
+# Subtest: 重名收款人必须明确选择，候选标签包含脱敏账号
+ok 25 - 重名收款人必须明确选择，候选标签包含脱敏账号
+  ---
+  duration_ms: 2.6993
+  type: 'test'
+  ...
+# Subtest: 账户余额不足时保留 Core 错误，不伪装成预览
+ok 26 - 账户余额不足时保留 Core 错误，不伪装成预览
+  ---
+  duration_ms: 1.8204
+  type: 'test'
+  ...
+# Subtest: 改口换任务、伪造选项和无法理解回答都不会进入 Core
+ok 27 - 改口换任务、伪造选项和无法理解回答都不会进入 Core
+  ---
+  duration_ms: 5.2767
+  type: 'test'
+  ...
+# Subtest: B repository: all shared entities, fen normalization, seed provenance and defensive copies
+ok 28 - B repository: all shared entities, fen normalization, seed provenance and defensive copies
+  ---
+  duration_ms: 4.4093
+  type: 'test'
+  ...
+# Subtest: B transfer lifecycle: prepare + confirm never debit; execute creates ledger entry and uniform receipt
+ok 29 - B transfer lifecycle: prepare + confirm never debit; execute creates ledger entry and uniform receipt
+  ---
+  duration_ms: 12.0169
+  type: 'test'
+  ...
+# Subtest: B risk: insufficient balance and unknown entities produce standard errors, zero debit
+ok 30 - B risk: insufficient balance and unknown entities produce standard errors, zero debit
+  ---
+  duration_ms: 3.8076
+  type: 'test'
+  ...
+# Subtest: B input: reject fractional fen, unsupported currency, hidden confirmation and unknown actions
+ok 31 - B input: reject fractional fen, unsupported currency, hidden confirmation and unknown actions
+  ---
+  duration_ms: 1.2724
+  type: 'test'
+  ...
+# Subtest: B idempotency: 20 concurrent retries return the same receipt with one debit
+ok 32 - B idempotency: 20 concurrent retries return the same receipt with one debit
+  ---
+  duration_ms: 6.2468
+  type: 'test'
+  ...
+# Subtest: B confirmation: tampered preview/hash/steps and bare boolean cannot authorize money
+ok 33 - B confirmation: tampered preview/hash/steps and bare boolean cannot authorize money
+  ---
+  duration_ms: 3.0568
+  type: 'test'
+  ...
+# Subtest: B cancellation is final and idempotent, never posts a transaction
+ok 34 - B cancellation is final and idempotent, never posts a transaction
+  ---
+  duration_ms: 2.6761
+  type: 'test'
+  ...
+# Subtest: B expiry: checked at both confirmation and execute; pending state becomes final failed receipt
+ok 35 - B expiry: checked at both confirmation and execute; pending state becomes final failed receipt
+  ---
+  duration_ms: 4.4074
+  type: 'test'
+  ...
+# Subtest: B concurrent independent transfers recheck balance/version instead of overspending or stale execution
+ok 36 - B concurrent independent transfers recheck balance/version instead of overspending or stale execution
+  ---
+  duration_ms: 5.9597
+  type: 'test'
+  ...
+# Subtest: B unknown outcomes: only CHECK is allowed, missing records never mean failed or succeeded
+ok 37 - B unknown outcomes: only CHECK is allowed, missing records never mean failed or succeeded
+  ---
+  duration_ms: 1.0492
+  type: 'test'
+  ...
+# Subtest: B old plan adapter shares operation store, cannot re-use transfer key or fake money effects
+ok 38 - B old plan adapter shares operation store, cannot re-use transfer key or fake money effects
+  ---
+  duration_ms: 3.9906
+  type: 'test'
+  ...
+# Subtest: B user scoping: shared store does not reveal another owner operation
+ok 39 - B user scoping: shared store does not reveal another owner operation
+  ---
+  duration_ms: 1.501
+  type: 'test'
+  ...
+# Subtest: B legacy context is computed from raw transactions, consistent with savings progress
+ok 40 - B legacy context is computed from raw transactions, consistent with savings progress
+  ---
+  duration_ms: 1.4528
+  type: 'test'
+  ...
+# Subtest: B v1.1 wire boundary preserves integers; resolved intent uses entity evidence, never names or monthlySavingFen
+ok 41 - B v1.1 wire boundary preserves integers; resolved intent uses entity evidence, never names or monthlySavingFen
+  ---
+  duration_ms: 3.138
+  type: 'test'
+  ...
+# Subtest: B HTTP: real handler and typed client run reads, preview, confirmation, execution and lookup
+ok 42 - B HTTP: real handler and typed client run reads, preview, confirmation, execution and lookup
+  ---
+  duration_ms: 57.1351
+  type: 'test'
+  ...
+# Subtest: B HTTP: lost execute response is uncertain, no retry; original ID lookup recovers single debit
+ok 43 - B HTTP: lost execute response is uncertain, no retry; original ID lookup recovers single debit
+  ---
+  duration_ms: 5.1933
+  type: 'test'
+  ...
+# Subtest: B HTTP: auth, origin, schema, action allowlist and idempotency header enforced
+ok 44 - B HTTP: auth, origin, schema, action allowlist and idempotency header enforced
+  ---
+  duration_ms: 3.8321
+  type: 'test'
+  ...
+# Subtest: B HTTP: payload cannot change approved amount during execution
+ok 45 - B HTTP: payload cannot change approved amount during execution
+  ---
+  duration_ms: 6.5866
+  type: 'test'
+  ...
+# Subtest: B HTTP: client rejects forged receipts, nonterminal success, altered previews and mismatched IDs
+ok 46 - B HTTP: client rejects forged receipts, nonterminal success, altered previews and mismatched IDs
+  ---
+  duration_ms: 6.2996
+  type: 'test'
+  ...
+# Subtest: B HTTP: client timeout does not retry writes; legacy HTTP shares the Core receipt store
+ok 47 - B HTTP: client timeout does not retry writes; legacy HTTP shares the Core receipt store
+  ---
+  duration_ms: 22.5153
+  type: 'test'
+  ...
+# Subtest: B browser Mock client uses the same validated dispatch path
+ok 48 - B browser Mock client uses the same validated dispatch path
+  ---
+  duration_ms: 1.61
+  type: 'test'
+  ...
+# Subtest: parses a complete transfer without resolving entities or calling a Skill
+ok 49 - parses a complete transfer without resolving entities or calling a Skill
+  ---
+  duration_ms: 36.457
+  type: 'test'
+  ...
+# Subtest: keeps missing amount as clarification and never invents it
+ok 50 - keeps missing amount as clarification and never invents it
+  ---
+  duration_ms: 1.2059
+  type: 'test'
+  ...
+# Subtest: keeps missing source account as clarification and never inserts a default ID
+ok 51 - keeps missing source account as clarification and never inserts a default ID
+  ---
+  duration_ms: 0.9211
+  type: 'test'
+  ...
+# Subtest: parses bill summary with only the month slot
+ok 52 - parses bill summary with only the month slot
+  ---
+  duration_ms: 1.4147
+  type: 'test'
+  ...
+# Subtest: ambiguous and prompt-injection requests remain non-executable
+ok 53 - ambiguous and prompt-injection requests remain non-executable
+  ---
+  duration_ms: 1.7548
+  type: 'test'
+  ...
+# Subtest: rejects injected execution fields as MODEL_FORMAT_ERROR without exposing raw output
+ok 54 - rejects injected execution fields as MODEL_FORMAT_ERROR without exposing raw output
+  ---
+  duration_ms: 1.895
+  type: 'test'
+  ...
+# Subtest: maps malformed model output and invalid values to MODEL_FORMAT_ERROR
+ok 55 - maps malformed model output and invalid values to MODEL_FORMAT_ERROR
+  ---
+  duration_ms: 5.3977
+  type: 'test'
+  ...
+# Subtest: maps Qwen rate limit, auth errors, timeout and upstream failures without leaking secrets
+ok 56 - maps Qwen rate limit, auth errors, timeout and upstream failures without leaking secrets
+  ---
+  duration_ms: 1.7934
+  type: 'test'
+  ...
+# Subtest: validates input and model configuration before making a request
+ok 57 - validates input and model configuration before making a request
+  ---
+  duration_ms: 0.8386
+  type: 'test'
+  ...
+# Subtest: model answers and clarification permit follow-up but never direct execution
+ok 58 - model answers and clarification permit follow-up but never direct execution
+  ---
+  duration_ms: 1.6527
+  type: 'test'
+  ...
+# Subtest: confirmation cannot skip analysis or draft review; double submit is blocked
+ok 59 - confirmation cannot skip analysis or draft review; double submit is blocked
+  ---
+  duration_ms: 0.2855
+  type: 'test'
+  ...
+# Subtest: uncertain operation must be queried, never replayed or reset
+ok 60 - uncertain operation must be queried, never replayed or reset
+  ---
+  duration_ms: 0.186
+  type: 'test'
+  ...
+# Subtest: invalid amounts, fractional cents and invalid rates are rejected
+ok 61 - invalid amounts, fractional cents and invalid rates are rejected
+  ---
+  duration_ms: 0.3797
+  type: 'test'
+  ...
+# Subtest: same operation replays its receipt; modified payload conflicts
+ok 62 - same operation replays its receipt; modified payload conflicts
+  ---
+  duration_ms: 5.3681
+  type: 'test'
+  ...
+# Subtest: operation status keeps an unknown operation pending until a backend receipt exists
+ok 63 - operation status keeps an unknown operation pending until a backend receipt exists
+  ---
+  duration_ms: 0.2539
+  type: 'test'
+  ...
+# Subtest: consent, confirmation, action whitelist and risk rejection are enforced
+ok 64 - consent, confirmation, action whitelist and risk rejection are enforced
+  ---
+  duration_ms: 1.3987
+  type: 'test'
+  ...
+# Subtest: HTTP: validates response, sends idempotency key, rejects mismatched receipts, never retries writes
+ok 65 - HTTP: validates response, sends idempotency key, rejects mismatched receipts, never retries writes
+  ---
+  duration_ms: 537.3909
+  type: 'test'
+  ...
+# Subtest: accepts transfer.create with raw references and integer minor units
+ok 66 - accepts transfer.create with raw references and integer minor units
+  ---
+  duration_ms: 2.2332
+  type: 'test'
+  ...
+# Subtest: requires clarification when transfer amount is absent and never invents a value
+ok 67 - requires clarification when transfer amount is absent and never invents a value
+  ---
+  duration_ms: 0.8396
+  type: 'test'
+  ...
+# Subtest: requires clarification when source account is absent
+ok 68 - requires clarification when source account is absent
+  ---
+  duration_ms: 0.335
+  type: 'test'
+  ...
+# Subtest: accepts missingSlots regardless of array order and rejects duplicates
+ok 69 - accepts missingSlots regardless of array order and rejects duplicates
+  ---
+  duration_ms: 0.2721
+  type: 'test'
+  ...
+# Subtest: accepts bill.summary for a valid month without requiring an account
+ok 70 - accepts bill.summary for a valid month without requiring an account
+  ---
+  duration_ms: 0.4112
+  type: 'test'
+  ...
+# Subtest: rejects account entity IDs from the model
+ok 71 - rejects account entity IDs from the model
+  ---
+  duration_ms: 0.2245
+  type: 'test'
+  ...
+# Subtest: ambiguous input can only produce canonical clarify or unsupported intents
+ok 72 - ambiguous input can only produce canonical clarify or unsupported intents
+  ---
+  duration_ms: 0.3438
+  type: 'test'
+  ...
+# Subtest: rejects model-injected tool, confirmation, risk, operation and entity fields
+ok 73 - rejects model-injected tool, confirmation, risk, operation and entity fields
+  ---
+  duration_ms: 0.6754
+  type: 'test'
+  ...
+# Subtest: rejects unsafe amounts, unsupported currency, invalid actions and extra nested fields
+ok 74 - rejects unsafe amounts, unsupported currency, invalid actions and extra nested fields
+  ---
+  duration_ms: 0.4778
+  type: 'test'
+  ...
+# Subtest: enforces bill month format and status derived from required slots
+ok 75 - enforces bill month format and status derived from required slots
+  ---
+  duration_ms: 0.5225
+  type: 'test'
+  ...
+# Subtest: Qwen: server auth, consent and history validation prevent model calls
+ok 76 - Qwen: server auth, consent and history validation prevent model calls
+  ---
+  duration_ms: 48.6306
+  type: 'test'
+  ...
+# Subtest: Qwen: real protocol adapter returns validated draft and usage, never provider secret
+ok 77 - Qwen: real protocol adapter returns validated draft and usage, never provider secret
+  ---
+  duration_ms: 5.7209
+  type: 'test'
+  ...
+# Subtest: Qwen: model cannot bypass rules, ambiguous queries and read-only answers create no plan
+ok 78 - Qwen: model cannot bypass rules, ambiguous queries and read-only answers create no plan
+  ---
+  duration_ms: 0.7271
+  type: 'test'
+  ...
+# Subtest: Qwen: invalid/truncated results, provider errors and timeouts are explicit and not retried
+ok 79 - Qwen: invalid/truncated results, provider errors and timeouts are explicit and not retried
+  ---
+  duration_ms: 6.6895
+  type: 'test'
+  ...
+# Subtest: Qwen: request size limit enforced before provider call
+ok 80 - Qwen: request size limit enforced before provider call
+  ---
+  duration_ms: 1.4992
+  type: 'test'
+  ...
+# Subtest: unique transfer reaches Core and returns only its formal awaiting-confirmation preview
+ok 81 - unique transfer reaches Core and returns only its formal awaiting-confirmation preview
+  ---
+  duration_ms: 10.3022
+  type: 'test'
+  ...
+# Subtest: clarification, bill, and skill errors never call Core prepare
+ok 82 - clarification, bill, and skill errors never call Core prepare
+  ---
+  duration_ms: 1.18
+  type: 'test'
+  ...
+# Subtest: Core rejection is preserved and does not become a successful preview
+ok 83 - Core rejection is preserved and does not become a successful preview
+  ---
+  duration_ms: 0.8506
+  type: 'test'
+  ...
+# Subtest: orchestrator dispatches before handing off and never invokes decide or execute
+ok 84 - orchestrator dispatches before handing off and never invokes decide or execute
+  ---
+  duration_ms: 2.2703
+  type: 'test'
+  ...
+1..84
+# tests 84
+# suites 0
+# pass 84
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1072.7536

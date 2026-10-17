@@ -15,44 +15,32 @@ function validateTransfer(input) {
   return { fromAccountId: body.fromAccountId, payeeId: body.payeeId, amountFen: body.amountFen, currency: 'CNY', memo: /** @type {string} */ (body.memo ?? '') };
 }
 
-/** @param {import('./contracts').ActionKind} action @param {unknown} value @returns {import('./contracts').ActionRequest['input']} */
-function validateActionInput(action, value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new BankingError('VALIDATION_ERROR', '操作参数无效');
-  const input = /** @type {Record<string, unknown>} */ (value);
-  if (action === 'transfer_money') return validateTransfer(input);
-  if (action === 'card.set_limit') {
-    if (Object.keys(input).some(key => !['cardId', 'monthlyLimitFen'].includes(key))) throw new BankingError('VALIDATION_ERROR', '调额包含未注册字段');
-    assertId(input.cardId, '卡片'); assertFen(input.monthlyLimitFen);
-    return { cardId: input.cardId, monthlyLimitFen: input.monthlyLimitFen };
-  }
-  if (action === 'subscription.cancel_debit') {
-    if (Object.keys(input).some(key => key !== 'subscriptionId')) throw new BankingError('VALIDATION_ERROR', '解除代扣包含未注册字段');
-    assertId(input.subscriptionId, '订阅');
-    return { subscriptionId: input.subscriptionId };
-  }
-  if (action === 'wealth.subscribe') {
-    if (Object.keys(input).some(key => !['fromAccountId', 'productId', 'amountFen', 'currency'].includes(key))) throw new BankingError('VALIDATION_ERROR', '理财申购包含未注册字段');
-    assertId(input.fromAccountId, '付款账户'); assertId(input.productId, '理财产品'); assertFen(input.amountFen);
-    if (input.currency !== 'CNY') throw new BankingError('VALIDATION_ERROR', '当前 Mock 仅支持显式 CNY 币种');
-    return { fromAccountId: input.fromAccountId, productId: input.productId, amountFen: input.amountFen, currency: 'CNY' };
-  }
-  throw new BankingError('UNKNOWN_ACTION', '当前写操作未注册');
+const cardActions = new Set(['card.set_budget', 'card.freeze', 'card.unfreeze']);
+/** @param {string} action @param {unknown} input @returns {import('./contracts').CardInput} */
+function validateCardInput(action, input) {
+  if (!cardActions.has(action) || !input || typeof input !== 'object' || Array.isArray(input)) throw new BankingError('VALIDATION_ERROR', '卡片操作参数无效');
+  const body = /** @type {Record<string, unknown>} */ (input);
+  const fields = action === 'card.set_budget' ? ['cardId', 'monthlyBudgetFen'] : ['cardId'];
+  if (Object.keys(body).some(key => !fields.includes(key)) || fields.some(key => !Object.hasOwn(body, key))) throw new BankingError('VALIDATION_ERROR', '卡片操作包含缺失或未注册字段');
+  assertId(body.cardId, '卡片');
+  if (action === 'card.set_budget' && (!Number.isSafeInteger(body.monthlyBudgetFen) || Number(body.monthlyBudgetFen) < 0 || Number(body.monthlyBudgetFen) > 10_000_000)) throw new BankingError('VALIDATION_ERROR', '月预算必须是 0 到 10000000 的整数分');
+  return /** @type {import('./contracts').CardInput} */ (body);
 }
-
-/** @typedef {Pick<OperationStore, 'get'|'put'|'fingerprint'> & {close?: () => Promise<void>, commitAction?: (owner: string, record: import('./contracts').OperationRecord, effect: import('./contracts').ActionEffect, at: string, makeReceipt: (result?: import('./contracts').Transaction) => import('./contracts').ActionReceipt) => Promise<import('./contracts').ActionReceipt>}} BankingStore */
 
 /** One isolated Mock banking session. Never feed model output to decide()/execute().
  * Future write actions must use this engine and a transaction adapter, not per-Skill Maps.
- * @param {{source?: Parameters<typeof createFinancialContext>[0], now?: () => number, store?: BankingStore, repository?: import('./contracts').FinancialContextRepository, ownerId?: string, policy?: {version: string, maxTransferFen: number, previewTtlMs: number}}} [options] */
+ * @param {{source?: Parameters<typeof createFinancialContext>[0], now?: () => number, store?: import('./contracts').BankingOperationStore, repository?: import('./contracts').FinancialContextRepository, ownerId?: string, policy?: {version: string, maxTransferFen: number, previewTtlMs: number}}} [options] */
 export function createBankingCore(options = {}) {
   const context = createFinancialContext(options.source);
   const repository = options.repository ?? context.repository;
-  const commitAction = context.commitAction;
+  const commitTransfer = context.commitTransfer;
+  const commitCard = context.commitCard;
   const ownerId = options.ownerId ?? context.ownerId;
-  const store = /** @type {BankingStore} */ (options.store ?? new OperationStore());
+  /** @type {import('./contracts').BankingOperationStore} */
+  const store = options.store ?? new OperationStore();
   const now = options.now ?? Date.now;
-  const policy = Object.freeze({ version: 'mock-transfer-v1', maxTransferFen: 10000000, previewTtlMs: 300000, ...options.policy });
-  assertFen(policy.maxTransferFen); assertFen(policy.previewTtlMs);
+  const policy = Object.freeze({ version: 'mock-transfer-v1', maxTransferFen: 10000000, previewTtlMs: 300000, largeTransferFen: 100000, ...options.policy });
+  assertFen(policy.maxTransferFen); assertFen(policy.previewTtlMs); assertFen(policy.largeTransferFen);
   /** @type {import('./contracts').AuditEvent[]} */
   const audit = [];
   /** @type {Map<string, Promise<import('./contracts').ActionResult<import('./contracts').ActionReceipt>>>} */
@@ -77,13 +65,13 @@ export function createBankingCore(options = {}) {
   function errorData(error) {
     return error instanceof BankingError ? error.toJSON() : new BankingError('INTERNAL_ERROR', '未取得可靠结果，请查询原操作', true).toJSON();
   }
-  /** @template T @param {() => T | Promise<T>} run @param {string} [operationId] @returns {Promise<import('./contracts').ActionResult<T>>} */
+  /** @template T @param {() => T} run @param {string} [operationId] @returns {Promise<import('./contracts').ActionResult<Awaited<T>>>} */
   async function guard(run, operationId) {
     try { return { ok: true, data: await run() }; }
     catch (error) { return { ok: false, error: errorData(error), ...(operationId ? { operationId } : {}) }; }
   }
-  /** @param {import('./contracts').ActionKind} action @param {unknown} value @returns {Promise<import('./contracts').RiskResult>} */
-  async function riskCheck(action, value) {
+  /** @param {import('./contracts').TransferInput} input @returns {Promise<import('./contracts').RiskResult>} */
+  async function riskCheck(input) {
     const result = await guard(async () => {
       const input = validateActionInput(action, value);
       if (action === 'transfer_money') {
@@ -120,40 +108,36 @@ export function createBankingCore(options = {}) {
       }
       return true;
     });
-    const riskLevel = action === 'card.set_limit' || action === 'subscription.cancel_debit' ? 'L2' : 'L3';
-    return { allowed: result.ok, riskLevel, policyVersion: `${policy.version}:${action}`, requiredConfirmation: 'mock_explicit', warnings: [action === 'wealth.subscribe' ? '合成理财产品模拟申购，不构成投资建议或真实交易。' : '合成数据模拟操作，不接真实银行；此确认仅用于 Mock。'], ...(!result.ok ? { error: result.error } : {}) };
+    const largeTransfer = input.amountFen > policy.largeTransferFen;
+    const warnings = ['合成数据模拟转账，不接真实银行；此确认仅用于 Mock。'];
+    if (largeTransfer) warnings.push(`大额转账（>¥${(policy.largeTransferFen / 100).toFixed(2)}）需短信验证码（演示码 123456）。`);
+    return { allowed: result.ok, riskLevel: 'L3', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', requiredVerification: largeTransfer ? 'mock_sms' : 'none', ...(largeTransfer ? { verificationCode: '123456' } : {}), warnings, ...(!result.ok ? { error: result.error } : {}) };
   }
-  /** @param {import('./contracts').ActionKind} action @param {unknown} value @param {string} operationId @returns {Promise<import('./contracts').ActionEffect>} */
-  async function effectFor(action, value, operationId) {
-    const input = validateActionInput(action, value);
-    if (action === 'transfer_money') {
-      const transfer = /** @type {import('./contracts').TransferInput} */ (input);
-      const account = await repository.getAccount(transfer.fromAccountId);
-      const payee = await repository.getPayee(transfer.payeeId);
-      if (!account || !payee) throw new BankingError('PREVIEW_STALE', '账户或收款人已失效');
-      return { kind: 'transfer_out', fromAccountId: account.id, accountName: account.name, payeeId: payee.id, payeeName: payee.name, accountNoMasked: payee.accountNoMasked, amountFen: transfer.amountFen, feeFen: 0, currency: 'CNY', balanceBeforeFen: account.balanceFen, balanceAfterFen: account.balanceFen - transfer.amountFen, availableBalanceAfterFen: account.availableBalanceFen - transfer.amountFen, accountVersion: account.version, memo: transfer.memo ?? '', arrival: 'mock_immediate' };
-    }
-    if (action === 'card.set_limit') {
-      const cardInput = /** @type {import('./contracts').CardLimitInput} */ (input);
-      const card = (await repository.getCards()).find(item => item.id === cardInput.cardId);
-      if (!card) throw new BankingError('PREVIEW_STALE', '卡片已不可用');
-      return { kind: 'card_limit_change', cardId: card.id, cardName: card.name, monthlyLimitBeforeFen: card.monthlyLimitFen, monthlyLimitAfterFen: cardInput.monthlyLimitFen, monthlySpentFen: card.monthlySpentFen, version: card.version };
-    }
-    if (action === 'subscription.cancel_debit') {
-      const cancelInput = /** @type {import('./contracts').CancelSubscriptionInput} */ (input);
-      const subscription = (await repository.getSubscriptions()).find(item => item.id === cancelInput.subscriptionId);
-      if (!subscription?.mandateId) throw new BankingError('PREVIEW_STALE', '模拟代扣授权已不可用');
-      return { kind: 'subscription_cancel', subscriptionId: subscription.id, subscriptionName: subscription.name, mandateId: subscription.mandateId, monthlyFeeFen: subscription.monthlyFeeFen, version: subscription.version };
-    }
-    const purchase = /** @type {import('./contracts').InvestmentPurchaseInput} */ (input);
-    const account = await repository.getAccount(purchase.fromAccountId);
-    const product = (await repository.getInvestmentProducts()).find(item => item.id === purchase.productId);
-    if (!account || !product) throw new BankingError('PREVIEW_STALE', '账户或理财产品已不可用');
-    return { kind: 'investment_purchase', fromAccountId: account.id, accountName: account.name, productId: product.id, productName: product.name, amountFen: purchase.amountFen, currency: 'CNY', balanceBeforeFen: account.balanceFen, balanceAfterFen: account.balanceFen - purchase.amountFen, availableBalanceAfterFen: account.availableBalanceFen - purchase.amountFen, accountVersion: account.version, riskLevel: product.riskLevel, liquidity: product.liquidity, holdingId: `holding_${operationId}` };
+  /** @param {import('./contracts').TransferInput} input @returns {Promise<import('./contracts').TransferEffect>} */
+  async function effectFor(input) {
+    const account = await repository.getAccount(input.fromAccountId);
+    const payee = await repository.getPayee(input.payeeId);
+    if (!account || !payee) throw new BankingError('PREVIEW_STALE', '账户或收款人已失效');
+    return { kind: 'transfer_out', fromAccountId: account.id, accountName: account.name, payeeId: payee.id, payeeName: payee.name, accountNoMasked: payee.accountNoMasked, amountFen: input.amountFen, feeFen: 0, currency: 'CNY', balanceBeforeFen: account.balanceFen, balanceAfterFen: account.balanceFen - input.amountFen, availableBalanceAfterFen: account.availableBalanceFen - input.amountFen, accountVersion: account.version, memo: input.memo ?? '', arrival: 'mock_immediate' };
+  }
+  /** @param {import('./contracts').CardAction} action @param {import('./contracts').CardInput} input @returns {Promise<import('./contracts').CardEffect>} */
+  async function cardEffectFor(action, input) {
+    const card = await repository.getCard(input.cardId);
+    if (!card) throw new BankingError('CARD_NOT_FOUND', '当前用户无法访问该卡片');
+    if (action === 'card.freeze' && card.status !== 'active') throw new BankingError('INVALID_STATE', '卡片已经冻结');
+    if (action === 'card.unfreeze' && card.status !== 'frozen') throw new BankingError('INVALID_STATE', '卡片并未冻结');
+    if (action === 'card.set_budget' && card.monthlyBudgetFen === input.monthlyBudgetFen) throw new BankingError('INVALID_STATE', '新预算与当前预算相同');
+    return { kind: 'card_change', action, cardId: card.id, cardName: card.name, cardVersion: card.version, previewGeneration: card.previewGeneration, before: { status: card.status, monthlyBudgetFen: card.monthlyBudgetFen }, after: { status: action === 'card.freeze' ? 'frozen' : action === 'card.unfreeze' ? 'active' : card.status, monthlyBudgetFen: action === 'card.set_budget' ? /** @type {number} */ (input.monthlyBudgetFen) : card.monthlyBudgetFen }, monthlySpentFen: card.monthlySpentFen };
+  }
+  /** @param {import('./contracts').CardEffect} effect @returns {import('./contracts').RiskResult} */
+  function cardRisk(effect) {
+    const warnings = ['合成数据模拟卡片操作，不接真实银行。'];
+    if (effect.action === 'card.set_budget' && effect.after.monthlyBudgetFen < effect.monthlySpentFen) warnings.push(`当前已超预算 ¥${((effect.monthlySpentFen - effect.after.monthlyBudgetFen) / 100).toFixed(2)}；预算不会阻止消费。`);
+    return { allowed: true, riskLevel: effect.action === 'card.unfreeze' ? 'L3' : 'L2', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', warnings };
   }
   /** @param {import('./contracts').OperationRecord} record @param {'succeeded'|'failed'|'cancelled'} status @param {string} message @param {string[]} [transactionIds] @returns {import('./contracts').ActionReceipt} */
   function receiptFor(record, status, message, transactionIds = []) {
-    return { receiptId: `receipt_${record.operationId}`, operationId: record.operationId, action: record.action, planId: record.request?.planId ?? record.operationId, stepId: record.request?.stepId ?? 'legacy_plan', status, message, executedAt: new Date(now()).toISOString(), dataSource: 'synthetic_demo_only', transactionIds, effects: status === 'succeeded' ? structuredClone(record.preview?.exactEffects ?? []) : [], ...(record.error ? { error: record.error } : {}) };
+    return { receiptId: `receipt_${record.operationId}`, operationId: record.operationId, action: record.action, planId: record.preview?.planId ?? record.operationId, stepId: record.preview?.stepIds[0] ?? 'legacy_plan', status, message, executedAt: new Date(now()).toISOString(), dataSource: 'synthetic_demo_only', transactionIds, effects: status === 'succeeded' ? structuredClone(record.preview?.exactEffects ?? []) : [], ...(record.error ? { error: record.error } : {}) };
   }
   /** @param {import('./contracts').OperationRecord} record @param {import('./contracts').ActionError} error */
   async function fail(record, error) {
@@ -170,13 +154,52 @@ export function createBankingCore(options = {}) {
     if (record.action === 'legacy.create-plan' || !record.preview || !record.request) throw new BankingError('INVALID_STATE', '操作尚未生成预览');
     const action = record.action;
     if (now() >= Date.parse(record.preview.expiresAt)) throw new BankingError('PREVIEW_EXPIRED', '预览已过期，请重新预览并确认');
-    const risk = await riskCheck(action, record.request.input);
+    if (cardActions.has(record.action)) {
+      const request = /** @type {{action:import('./contracts').CardAction,input:import('./contracts').CardInput}} */ (record.request);
+      const effect = await cardEffectFor(request.action, request.input);
+      if (record.risk?.policyVersion !== policy.version || canonical(effect) !== canonical(record.preview.exactEffects[0])) throw new BankingError('PREVIEW_STALE', '卡片状态、版本或预览已变化，请重新预览并确认');
+      return;
+    }
+    const transferRequest = /** @type {{action:'transfer_money',input:import('./contracts').TransferInput}} */ (record.request);
+    const risk = await riskCheck(transferRequest.input);
     if (!risk.allowed && risk.error) throw new BankingError(risk.error.code, risk.error.message);
-    if (risk.policyVersion !== record.risk?.policyVersion || canonical(record.preview.exactEffects[0]) !== canonical(await effectFor(action, record.request.input, record.operationId))) throw new BankingError('PREVIEW_STALE', '账户、业务对象或风险条件已变化，请重新预览并确认');
+    if (risk.policyVersion !== record.risk?.policyVersion || canonical(record.preview.exactEffects[0]) !== canonical(await effectFor(transferRequest.input))) throw new BankingError('PREVIEW_STALE', '账户、收款人或风险条件已变化，请重新预览并确认');
   }
   /** @param {import('./contracts').OperationRecord} record @returns {import('./contracts').OperationStatus} */
   function statusFor(record) {
     return { operationId: record.operationId, state: record.state, status: record.receipt?.status ?? 'pending', ...(record.receipt ? { receipt: record.receipt } : {}), ...(record.preview ? { preview: record.preview } : {}), ...(record.error ? { error: record.error } : {}) };
+  }
+
+  /** @param {import('./contracts').ActionRequest} request @param {string} operationId */
+  async function prepareCard(request, operationId) {
+    /** @type {import('./contracts').OperationRecord | undefined} */
+    let record;
+    try {
+      if (!cardActions.has(request.action) || Object.keys(request).some(key => !['action', 'input'].includes(key))) throw new BankingError('VALIDATION_ERROR', '卡片请求含有未注册字段');
+      const action = /** @type {import('./contracts').CardAction} */ (request.action);
+      const input = validateCardInput(action, request.input);
+      // Check before reserving: an invalid request must not invalidate an existing preview.
+      await cardEffectFor(action, input);
+      record = { operationId, action, fingerprint: store.fingerprint(action, input), state: 'preparing', request: { action, input } };
+      await save(record); await move(record, 'PREPARED');
+      const generation = typeof store.reserveCardPreview === 'function' ? await store.reserveCardPreview(ownerId, input.cardId) : context.reserveCardPreview(input.cardId);
+      const effect = await cardEffectFor(action, input);
+      if (effect.previewGeneration !== generation) throw new BankingError('PREVIEW_STALE', '卡片预览已变化，请重新尝试');
+      const risk = cardRisk(effect); record.risk = risk;
+      const expiresAt = new Date(now() + policy.previewTtlMs).toISOString();
+      const contextSnapshotId = (await repository.getContextInfo()).snapshotId;
+      const planId = `plan_${crypto.randomUUID()}`, stepId = `step_${crypto.randomUUID()}`;
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical({ ownerId, operationId, planId, stepId, effect, expiresAt, contextSnapshotId, policy })));
+      const previewHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+      const summary = action === 'card.set_budget' ? `${effect.cardName}月消费预算 ¥${(effect.before.monthlyBudgetFen / 100).toFixed(2)} → ¥${(effect.after.monthlyBudgetFen / 100).toFixed(2)}` : `${effect.cardName}${action === 'card.freeze' ? '冻结' : '解冻'}：${effect.before.status} → ${effect.after.status}`;
+      record.preview = { planId, stepIds: [stepId], summary, exactEffects: [effect], riskLevel: risk.riskLevel, warnings: risk.warnings, expiresAt, previewHash, contextSnapshotId };
+      await move(record, 'PREVIEWED');
+      return /** @type {import('./contracts').ActionResult<import('./contracts').PreparedAction>} */ ({ ok: true, data: { operationId, state: 'awaiting_confirmation', preview: structuredClone(record.preview), risk: structuredClone(risk) } });
+    } catch (error) {
+      const data = errorData(error);
+      if (record) await fail(record, data);
+      return /** @type {import('./contracts').ActionResult<import('./contracts').PreparedAction>} */ ({ ok: false, operationId, error: data });
+    }
   }
 
   return Object.freeze({
@@ -186,6 +209,7 @@ export function createBankingCore(options = {}) {
     /** @param {import('./contracts').ActionRequest} request @returns {Promise<import('./contracts').ActionResult<import('./contracts').PreparedAction>>} */
     async prepare(request) {
       const operationId = `op_${crypto.randomUUID()}`;
+      if (request && cardActions.has(request.action)) return prepareCard(request, operationId);
       /** @type {import('./contracts').OperationRecord | undefined} */
       let record;
       try {
@@ -240,7 +264,7 @@ export function createBankingCore(options = {}) {
           try { await recheck(record); } catch (error) { await fail(record, errorData(error)); throw error; }
         }
         record.decision = { ...structuredClone(decision), planId: record.preview.planId, confirmationMethod: 'mock_explicit', idempotencyKey: operationId, decidedAt: new Date(now()).toISOString() };
-        if (decision.decision === 'reject') record.receipt = receiptFor(record, 'cancelled', '已取消模拟转账，未扣款');
+        if (decision.decision === 'reject') record.receipt = receiptFor(record, 'cancelled', cardActions.has(record.action) ? '已取消卡片操作，卡片未变更' : '已取消模拟转账，未扣款');
         await move(record, decision.decision === 'confirm' ? 'CONFIRM' : 'CANCEL');
         return statusFor(record);
       }, operationId);
@@ -252,7 +276,7 @@ export function createBankingCore(options = {}) {
       if (running) return running;
       const execution = guard(async () => {
         const record = await lookup(operationId);
-        if (!['transfer_money', 'card.set_limit', 'subscription.cancel_debit', 'wealth.subscribe'].includes(record.action)) throw new BankingError('UNKNOWN_ACTION', '此执行入口不支持该动作');
+        if (record.action !== 'transfer_money' && !cardActions.has(record.action)) throw new BankingError('UNKNOWN_ACTION', '此执行入口不接受该动作');
         verifyHash(record, previewHash);
         if (!record.preview) throw new BankingError('INVALID_STATE', '缺少预览');
         if (record.receipt) return record.receipt;
@@ -261,13 +285,23 @@ export function createBankingCore(options = {}) {
         try {
           await recheck(record); await move(record, 'EXECUTE');
           const at = new Date(now()).toISOString();
-          if (typeof store.commitAction === 'function') {
-            record.receipt = await store.commitAction(ownerId, record, record.preview.exactEffects[0], at, result => receiptFor(record, 'succeeded', '模拟操作成功', result ? [result.id] : []));
+          if (cardActions.has(record.action)) {
+            const effect = /** @type {import('./contracts').CardEffect} */ (record.preview.exactEffects[0]);
+            if (typeof store.commitCard === 'function') {
+              record.receipt = await store.commitCard(ownerId, record, effect, () => receiptFor(record, 'succeeded', '模拟卡片操作成功'));
+              record.state = transitionAction(record.state, 'SUCCEEDED');
+            } else {
+              commitCard(effect);
+              record.receipt = receiptFor(record, 'succeeded', '模拟卡片操作成功');
+              await move(record, 'SUCCEEDED');
+            }
+          } else if (typeof store.commitTransfer === 'function') {
+            record.receipt = await store.commitTransfer(ownerId, record, /** @type {import('./contracts').TransferEffect} */ (record.preview.exactEffects[0]), at, transaction => receiptFor(record, 'succeeded', '模拟转账成功', [transaction.id]));
             record.state = transitionAction(record.state, 'SUCCEEDED');
             audit.push({ operationId: record.operationId, action: record.action, state: record.state, at: new Date(now()).toISOString() });
           } else {
-            const result = await commitAction(record.preview.exactEffects[0], operationId, at);
-            record.receipt = receiptFor(record, 'succeeded', '模拟操作成功', result ? [result.id] : []);
+            const transaction = await commitTransfer(/** @type {import('./contracts').TransferEffect} */ (record.preview.exactEffects[0]), operationId, at);
+            record.receipt = receiptFor(record, 'succeeded', '模拟转账成功', [transaction.id]);
             await move(record, 'SUCCEEDED');
           }
           return record.receipt;
@@ -291,7 +325,9 @@ export function createBankingCore(options = {}) {
       assertId(operationId);
       if (input.confirmed !== true) throw new BankingError('CONFIRMATION_REQUIRED', '操作前需要明确确认');
       assertFen(input.monthlySavingFen);
-      if (input.monthlySavingFen > (await repository.getDemoSettings()).monthlySavingCapFen || !Number.isInteger(input.saveRateBps) || Number(input.saveRateBps) < 0 || Number(input.saveRateBps) > 10000) throw new BankingError('VALIDATION_ERROR', '月金额或储蓄比例超出模拟范围');
+      if ('saveRateBps' in input || 'savingRate' in input || 'category' in input) throw new BankingError('VALIDATION_ERROR', '消费比例储蓄规则已不支持');
+      if (input.monthlySavingFen > (await repository.getDemoSettings()).monthlySavingCapFen) throw new BankingError('VALIDATION_ERROR', '月金额超出模拟范围');
+      if (input.targetAmountFen !== undefined && input.targetAmountFen !== null) assertFen(input.targetAmountFen);
       const fingerprint = store.fingerprint('legacy.create-plan', input);
       const existing = await store.get(ownerId, operationId);
       if (existing) {

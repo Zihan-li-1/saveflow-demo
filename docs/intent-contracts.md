@@ -1,5 +1,10 @@
 # AI Banking Agent — Intent Contracts v1.1
 
+本轮转账预览安全与双月账单分析的交接接口见 [本轮开发交接契约](iteration-handoff-transfer-bill.md)；该文件是待成员核对的实现约定，不表示相关能力已完成。
+
+本轮落地范围、名称对照与成员确认见 [目标动作—当前实现—本轮状态](intent-action-status.md)。
+订阅接入属于合同预备，前两条主链路验收及 B、C、D 接口确认后再新增解析器动作枚举；E 不作为前置确认人。当前服务仍采用单意图 `schemaVersion: "1.0.0"`。
+
 > 状态：面向新版 SaveFlow Demo 的目标合同，尚未由现有代码实现；适用于 IM 输入、意图识别器、Orchestrator、六类 Skill、Financial Context、Risk & Action Engine。  
 > 范围：定义“用户想做什么、已说清什么、还缺什么”；不授权银行操作。演示数据与银行接口均可为 Mock，但确认、状态与审计链路按真实系统设计。
 
@@ -110,7 +115,7 @@ interface ResolvedIntent {
 | 理财操作 | `wealth.subscribe` | 申购 | `product_ref`, `amount`, `source_account_ref`；资格、适配与披露由服务端检查 | 资金 |
 | 理财操作 | `wealth.redeem` | 赎回 | `holding_ref`, `quantity_or_amount`；核对份额和到账规则 | 资金 |
 | 卡片管理 | `card.apply` | 申请卡片 | `card_product_ref`；申请资料由正式流程补充 | 申请 |
-| 卡片管理 | `card.set_limit` | 调整总额/单笔/分类限额 | `card_ref`, `limit_type`, `amount` | 控制变更 |
+| 卡片管理 | `card.get` / `card.set_budget` / `card.freeze` / `card.unfreeze` | 查询、月消费预算、冻结或解冻 | `card_ref`；预算另需 `amount` | Core 预览、确认与执行 |
 | 卡片管理 | `card.set_rule` | 线上/境外开关、交易类别或商户限制 | `card_ref`, `rule_type`, `rule_value` | 控制变更 |
 | 卡片管理 | `card.freeze` / `card.unfreeze` | 冻结/解冻 | `card_ref` | 控制变更 |
 | 卡片管理 | `card.report_loss` | 挂失 | `card_ref`；特殊不可逆限制由银行能力决定 | 控制变更 |
@@ -140,7 +145,7 @@ interface ResolvedIntent {
 
 `slot_sources` 只允许 `utterance`/`conversation`；从数据库补全的值只能出现在 `ResolvedIntent.references`。默认账户、默认卡、常用收款人可以作为候选建议，但有多个候选或重要信息不一致时必须追问。来源证据贯穿分析结果，便于解释“为什么建议调整购物卡限额”。
 
-**逐动作 Schema 必须补充：** `period`/`horizon` 的起止与开闭区间、`schedule` 的执行时刻与结束条件、`participants` 的成员及本人是否计入、`quantity_or_amount` 的单位、`rule_value` 的布尔/类别形状、`proposed_steps` 的动作与最大权限。`granularity`、`assessment_scope`、`card_product_ref`、`limit_type`、`rule_type`、`rule_value`、`event_ref`、`trigger` 和 `conditions` 也要在对应动作 Schema 明确定义；不能因为通用 JSON 类型宽松就通过业务校验。服务端将相对时间按 `message_time` 和时区解析，并记录原始表达与解析基准。
+**逐动作 Schema 必须补充：** `period`/`horizon` 的起止与开闭区间、`schedule` 的执行时刻与结束条件、`participants` 的成员及本人是否计入、`quantity_or_amount` 的单位、`rule_value` 的布尔/类别形状、`proposed_steps` 的动作与最大权限。`granularity`、`assessment_scope`、`card_product_ref`、`rule_type`、`rule_value`、`event_ref`、`trigger` 和 `conditions` 也要在对应动作 Schema 明确定义；不能因为通用 JSON 类型宽松就通过业务校验。服务端将相对时间按 `message_time` 和时区解析，并记录原始表达与解析基准。
 
 ## 4. 从意图到执行的第二份合同
 
@@ -263,8 +268,8 @@ interface UserDecision {
 
 | 当前源码/数据 | 当前语义 | 目标合同中的位置与动作 |
 |---|---|---|
-| `server/qwen.mjs` → `intent=create_plan/update_saving_rule/analyze_bills/subscriptions/clarify/unsupported` | 单一旧枚举，另带 `reply`、`plan`、`analysis`；模型解析与业务计划部分混在 `interpret()` | 在服务端新增 Parser 输出 v1.1 envelope；`analyze_bills` 可映射 `bill.analyze`，`subscriptions` 只有查询意图时可映射 `subscription.list`；`clarify` 是交互状态，不能作为 action |
-| `create_plan` / `update_saving_rule` 和 `AgentPlan` | 月金额 + 消费类别储蓄比例的旧计划 | 不映射 `wealth.subscribe`、`card.set_limit`、`scenario.create_rule`；若保留普通目标储蓄，另注册 `goal.create`，只创建目标/提醒，不自动消费扣划。消费比例规则从比赛主链路下线 |
+| `server/qwen.mjs` → `intent=create_plan/analyze_bills/subscriptions/clarify/unsupported` | 单一旧枚举，另带 `reply`、`plan`、`analysis`；模型解析与业务计划部分混在 `interpret()` | 在服务端新增 Parser 输出 v1.1 envelope；`analyze_bills` 可映射 `bill.analyze`，`subscriptions` 只有查询意图时可映射 `subscription.list`；`clarify` 是交互状态，不能作为 action |
+| `create_plan` 和 `AgentPlan` | 普通目标金额与每月储蓄金额；消费比例规则请求返回 `unsupported` | 不映射 `wealth.subscribe`、`card.set_budget`、`scenario.create_rule`；若保留普通目标储蓄，另注册 `goal.create`，只创建目标/提醒，不自动消费扣划。消费比例规则从比赛主链路下线 |
 | `src/lib/api/contracts.ts` 的 `analyze/create-plan/operation-status` | SaveFlow 专用业务 API，`confirmed:true`、`Idempotency-Key`、操作回执 | 作为过渡实现保留；新 Skill 使用独立 action 注册和逐步回执。`confirmed:true` 只供旧模拟计划使用，不能成为转账/申购等动作的授权凭证 |
 | `flow-machine.ts` 与 `use-saveflow.ts` | 单张储蓄计划的状态与写后查询，Qwen 读请求可以追问/回答 | UI 状态骨架可复用；扩展为每个 `step_id` 的预览、确认、执行、待核实和部分失败。禁止把一个 `success` 表示多步骤全部成功 |
 | `saveflow_mock_data.json` | 用户、2 账户、36 笔交易、3 个月汇总、2 卡、2 订阅、1 目标、2 预算 | 可支撑部分账单/卡片/订阅查询演示；缺收款人及收款账户、授权代扣、理财产品/持仓/测评、未来事件/待扣款/订单、能力注册与审计记录，不能直接演示其操作成功 |
@@ -273,14 +278,14 @@ interface UserDecision {
 
 1. **日期与数据有效期**：种子数据 `snapshotDate=2026-09-01`，账单样例 `currentMonth=2026-08`；Qwen 提示词使用运行时的“今天”。不能直接把 8 月样例说成当前月、把 9 月余额当作实时余额或据此算未来十天现金流。Demo 固定“数据截至 2026-09-01”，或者提供可重放的 `as_of` 与未来事件数据；统计结果携带区间、数据截点与来源。
 2. **数据口径**：种子文件 `savingGoals[0].currentAmount=0`、`proposedMonthlySaving=5000`；服务端 `savedAmountFen=240000` 和页面“已完成 ¥2,400”，且创建计划上限为每月 ¥3,000，三处互相冲突。先确定唯一的目标进度、月金额口径及演示目标是否可达，再由 Context 统一供给。账户余额、月收入、月支出不能替代可投资金额或可转账余额；可用金额须扣除已知义务，并明确未知事项。
-3. **字段映射**：旧 API 用 `camelCase` 和 `Fen/Bps` 后缀，新内部合同用 `snake_case`、`amount_minor + currency`；只在边界 adapter 转换。`monthlySavingFen` ≠ 转账金额，`saveRateBps` ≠ 卡限额。数据里的 `savingRate` 属旧消费储蓄设计，可留在历史字段但不作为新 Skill 的输入。
+3. **字段映射**：旧 API 用 `camelCase` 和 `Fen` 后缀，新内部合同用 `snake_case`、`amount_minor + currency`；只在边界 adapter 转换。`monthlySavingFen` ≠ 转账金额。已废弃的消费比例储蓄字段在旧计划接口被拒绝。
 4. **模型与权限**：Qwen 目前返回已经计算好的 `plan` 及自然语言 `reply`，只能作为草稿建议；新流程先验证意图和槽位，再由服务端读 Context、生成逐步计划、预览哈希和确认凭证。旧前端 `confirmed:true` 与演示访问码不能用于 L2/L3 真实授权。
 5. **跨场景触发**：只有模拟事件数据或可信事件源才可生成 `scenario.review_event`。定时任务与用户输入必须区分来源、权限、去重及重放；事件触发后产生建议，不继承用户上次对未来付款的确认。
 
 ### 8.2 最小迁移顺序与验收
 
 1. **先加适配层**：保留现有 `/api/agent` 对旧 UI 的响应，在同一服务端引入 `parseMessage()` 与 v1.1 envelope 验证；用八类黄金语句覆盖六个领域、复合目标、追问、未知意图。旧枚举不能一对多凭空补出用户没有说过的动作；Qwen/JEV 可替换 Parser 内部算法，不改变 v1.1 输出。
-2. **再加数据/只读 Skill**：给合成数据添加 `as_of`；先实现 `bill.analyze`、`subscription.list`、卡片查询和 `orchestrator.goal` 的多步骤只读计划，返回来源与数据范围。卡片查询若对用户开放，需要另注册 `card.get`；不要误用 `card.set_limit`。
+2. **再加数据/只读 Skill**：给合成数据添加 `as_of`；先实现 `bill.analyze`、`subscription.list`、卡片查询和 `orchestrator.goal` 的多步骤只读计划，返回来源与数据范围。卡片查询若对用户开放，需要另注册 `card.get`；不要误用 `card.set_budget`。
 3. **最后加写操作**：为每个新动作增加 Mock 工具、逐动作 Schema、服务端预览与授权、幂等回执/状态查询和审计；先贯通一个 L2（如卡额度）与一个 L3（如模拟转账），再扩展理财、代扣和场景规则。未具备对应数据和工具时明确显示“仅建议/尚未支持”。
 
-**演示剧本核验：** 当前可以展示账单摘要、订阅摘要和模拟储蓄计划；“转账成功”“已取消商户会员”“卡限额已更新”“理财已申购”“生日规则已执行”目前都不能在此版本中宣称。新主剧情建议从“8 月支出为何增加”开始，逐步加入待扣款、卡限额建议和逐项确认的 Mock 执行；普通目标储蓄只作为可选支线。
+**演示剧本核验：** 当前 Banking Agent 可查询账单与卡片，卡片月预算、冻结及解冻在页面明确确认后可完成 Mock 执行；模拟转账仍仅开放正式预览。解除商户会员代扣、理财申购、生日规则和超预算消费尚未实现，不能宣称成功。普通目标储蓄只作为可选支线。

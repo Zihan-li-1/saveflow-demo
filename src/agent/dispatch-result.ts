@@ -19,12 +19,20 @@ export type DispatchResult =
       data: unknown;
     }
   | {
+      ok: true;
+      kind: "card_result" | "card_action_request";
+      action: "card.get" | "card.set_budget" | "card.freeze" | "card.unfreeze";
+      data: unknown;
+    }
+  | {
       ok: false;
       kind: "needs_clarification";
       action: string;
       source: "parser" | "resolver";
       missingSlots?: string[];
       question?: string;
+      slot?: string;
+      reason?: string;
       candidates?: unknown[];
     }
   | {
@@ -39,4 +47,10 @@ export type DispatchResult =
         code: "SKILL_ERROR";
         message: string;
       };
+    }
+  | {
+      ok: false;
+      kind: "card_error";
+      action: string;
+      error: { code: string; message: string; uncertain?: boolean };
     };
