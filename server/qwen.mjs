@@ -1,4 +1,5 @@
-import { getLegacyContext } from '../src/banking-core/legacy-adapter.mjs';
+import { getLegacyContext, getLegacyContextAsync } from '../src/banking-core/legacy-adapter.mjs';
+import { getConfiguredBankingCore } from '../src/banking-core/postgres-store.mjs';
 import { timingSafeEqual } from 'node:crypto';
 
 const intents = ['create_plan', 'analyze_bills', 'subscriptions', 'clarify', 'unsupported'];
@@ -32,7 +33,7 @@ export function interpret(value, userMessage = '') {
   }
   const result = { intent: value.intent, reply: value.reply, needsClarification: value.intent === 'clarify', plan: null };
   if (value.intent === 'create_plan') {
-    const monthly = value.monthlySavingFen ?? (value.targetAmountFen !== null && value.months !== null ? Math.ceil(Math.max(0, value.targetAmountFen - context.savedAmountFen) / value.months) : null);
+    const monthly = value.monthlySavingFen ?? (value.targetAmountFen !== null && value.months !== null ? Math.ceil(Math.max(0, value.targetAmountFen - activeContext.savedAmountFen) / value.months) : null);
     if (monthly === null) return { ...result, needsClarification: true, reply: '请补充每月计划储蓄金额，或者目标总额及完成期限。' };
     if (monthly === 0) return { ...result, reply: `当前模拟已储蓄金额为 ¥${(context.savedAmountFen / 100).toFixed(2)}，已达到这个目标，无需创建新计划。` };
     if (monthly > context.monthlySavingCapFen || monthly > context.monthlyIncomeFen - context.totalExpenseFen) return { ...result, needsClarification: true, reply: '这个安排超过演示月度储蓄上限或模拟现金流结余。请延长期限或降低每月金额。' };
@@ -85,11 +86,13 @@ export async function handleAgent(request, { env = process.env, fetchImpl = fetc
     if (!body || body.consent !== true || typeof body.message !== 'string' || !body.message.trim() || body.message.length > 500 || !Array.isArray(body.history) || body.history.length > 6 || body.history.some(item => !item || !['user', 'assistant'].includes(item.role) || typeof item.content !== 'string' || item.content.length > 1500)) {
       return respond(400, 'INVALID_REQUEST', '请授权使用 Qwen，并提供有效的目标和对话历史。');
     }
+    const core = await getConfiguredBankingCore(env);
+    const activeContext = await getLegacyContextAsync(core.repository);
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(25000)]);
     const upstream = await fetchImpl(settings.endpoint, {
       method: 'POST', signal, headers: { Authorization: `Bearer ${settings.key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: settings.model, stream: false, enable_thinking: false, temperature: 0.2, max_tokens: 1000, response_format: { type: 'json_object' }, messages: [
-        { role: 'system', content: `${systemPrompt}\n今天：${new Date().toISOString().slice(0, 10)}\n模拟账单摘要：${JSON.stringify(context)}` },
+        { role: 'system', content: `${systemPrompt}\n今天：${new Date().toISOString().slice(0, 10)}\n模拟账单摘要：${JSON.stringify(activeContext)}` },
         ...body.history, { role: 'user', content: body.message },
       ] }),
     });
@@ -104,7 +107,7 @@ export async function handleAgent(request, { env = process.env, fetchImpl = fetc
     try { parsed = JSON.parse(choice.message.content); } catch { throw new ServiceError('MODEL_FORMAT_ERROR', '模型返回了无效的结构化结果，请重试。', 502); }
     const decision = interpret(parsed, body.message);
     const tokens = key => Number.isSafeInteger(payload.usage?.[key]) && payload.usage[key] >= 0 ? payload.usage[key] : 0;
-    return respond(200, 'OK', 'Qwen 建议已生成，业务执行仍为模拟', { ...decision, analysis: { asOf: context.asOf, currentMonth: context.currentMonth, previousMonth: context.previousMonth, dataSource: context.dataSource, totalExpenseFen: context.totalExpenseFen, subscriptionCount: context.subscriptionCount, momIncreaseFen: context.expenseIncreaseFen, categories: context.categoryChanges }, model: settings.model, usage: { inputTokens: tokens('prompt_tokens'), outputTokens: tokens('completion_tokens') } });
+    return respond(200, 'OK', 'Qwen 建议已生成，业务执行仍为模拟', { ...decision, analysis: { asOf: activeContext.asOf, currentMonth: activeContext.currentMonth, previousMonth: activeContext.previousMonth, dataSource: activeContext.dataSource, totalExpenseFen: activeContext.totalExpenseFen, subscriptionCount: activeContext.subscriptionCount, momIncreaseFen: activeContext.expenseIncreaseFen, categories: activeContext.categoryChanges }, model: settings.model, usage: { inputTokens: tokens('prompt_tokens'), outputTokens: tokens('completion_tokens') } });
   } catch (error) {
     if (error instanceof ServiceError) return respond(error.status, error.code, error.message);
     if (['TimeoutError', 'AbortError'].includes(error?.name)) return respond(504, 'MODEL_TIMEOUT', '模型请求超时；未执行任何资金操作，可手动重试。');

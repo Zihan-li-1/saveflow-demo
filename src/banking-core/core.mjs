@@ -73,15 +73,39 @@ export function createBankingCore(options = {}) {
   /** @param {import('./contracts').TransferInput} input @returns {Promise<import('./contracts').RiskResult>} */
   async function riskCheck(input) {
     const result = await guard(async () => {
-      validateTransfer(input);
-      const account = await repository.getAccount(input.fromAccountId);
-      const payee = await repository.getPayee(input.payeeId);
-      if (!account) throw new BankingError('ACCOUNT_NOT_FOUND', '找不到可访问的付款账户');
-      if (!payee) throw new BankingError('PAYEE_NOT_FOUND', '找不到收款人，请先完成实体解析');
-      if (account.status !== 'active') throw new BankingError('ACCOUNT_BLOCKED', '付款账户当前不可用');
-      if (payee.status !== 'active') throw new BankingError('PAYEE_BLOCKED', '收款人当前不可用');
-      if (account.availableBalanceFen < input.amountFen) throw new BankingError('INSUFFICIENT_BALANCE', '付款账户可用余额不足');
-      if (input.amountFen > policy.maxTransferFen) throw new BankingError('LIMIT_EXCEEDED', '超过 Mock 单笔转账限额');
+      const input = validateActionInput(action, value);
+      if (action === 'transfer_money') {
+        const transfer = /** @type {import('./contracts').TransferInput} */ (input);
+        const account = await repository.getAccount(transfer.fromAccountId);
+        const payee = await repository.getPayee(transfer.payeeId);
+        if (!account) throw new BankingError('ACCOUNT_NOT_FOUND', '找不到可访问的付款账户');
+        if (!payee) throw new BankingError('PAYEE_NOT_FOUND', '找不到收款人，请先完成实体解析');
+        if (account.status !== 'active') throw new BankingError('ACCOUNT_BLOCKED', '付款账户当前不可用');
+        if (payee.status !== 'active') throw new BankingError('PAYEE_BLOCKED', '收款人当前不可用');
+        if (account.availableBalanceFen < transfer.amountFen) throw new BankingError('INSUFFICIENT_BALANCE', '付款账户可用余额不足');
+        if (transfer.amountFen > policy.maxTransferFen) throw new BankingError('LIMIT_EXCEEDED', '超过 Mock 单笔转账限额');
+      } else if (action === 'card.set_limit') {
+        const cardInput = /** @type {import('./contracts').CardLimitInput} */ (input);
+        const card = (await repository.getCards()).find(item => item.id === cardInput.cardId);
+        if (!card) throw new BankingError('CARD_NOT_FOUND', '找不到卡片');
+        if (card.status !== 'active') throw new BankingError('CARD_BLOCKED', '卡片当前不可用');
+        if (cardInput.monthlyLimitFen < card.monthlySpentFen) throw new BankingError('LIMIT_EXCEEDED', '新额度不能低于本月已用金额');
+      } else if (action === 'subscription.cancel_debit') {
+        const cancelInput = /** @type {import('./contracts').CancelSubscriptionInput} */ (input);
+        const subscription = (await repository.getSubscriptions()).find(item => item.id === cancelInput.subscriptionId);
+        if (!subscription) throw new BankingError('SUBSCRIPTION_NOT_FOUND', '找不到订阅');
+        if (subscription.status !== 'active' || !subscription.mandateId) throw new BankingError('INVALID_STATE', '此订阅没有可解除的模拟代扣授权');
+      } else if (action === 'wealth.subscribe') {
+        const purchase = /** @type {import('./contracts').InvestmentPurchaseInput} */ (input);
+        const account = await repository.getAccount(purchase.fromAccountId);
+        const product = (await repository.getInvestmentProducts()).find(item => item.id === purchase.productId);
+        if (!account) throw new BankingError('ACCOUNT_NOT_FOUND', '找不到可访问的付款账户');
+        if (account.status !== 'active') throw new BankingError('ACCOUNT_BLOCKED', '付款账户当前不可用');
+        if (!product) throw new BankingError('PRODUCT_NOT_FOUND', '找不到理财产品');
+        if (!product.isSynthetic || product.currency !== 'CNY') throw new BankingError('ACTION_UNSUPPORTED', '仅支持明确标记的合成演示产品');
+        if (purchase.amountFen < product.minimumAmountFen) throw new BankingError('LIMIT_EXCEEDED', '申购金额低于产品起购金额');
+        if (account.availableBalanceFen < purchase.amountFen) throw new BankingError('INSUFFICIENT_BALANCE', '可用余额不足');
+      }
       return true;
     });
     const largeTransfer = input.amountFen > policy.largeTransferFen;
@@ -127,7 +151,8 @@ export function createBankingCore(options = {}) {
   }
   /** Recheck at confirmation AND immediately before execution. @param {import('./contracts').OperationRecord} record */
   async function recheck(record) {
-    if (!record.preview || !record.request) throw new BankingError('INVALID_STATE', '操作尚未生成预览');
+    if (record.action === 'legacy.create-plan' || !record.preview || !record.request) throw new BankingError('INVALID_STATE', '操作尚未生成预览');
+    const action = record.action;
     if (now() >= Date.parse(record.preview.expiresAt)) throw new BankingError('PREVIEW_EXPIRED', '预览已过期，请重新预览并确认');
     if (cardActions.has(record.action)) {
       const request = /** @type {{action:import('./contracts').CardAction,input:import('./contracts').CardInput}} */ (record.request);
@@ -188,25 +213,34 @@ export function createBankingCore(options = {}) {
       /** @type {import('./contracts').OperationRecord | undefined} */
       let record;
       try {
-        if (!request || request.action !== 'transfer_money') throw new BankingError('UNKNOWN_ACTION', '当前写操作仅注册 transfer_money');
+        if (!request || !['transfer_money', 'card.set_limit', 'subscription.cancel_debit', 'wealth.subscribe'].includes(request.action)) throw new BankingError('UNKNOWN_ACTION', '当前写操作未注册');
         if (Object.keys(request).some(k => !['action', 'input', 'planId', 'stepId', 'origin'].includes(k))) throw new BankingError('VALIDATION_ERROR', '不接受模型提供的风险等级或确认标记');
-        const input = validateTransfer(request.input);
+        const action = /** @type {import('./contracts').ActionKind} */ (request.action);
+        const input = validateActionInput(action, request.input);
         const planId = request.planId ?? `plan_${crypto.randomUUID()}`;
         const stepId = request.stepId ?? `step_${crypto.randomUUID()}`;
         assertId(planId); assertId(stepId);
         const origin = request.origin ?? 'user_requested';
         if (!['user_requested', 'agent_suggested', 'event_triggered'].includes(origin)) throw new BankingError('VALIDATION_ERROR', '操作来源无效');
-        record = { operationId, action: 'transfer_money', fingerprint: store.fingerprint('transfer_money', input), state: 'preparing', request: { action: 'transfer_money', input, planId, stepId, origin } };
+        const actionRequest = /** @type {import('./contracts').ActionRequest} */ ({ action, input, planId, stepId, origin });
+        record = { operationId, action, fingerprint: store.fingerprint(action, input), state: 'preparing', request: actionRequest };
         await save(record); await move(record, 'PREPARED');
-        const risk = await riskCheck(input); record.risk = risk;
+        const risk = await riskCheck(action, input); record.risk = risk;
         if (!risk.allowed && risk.error) throw new BankingError(risk.error.code, risk.error.message);
-        const effect = await effectFor(input);
+        const effect = await effectFor(action, input, operationId);
         const expiresAt = new Date(now() + policy.previewTtlMs).toISOString();
         const contextSnapshotId = (await repository.getContextInfo()).snapshotId;
         const hashInput = canonical({ ownerId, operationId, planId, stepId, origin, effect, expiresAt, contextSnapshotId, policy });
         const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(hashInput));
         const previewHash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
-        record.preview = { planId, stepIds: [stepId], summary: `从${effect.accountName}向${effect.payeeName}（${effect.accountNoMasked}）模拟转账 ¥${(input.amountFen / 100).toFixed(2)}，手续费 ¥0.00，模拟即时到账。`, exactEffects: [effect], riskLevel: risk.riskLevel, warnings: risk.warnings, expiresAt, previewHash, contextSnapshotId };
+        const summary = effect.kind === 'transfer_out'
+          ? `从${effect.accountName}向${effect.payeeName}（${effect.accountNoMasked}）模拟转账 ¥${(effect.amountFen / 100).toFixed(2)}，手续费 ¥0.00，模拟即时到账。`
+          : effect.kind === 'card_limit_change'
+            ? `将${effect.cardName}月度限额从 ¥${(effect.monthlyLimitBeforeFen / 100).toFixed(2)} 调整为 ¥${(effect.monthlyLimitAfterFen / 100).toFixed(2)}。`
+            : effect.kind === 'subscription_cancel'
+              ? `解除「${effect.subscriptionName}」模拟银行代扣授权，预计停止后续每月 ¥${(effect.monthlyFeeFen / 100).toFixed(2)} 的模拟扣款；不代表商户会员已取消。`
+              : `从${effect.accountName}模拟申购「${effect.productName}」¥${(effect.amountFen / 100).toFixed(2)}；风险等级 ${effect.riskLevel}，流动性 ${effect.liquidity}。`;
+        record.preview = { planId, stepIds: [stepId], summary, exactEffects: [effect], riskLevel: risk.riskLevel, warnings: risk.warnings, expiresAt, previewHash, contextSnapshotId };
         await move(record, 'PREVIEWED');
         return { ok: true, data: { operationId, state: 'awaiting_confirmation', preview: structuredClone(record.preview), risk: structuredClone(risk) } };
       } catch (error) {

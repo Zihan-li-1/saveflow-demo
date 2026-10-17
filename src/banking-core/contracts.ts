@@ -24,6 +24,7 @@ export interface FinancialContextRepository {
   getCard(id: string): MaybePromise<Card | undefined>;
   getSubscriptions(): MaybePromise<Subscription[]>;
   getInvestmentProducts(): MaybePromise<InvestmentProduct[]>;
+  getHoldings(): MaybePromise<Holding[]>;
   getSavingGoal(): MaybePromise<SavingGoal>;
   getDemoSettings(): MaybePromise<DemoSettings>;
 }

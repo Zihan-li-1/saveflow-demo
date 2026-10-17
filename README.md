@@ -2,7 +2,7 @@
 
 对应公共网址：https://startling-flan-ed8dcb.netlify.app/
 
-已完成 B 项目 Banking Core：公共类型、统一 FinancialContextRepository、Mock 转账预览/风险/确认/幂等执行/回执、HTTP 及旧接口适配。交接规范见 [Banking Core 合同与验收](docs/Banking-Core.md)。本次修改未发布到上述网址。
+已完成 B 项目 Banking Core：公共类型、统一 FinancialContextRepository，以及转账、卡片调额、模拟代扣解除、合成理财申购共用的预览/风险/确认/幂等执行/回执流程；PostgreSQL 持久层将业务变更与回执放在同一事务中。所有数据和资金效果均为合成 Mock，不连接真实银行。本地代码尚未发布到上述网址。交接规范见 [Banking Core 合同与验收](docs/Banking-Core.md)。
 
 ```bash
 npm install
@@ -19,4 +19,6 @@ npm run lint
 npm run build
 ```
 
-验收脚本模拟张三 500 元转账并核验幂等，不调用真实 Qwen 或银行。自然语言转账路由和聊天确认卡属于 A/D 后续对接范围。
+`npm run demo:banking` 模拟张三 500 元转账并核验幂等，不调用真实 Qwen 或银行。Banking Agent 自然语言入口与聊天确认卡仍属于 A/D 集成范围；新增 B HTTP 动作暂由 typed client 调用。
+
+PostgreSQL 跨实例验收需先在专用数据库运行 `npm run db:migrate`，再设置 `BANKING_TEST_DATABASE_URL` 并执行 `npm test`。没有该变量时 Postgres 集成测试会显示为 skipped，不能视为跨实例验收通过。

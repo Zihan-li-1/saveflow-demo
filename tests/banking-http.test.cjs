@@ -29,7 +29,7 @@ async function confirmed(client) {
 
 test('B HTTP: real handler and typed client run reads, preview, confirmation, execution and lookup', async () => {
   const { client, core } = await setup();
-  for (const action of ['account.list', 'payee.list', 'transaction.list', 'product.list', 'card.list', 'subscription.list']) assert.ok((await client.request(action, {})).length > 0);
+  for (const action of ['account.list', 'payee.list', 'transaction.list', 'product.list', 'card.list', 'subscription.list', 'holding.list']) assert.ok((await client.request(action, {})).length >= (action === 'holding.list' ? 0 : 1));
   assert.equal((await client.request('context.get', {})).currentMonth, '2026-08');
   const p = await confirmed(client);
   assert.equal(core.repository.getAccount(input.fromAccountId).balanceFen, 500000);
@@ -71,6 +71,17 @@ test('B HTTP: lost execute response is uncertain, no retry; original ID lookup r
   assert.equal((await client.request('action.status', { operationId: p.operationId })).status, 'succeeded');
   assert.equal(core.repository.getAccount(input.fromAccountId).balanceFen, 450000);
   assert.equal((await client.request('action.status', { operationId: 'missing_key' })).status, 'pending');
+});
+
+test('B HTTP: lost confirmation response is uncertain and recovers by the same operation ID', async () => {
+  const { client, core, fetchImpl } = await setup();
+  const prepared = await client.request('transfer.prepare', input);
+  const broken = createBankingClient({ mode: 'http', baseUrl: 'https://demo.example', accessCode: () => env.SAVEFLOW_ACCESS_CODE, fetchImpl: async (...args) => { await fetchImpl(...args); throw new Error('response lost'); } });
+  await assert.rejects(broken.request('action.decide', { operationId: prepared.operationId, previewHash: prepared.preview.previewHash, decision: 'confirm', confirmedStepIds: prepared.preview.stepIds }), { uncertain: true, code: 'NETWORK_ERROR' });
+  const status = await client.request('action.status', { operationId: prepared.operationId });
+  assert.equal(status.state, 'confirmed');
+  assert.equal(status.status, 'pending');
+  assert.equal(core.repository.getAccount(input.fromAccountId).balanceFen, 500000);
 });
 
 test('B HTTP: auth, origin, schema, action allowlist and idempotency header enforced', async () => {

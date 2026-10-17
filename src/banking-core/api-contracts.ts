@@ -14,6 +14,9 @@ export type BankingRequestMap = {
   "card.unfreeze": { cardId: string };
   "subscription.list": Record<string, never>;
   "transfer.prepare": TransferInput;
+  "card-limit.prepare": CardLimitInput;
+  "subscription-cancel.prepare": CancelSubscriptionInput;
+  "investment-purchase.prepare": InvestmentPurchaseInput;
   "action.decide": DecisionInput & { operationId: string };
   "action.execute": { operationId: string; previewHash: string };
   "action.status": { operationId: string };
@@ -32,7 +35,11 @@ export type BankingResultMap = {
   "card.freeze": PreparedAction;
   "card.unfreeze": PreparedAction;
   "subscription.list": Subscription[];
+  "holding.list": Holding[];
   "transfer.prepare": PreparedAction;
+  "card-limit.prepare": PreparedAction;
+  "subscription-cancel.prepare": PreparedAction;
+  "investment-purchase.prepare": PreparedAction;
   "action.decide": OperationStatus;
   "action.execute": ActionReceipt;
   "action.status": OperationStatus;

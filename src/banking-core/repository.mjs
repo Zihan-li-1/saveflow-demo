@@ -39,13 +39,48 @@ export function createFinancialContext(source = seed) {
     getCard: id => structuredClone(cards.find(c => c.id === id)),
     getSubscriptions: () => raw.subscriptions.map(s => ({ id: s.id, name: s.name, monthlyFeeFen: seedYuanToFen(s.monthlyFee), status: s.status === 'active' ? 'active' : 'cancelled', lastUsedDate: s.lastUsedDate, isPotentiallyUnused: s.isPotentiallyUnused, mandateId: null })),
     getInvestmentProducts: () => structuredClone(products),
+    getHoldings: () => structuredClone(holdings),
     getSavingGoal: () => ({ id: raw.savingGoals[0].id, targetAmountFen: seedYuanToFen(raw.savingGoals[0].targetAmount), currentAmountFen: seedYuanToFen(raw.savingGoals[0].currentAmount), targetDate: raw.savingGoals[0].targetDate, proposedMonthlySavingFen: seedYuanToFen(raw.savingGoals[0].proposedMonthlySaving) }),
     // Original goal requires 5000/month, above demo cap: expose it honestly; draft defaults to 2500.
     getDemoSettings: () => ({ monthlyIncomeFen: seedYuanToFen(raw.user.monthlyIncome), defaultMonthlySavingFen: 250000, monthlySavingCapFen: 300000 }),
   };
   /** Synchronous compare-and-swap: no await between checks, debit and transaction append.
-   * @param {import('./contracts').TransferEffect} effect @param {string} operationId @param {string} at */
-  function commitTransfer(effect, operationId, at) {
+  * @param {import('./contracts').ActionEffect} effect @param {string} operationId @param {string} at */
+  function commitAction(effect, operationId, at) {
+    if (effect.kind === 'card_limit_change') {
+      const card = cards.find(item => item.id === effect.cardId);
+      if (!card || card.status !== 'active' || card.version !== effect.version || card.monthlyLimitFen !== effect.monthlyLimitBeforeFen || card.monthlySpentFen !== effect.monthlySpentFen) throw new BankingError('PREVIEW_STALE', '卡片状态已变化，请重新预览并确认');
+      card.monthlyLimitFen = effect.monthlyLimitAfterFen;
+      card.version++;
+      revision++;
+      return undefined;
+    }
+    if (effect.kind === 'subscription_cancel') {
+      const subscription = subscriptions.find(item => item.id === effect.subscriptionId);
+      if (!subscription || subscription.status !== 'active' || subscription.version !== effect.version || subscription.mandateId !== effect.mandateId) throw new BankingError('PREVIEW_STALE', '代扣授权状态已变化，请重新查询');
+      subscription.status = 'cancelled';
+      subscription.mandateId = null;
+      subscription.version++;
+      revision++;
+      return undefined;
+    }
+    if (effect.kind === 'investment_purchase') {
+      const account = accounts.find(item => item.id === effect.fromAccountId);
+      if (!account || account.version !== effect.accountVersion || account.balanceFen !== effect.balanceBeforeFen) throw new BankingError('PREVIEW_STALE', '账户已变化，请重新预览并确认');
+      assertFen(effect.amountFen);
+      if (account.availableBalanceFen < effect.amountFen) throw new BankingError('INSUFFICIENT_BALANCE', '可用余额不足');
+      const product = products.find(item => item.id === effect.productId);
+      if (!product) throw new BankingError('PREVIEW_STALE', '理财产品已不可用');
+      const transaction = /** @type {import('./contracts').Transaction} */ ({ id: `txn_${operationId}`, operationId, accountId: account.id, occurredAt: at, type: 'investment_purchase', category: '理财申购', merchant: effect.productName, amountFen: effect.amountFen, currency: 'CNY', status: 'posted', source: 'mock_execution' });
+      const holding = /** @type {import('./contracts').Holding} */ ({ id: effect.holdingId, accountId: account.id, productId: product.id, amountFen: effect.amountFen, acquiredAt: at, status: 'active' });
+      account.balanceFen -= effect.amountFen;
+      account.availableBalanceFen -= effect.amountFen;
+      account.version++;
+      transactions.push(transaction);
+      holdings.push(holding);
+      revision++;
+      return structuredClone(transaction);
+    }
     const existing = transactions.find(t => t.operationId === operationId);
     if (existing) throw new BankingError('IDEMPOTENCY_CONFLICT', '账务已存在此操作，请查询回执', true);
     const account = accounts.find(a => a.id === effect.fromAccountId);

@@ -15,11 +15,9 @@ export function getLegacyContext(repository = mockRepository) {
   const expenseRows = month => repository.getTransactions({ month }).filter(t => t.type === 'expense');
   const current = expenseRows(info.currentMonth), previous = expenseRows(info.previousMonth);
   /** @param {import('./contracts').Transaction[]} rows */
-  const total = rows => rows.reduce((sum, t) => sum + t.amountFen, 0);
+  const total = rows => rows.reduce((sum, transaction) => sum + transaction.amountFen, 0);
   const names = [...new Set([...current, ...previous].map(t => t.category))];
   const categoryChanges = names.map(name => ({ name, changeAmountFen: total(current.filter(t => t.category === name)) - total(previous.filter(t => t.category === name)) })).sort((a, b) => b.changeAmountFen - a.changeAmountFen).slice(0, 2);
-  const subscriptions = repository.getSubscriptions();
-  const savingGoal = repository.getSavingGoal();
   return { ...info, dataType: info.dataSource, ...settings, totalExpenseFen: total(current), previousExpenseFen: total(previous), expenseIncreaseFen: total(current) - total(previous), categoryChanges, subscriptionCount: subscriptions.length, subscriptions: subscriptions.map(s => ({ name: s.name, monthlyFee: s.monthlyFeeFen / 100, lastUsedDate: s.lastUsedDate, isPotentiallyUnused: s.isPotentiallyUnused })), savedAmountFen: savingGoal.currentAmountFen };
 }
 /** Resolve database-backed repositories before using the synchronous summary builder.
