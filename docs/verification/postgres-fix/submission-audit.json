@@ -1,12 +1,12 @@
 {
-  "at": "2026-10-18T10:37:15.284Z",
+  "at": "2026-10-18T10:46:01.843Z",
   "branch": "spike/trueforge-harness",
-  "head": "eef277032ea7274d45342ba2a3b53b4f8098cf1e",
+  "head": "b6eeee051f9f0ecb3c1974e7458e7c98471a4702",
   "main": "07d5667599601fd0b4ef97d82082362946876b8f",
   "envLocalIgnored": true,
   "envLocalTracked": false,
   "configuredSecretCount": 2,
-  "scannedGitFiles": 298,
+  "scannedGitFiles": 318,
   "scannedStaticFiles": 41,
   "findings": [],
   "runtimeBoundary": {
@@ -25,14 +25,98 @@
     "next-env.d.ts",
     "tsconfig.tsbuildinfo"
   ],
-  "pendingFileCount": 193,
+  "pendingFileCount": 21,
   "files": [
+    {
+      "path": "docs/verification/netlify-preview/docker-build-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-build-network-attempt.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-desktop.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-http-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-http-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-mobile.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-ui-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-ui-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/lint-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/mock-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/postgres-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/preview-driver-lint.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/services-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/typecheck-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/typegen-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/upstream-contracts.log",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-netlify-preview.mjs",
+      "generated": false
+    },
     {
       "path": ".dockerignore",
       "generated": false
     },
     {
+      "path": ".env.example",
+      "generated": false
+    },
+    {
+      "path": ".gitignore",
+      "generated": false
+    },
+    {
+      "path": "CLAUDE.md",
+      "generated": false
+    },
+    {
       "path": "Dockerfile",
+      "generated": false
+    },
+    {
+      "path": "README.md",
       "generated": false
     },
     {
@@ -44,11 +128,47 @@
       "generated": false
     },
     {
+      "path": "docs/Banking-Agent-API.md",
+      "generated": false
+    },
+    {
+      "path": "docs/Banking-Agent-Integration.md",
+      "generated": false
+    },
+    {
+      "path": "docs/Banking-Core.md",
+      "generated": false
+    },
+    {
+      "path": "docs/Card-Actions.md",
+      "generated": false
+    },
+    {
+      "path": "docs/Intent-Diagnostics.md",
+      "generated": false
+    },
+    {
+      "path": "docs/Qwen接入与部署.md",
+      "generated": false
+    },
+    {
       "path": "docs/banking-bill-card-ui.md",
       "generated": false
     },
     {
       "path": "docs/docker-test-report.md",
+      "generated": false
+    },
+    {
+      "path": "docs/intent-action-status.md",
+      "generated": false
+    },
+    {
+      "path": "docs/intent-contracts.md",
+      "generated": false
+    },
+    {
+      "path": "docs/iteration-handoff-transfer-bill.md",
       "generated": false
     },
     {
@@ -105,6 +225,10 @@
     },
     {
       "path": "docs/verification/balance-recovery/user-before-events.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/banking-agent-tests.log",
       "generated": false
     },
     {
@@ -552,234 +676,6 @@
       "generated": false
     },
     {
-      "path": "scripts/audit-trial-submission.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/configure-trueforge-bridge.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/configure-trueforge-docker.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/diagnose-skill-switch-before.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/diagnose-transfer-before.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/inspect-trueforge-transfer.py",
-      "generated": false
-    },
-    {
-      "path": "scripts/serve-container.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/serve-frozen-trial-mcp.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/verify-banking-bill-ui.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/verify-docker-http.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/verify-docker-persistence.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/verify-docker-ui.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/verify-skill-switch-ui.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/verify-transfer-balance-ui.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/verify-transfer-continuation-ui.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/verify-trueforge-bill.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/verify-trueforge-skills-timeout.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/verify-trueforge-skills-ui.mjs",
-      "generated": false
-    },
-    {
-      "path": "scripts/verify-trueforge-ui.mjs",
-      "generated": false
-    },
-    {
-      "path": "server/banking-orchestrator.mjs",
-      "generated": false
-    },
-    {
-      "path": "server/mcp/saveflow-trial.mjs",
-      "generated": false
-    },
-    {
-      "path": "server/mcp/trueforge-token-bridge.mjs",
-      "generated": false
-    },
-    {
-      "path": "server/trueforge-bill-adapter.mjs",
-      "generated": false
-    },
-    {
-      "path": "server/trueforge-client.mjs",
-      "generated": false
-    },
-    {
-      "path": "server/trueforge-skill-adapter.mjs",
-      "generated": false
-    },
-    {
-      "path": "server/trueforge-tool-result.mjs",
-      "generated": false
-    },
-    {
-      "path": "src/app/BankingBillCard.tsx",
-      "generated": false
-    },
-    {
-      "path": "src/app/BankingReadCards.tsx",
-      "generated": false
-    },
-    {
-      "path": "src/app/BankingTransferPreview.tsx",
-      "generated": false
-    },
-    {
-      "path": "src/app/banking-bill-card.css",
-      "generated": false
-    },
-    {
-      "path": "src/app/banking-trial-cards.css",
-      "generated": false
-    },
-    {
-      "path": "src/lib/banking-chat-storage.ts",
-      "generated": false
-    },
-    {
-      "path": "src/lib/banking-flow-state.ts",
-      "generated": false
-    },
-    {
-      "path": "src/lib/bill-display.ts",
-      "generated": false
-    },
-    {
-      "path": "src/lib/trial-preview.mjs",
-      "generated": false
-    },
-    {
-      "path": "src/lib/trueforge-routing.mjs",
-      "generated": false
-    },
-    {
-      "path": "tests/banking-agent-auth.test.cjs",
-      "generated": false
-    },
-    {
-      "path": "tests/banking-bill-card.test.cjs",
-      "generated": false
-    },
-    {
-      "path": "tests/fixtures/trueforge-bill-turn.json",
-      "generated": false
-    },
-    {
-      "path": "tests/saveflow-trial.test.mjs",
-      "generated": false
-    },
-    {
-      "path": "tests/trueforge-bill.test.mjs",
-      "generated": false
-    },
-    {
-      "path": "tests/trueforge-preview-client.test.cjs",
-      "generated": false
-    },
-    {
-      "path": "tests/trueforge-skills.test.mjs",
-      "generated": false
-    },
-    {
-      "path": ".env.example",
-      "generated": false
-    },
-    {
-      "path": ".gitignore",
-      "generated": false
-    },
-    {
-      "path": "CLAUDE.md",
-      "generated": false
-    },
-    {
-      "path": "README.md",
-      "generated": false
-    },
-    {
-      "path": "docs/Banking-Agent-API.md",
-      "generated": false
-    },
-    {
-      "path": "docs/Banking-Agent-Integration.md",
-      "generated": false
-    },
-    {
-      "path": "docs/Banking-Core.md",
-      "generated": false
-    },
-    {
-      "path": "docs/Card-Actions.md",
-      "generated": false
-    },
-    {
-      "path": "docs/Intent-Diagnostics.md",
-      "generated": false
-    },
-    {
-      "path": "docs/Qwen接入与部署.md",
-      "generated": false
-    },
-    {
-      "path": "docs/intent-action-status.md",
-      "generated": false
-    },
-    {
-      "path": "docs/intent-contracts.md",
-      "generated": false
-    },
-    {
-      "path": "docs/iteration-handoff-transfer-bill.md",
-      "generated": false
-    },
-    {
-      "path": "docs/verification/banking-agent-tests.log",
-      "generated": false
-    },
-    {
       "path": "docs/架构审查-2026-09-22.md",
       "generated": false
     },
@@ -848,6 +744,18 @@
       "generated": false
     },
     {
+      "path": "scripts/audit-trial-submission.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/configure-trueforge-bridge.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/configure-trueforge-docker.mjs",
+      "generated": false
+    },
+    {
       "path": "scripts/demo-banking.mjs",
       "generated": false
     },
@@ -856,11 +764,75 @@
       "generated": false
     },
     {
+      "path": "scripts/diagnose-skill-switch-before.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/diagnose-transfer-before.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/inspect-trueforge-transfer.py",
+      "generated": false
+    },
+    {
       "path": "scripts/migrate-banking.mjs",
       "generated": false
     },
     {
+      "path": "scripts/serve-container.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/serve-frozen-trial-mcp.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-banking-bill-ui.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-docker-http.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-docker-persistence.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-docker-ui.mjs",
+      "generated": false
+    },
+    {
       "path": "scripts/verify-qwen.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-skill-switch-ui.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-transfer-balance-ui.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-transfer-continuation-ui.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-trueforge-bill.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-trueforge-skills-timeout.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-trueforge-skills-ui.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-trueforge-ui.mjs",
       "generated": false
     },
     {
@@ -876,11 +848,39 @@
       "generated": false
     },
     {
+      "path": "server/banking-orchestrator.mjs",
+      "generated": false
+    },
+    {
       "path": "server/banking.mjs",
       "generated": false
     },
     {
+      "path": "server/mcp/saveflow-trial.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/mcp/trueforge-token-bridge.mjs",
+      "generated": false
+    },
+    {
       "path": "server/qwen.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/trueforge-bill-adapter.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/trueforge-client.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/trueforge-skill-adapter.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/trueforge-tool-result.mjs",
       "generated": false
     },
     {
@@ -944,11 +944,31 @@
       "generated": false
     },
     {
+      "path": "src/app/BankingBillCard.tsx",
+      "generated": false
+    },
+    {
       "path": "src/app/BankingCardCards.tsx",
       "generated": false
     },
     {
+      "path": "src/app/BankingReadCards.tsx",
+      "generated": false
+    },
+    {
+      "path": "src/app/BankingTransferPreview.tsx",
+      "generated": false
+    },
+    {
       "path": "src/app/api/saveflow/route.ts",
+      "generated": false
+    },
+    {
+      "path": "src/app/banking-bill-card.css",
+      "generated": false
+    },
+    {
+      "path": "src/app/banking-trial-cards.css",
       "generated": false
     },
     {
@@ -1056,6 +1076,18 @@
       "generated": false
     },
     {
+      "path": "src/lib/banking-chat-storage.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/banking-flow-state.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/bill-display.ts",
+      "generated": false
+    },
+    {
       "path": "src/lib/flow-machine.ts",
       "generated": false
     },
@@ -1065,6 +1097,14 @@
     },
     {
       "path": "src/lib/saveflow-mock.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/trial-preview.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/lib/trueforge-routing.mjs",
       "generated": false
     },
     {
@@ -1116,11 +1156,23 @@
       "generated": false
     },
     {
+      "path": "tests/banking-agent-auth.test.cjs",
+      "generated": false
+    },
+    {
       "path": "tests/banking-agent-http.test.cjs",
       "generated": false
     },
     {
       "path": "tests/banking-agent-integration.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/banking-agent.test.mjs",
+      "generated": false
+    },
+    {
+      "path": "tests/banking-bill-card.test.cjs",
       "generated": false
     },
     {
@@ -1192,6 +1244,10 @@
       "generated": false
     },
     {
+      "path": "tests/fixtures/trueforge-bill-turn.json",
+      "generated": false
+    },
+    {
       "path": "tests/flow.test.cjs",
       "generated": false
     },
@@ -1208,7 +1264,31 @@
       "generated": false
     },
     {
+      "path": "tests/saveflow-trial.test.mjs",
+      "generated": false
+    },
+    {
+      "path": "tests/transfer-alignment.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/transfer-execute.test.mjs",
+      "generated": false
+    },
+    {
       "path": "tests/transfer-orchestrator.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/trueforge-bill.test.mjs",
+      "generated": false
+    },
+    {
+      "path": "tests/trueforge-preview-client.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/trueforge-skills.test.mjs",
       "generated": false
     },
     {

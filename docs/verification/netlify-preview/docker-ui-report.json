@@ -1,0 +1,176 @@
+{
+  "at": "2026-10-18T10:43:55.456Z",
+  "url": "http://127.0.0.1:4300",
+  "actualDockerHttpMcpAndHostTrueforge": true,
+  "requests": [
+    {
+      "message": "查询2026年8月账单",
+      "httpStatus": 200,
+      "code": "OK",
+      "elapsedMs": 1678,
+      "sentContinuation": false,
+      "status": "bill_result",
+      "action": "bill.summary",
+      "bill": {
+        "month": "2026-08",
+        "totalIncomeFen": 1200000,
+        "totalExpenseFen": 846000,
+        "transactionCount": 12,
+        "categoryTotals": {
+          "房租": 300000,
+          "餐饮": 145000,
+          "交通": 40000,
+          "通信": 10000,
+          "日用品": 50000,
+          "娱乐": 112000,
+          "购物": 128000,
+          "订阅": 9000,
+          "其他": 52000
+        }
+      }
+    },
+    {
+      "message": "给王先生转500元",
+      "httpStatus": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "elapsedMs": 1962,
+      "sentContinuation": false,
+      "status": "needs_clarification",
+      "action": "transfer.create",
+      "slot": "source_account_ref"
+    },
+    {
+      "message": "选择模拟储蓄账户（可用 ¥0.00）",
+      "httpStatus": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "elapsedMs": 2226,
+      "sentContinuation": true,
+      "status": "needs_clarification",
+      "action": "transfer.create",
+      "slot": "payee_ref"
+    },
+    {
+      "message": "选择房东王先生（****1003）",
+      "httpStatus": 400,
+      "code": "INSUFFICIENT_BALANCE",
+      "elapsedMs": 2120,
+      "sentContinuation": true,
+      "status": "error",
+      "recoveryQuestion": "模拟储蓄账户可用余额为 ¥0.00，不足以转出 ¥500.00。请重新选择付款账户，或修改金额；已保留收款人和转账草稿。"
+    },
+    {
+      "message": "选择模拟活期账户（可用 ¥5000.00）",
+      "httpStatus": 200,
+      "code": "OK",
+      "elapsedMs": 2065,
+      "sentContinuation": true,
+      "status": "awaiting_confirmation",
+      "action": "transfer.create",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 50000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 450000,
+        "availableBalanceAfterFen": 450000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "改成400元",
+      "httpStatus": 200,
+      "code": "OK",
+      "elapsedMs": 1586,
+      "sentContinuation": true,
+      "status": "awaiting_confirmation",
+      "action": "transfer.create",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 40000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 460000,
+        "availableBalanceAfterFen": 460000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "查看日常虚拟卡",
+      "httpStatus": 200,
+      "code": "OK",
+      "elapsedMs": 1700,
+      "sentContinuation": false,
+      "status": "card_result",
+      "action": "card.get"
+    },
+    {
+      "message": "刷新后返回转账改300元",
+      "httpStatus": 200,
+      "code": "OK",
+      "elapsedMs": 2799,
+      "sentContinuation": true,
+      "status": "awaiting_confirmation",
+      "action": "transfer.create",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 30000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 470000,
+        "availableBalanceAfterFen": 470000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "确认转账",
+      "httpStatus": 403,
+      "code": "PREVIEW_ONLY",
+      "elapsedMs": 29,
+      "sentContinuation": true,
+      "status": "error"
+    },
+    {
+      "message": "取消",
+      "httpStatus": 200,
+      "code": "OK",
+      "elapsedMs": 29,
+      "sentContinuation": true,
+      "status": "cancelled",
+      "action": "transfer.create"
+    }
+  ],
+  "checks": [
+    "production static UI hydration and real bill statistics",
+    "zero balance rejected without a fake preview, actionable recovery",
+    "account recovery, amount edit and cross-Skill card query",
+    "refresh restores history and original transfer continuation; new formal 300 yuan preview",
+    "chat confirmation and direct Core execution refused; cancellation without execution"
+  ],
+  "browserErrors": [],
+  "mobileHorizontalOverflow": false,
+  "success": true
+}
