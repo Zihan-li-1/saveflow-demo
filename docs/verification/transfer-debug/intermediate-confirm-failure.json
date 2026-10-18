@@ -1,0 +1,127 @@
+{
+  "at": "2026-10-17T09:05:03.266Z",
+  "realTrueforgeAndDeepseekAndMcp": true,
+  "checks": [
+    "exact two-message reproduction: 500→400, same resolved payer/payee, new formal preview, full five-message history",
+    "refresh restores messages/opaque continuation, requires access code and consent again, sends no automatic request",
+    "amount form prevents reload and resumes restored Session; identical replay returns same operation without new preview",
+    "payee form uses real disambiguation choices and preserves payer/amount; no guessed IDs"
+  ],
+  "requests": [
+    {
+      "message": "从模拟活期账户转账500元给房东王先生",
+      "elapsedMs": 1771,
+      "status": 200,
+      "code": "OK",
+      "source": "trueforge-mcp",
+      "operationId": "tfpreview:op_8f893004-af66-4acb-aa25-c7f598e0d1d4",
+      "previewHash": "c4eb269e34ef84038789d49b3f217ac1665123bac0601dd9d336928dee218259",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 50000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 450000,
+        "availableBalanceAfterFen": 450000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "改成转账400元",
+      "elapsedMs": 1626,
+      "status": 200,
+      "code": "OK",
+      "source": "trueforge-mcp",
+      "operationId": "tfpreview:op_d2d6b117-995c-463d-ad63-67a263af84ad",
+      "previewHash": "509644509ae2b105a62f6e058ca1d0d4b16c02af83f3478cedfef29bc068d843",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 40000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 460000,
+        "availableBalanceAfterFen": 460000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "card: 修改金额350",
+      "elapsedMs": 2039,
+      "status": 200,
+      "code": "OK",
+      "source": "trueforge-mcp",
+      "operationId": "tfpreview:op_fadfa52e-d9f4-4e37-93bf-4960b38d3bb5",
+      "previewHash": "e7a7732ae7942d073dbb48eda28e40e1d98a80a1a301fa4eb861baea8df4eee2",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 35000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 465000,
+        "availableBalanceAfterFen": 465000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "card: 修改收款人为王先生",
+      "elapsedMs": 2262,
+      "status": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "source": "trueforge-mcp",
+      "slot": "payee_ref"
+    },
+    {
+      "message": "candidate: 王强",
+      "elapsedMs": 1986,
+      "status": 200,
+      "code": "OK",
+      "source": "trueforge-mcp",
+      "operationId": "tfpreview:op_af0f697e-1e40-437b-b5c6-16562a835422",
+      "previewHash": "c0b9e54b70386d7245575145530e446517837ccf2543c86f5fccb14eda77aaaa",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_004",
+        "payeeName": "王强",
+        "accountNoMasked": "****1004",
+        "amountFen": 35000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 465000,
+        "availableBalanceAfterFen": 465000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    }
+  ],
+  "browserErrors": [],
+  "success": false,
+  "error": "page.waitForFunction: Timeout 30000ms exceeded."
+}

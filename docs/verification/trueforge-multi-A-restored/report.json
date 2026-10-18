@@ -1,0 +1,77 @@
+{
+  "phase": "A-restored",
+  "realTrueforgeAndMcpAndUi": true,
+  "checks": [
+    "card query",
+    "ambiguous card choice in same session",
+    "unknown card does not invent a result",
+    "subscriptions from actual Mock",
+    "products and narrow card layout",
+    "bill regression"
+  ],
+  "requests": [
+    {
+      "message": "查看娱乐虚拟卡",
+      "elapsedMs": 1531,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "card_result",
+      "action": "card.get",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "查看我的卡",
+      "elapsedMs": 1359,
+      "httpStatus": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "status": "needs_clarification",
+      "action": "card.get",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "candidate choice",
+      "elapsedMs": 1818,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "card_result",
+      "action": "card.get",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "查看不存在卡",
+      "elapsedMs": 1213,
+      "httpStatus": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "status": "needs_clarification",
+      "action": "card.get",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "查询订阅",
+      "elapsedMs": 1383,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "subscription_result",
+      "action": "subscription.list",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "查询理财产品",
+      "elapsedMs": 1931,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "product_result",
+      "action": "product.list",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "查询2026年8月账单",
+      "elapsedMs": 1504,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "bill_result",
+      "action": "bill.summary"
+    }
+  ],
+  "success": true
+}

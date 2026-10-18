@@ -1,0 +1,49 @@
+{
+  "checkedAt": "2026-10-18T10:51:22.200Z",
+  "id": "6ad4a3ebf7b8f5ab5b5f1b17",
+  "buildId": "6ad4a3ebf7b8f5ab5b5f1b15",
+  "state": "ready",
+  "context": "deploy-preview",
+  "branch": "spike/trueforge-harness",
+  "reviewId": 13,
+  "commitRef": "49c32a50eb0c6bbd8e561bae1b334cf19b84411b",
+  "previewUrl": "https://deploy-preview-13--startling-flan-ed8dcb.netlify.app",
+  "immutableUrl": "http://deploy-preview-13--startling-flan-ed8dcb.netlify.app",
+  "adminUrl": "https://app.netlify.com/projects/startling-flan-ed8dcb",
+  "pluginState": "success",
+  "summary": {
+    "status": "ready",
+    "messages": [
+      {
+        "type": "info",
+        "title": "15 new files uploaded",
+        "description": "4 generated pages and 11 assets changed.",
+        "details": "New pages include:\n- index.html\n- 404.html\n- 404/index.html\n- _not-found/index.html\n"
+      },
+      {
+        "type": "info",
+        "title": "3 redirect rules processed",
+        "description": "All redirect rules deployed without errors.",
+        "details": ""
+      },
+      {
+        "type": "info",
+        "title": "1 header rule processed",
+        "description": "All header rules deployed without errors.",
+        "details": ""
+      },
+      {
+        "type": "info",
+        "title": "4 functions deployed",
+        "description": "We have deployed 4 functions. [Visit your Functions](/projects/startling-flan-ed8dcb/logs/functions?scope=deploypreview:13) for more information.",
+        "details": null
+      },
+      {
+        "type": "info",
+        "title": "No edge functions deployed",
+        "description": "This deploy did not include any edge functions. [Learn more about Edge Functions](https://docs.netlify.com/edge-functions/overview/)",
+        "details": null
+      }
+    ]
+  }
+}

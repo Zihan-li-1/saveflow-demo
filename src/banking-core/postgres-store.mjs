@@ -9,7 +9,16 @@ let configuredUrl;
 let configuredCore;
 
 function fromRecord(record) {
-  return record ? structuredClone(record) : undefined;
+  if (record === undefined) return undefined;
+  // postgres parses JSONB itself. Older releases stored a JSON string inside
+  // JSONB; decode that one legacy layer without weakening conflict checks.
+  try {
+    const decoded = typeof record === 'string' ? JSON.parse(record) : record;
+    if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error('Invalid record');
+    return structuredClone(decoded);
+  } catch {
+    throw new BankingError('VALIDATION_ERROR', '持久化记录格式无效，请核查数据库');
+  }
 }
 
 function accountFromRow(row, sourceAccount) {
@@ -51,7 +60,7 @@ export async function createPostgresBankingCore({ connectionString, source = see
       await tx.unsafe(
         `INSERT INTO banking_transactions (owner_id, transaction_id, account_id, operation_id, occurred_at, amount_fen, record)
          VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb) ON CONFLICT (owner_id, transaction_id) DO NOTHING`,
-        [ownerId, transaction.id, transaction.accountId, transaction.operationId ?? null, transaction.occurredAt, transaction.amountFen, JSON.stringify(transaction)],
+        [ownerId, transaction.id, transaction.accountId, transaction.operationId ?? null, transaction.occurredAt, transaction.amountFen, tx.json(transaction)],
       );
     }
     for (const card of staticCards) {
@@ -93,9 +102,9 @@ export async function createPostgresBankingCore({ connectionString, source = see
       const clauses = ['owner_id = $1'];
       const params = [ownerId];
       if (filter.accountId) { params.push(filter.accountId); clauses.push(`account_id = $${params.length}`); }
-      if (filter.month) { params.push(`${filter.month}-%`); clauses.push(`record->>'occurredAt' LIKE $${params.length}`); }
+      if (filter.month) { params.push(filter.month); clauses.push(`to_char(occurred_at AT TIME ZONE 'UTC', 'YYYY-MM') = $${params.length}`); }
       const rows = await sql.unsafe(`SELECT record FROM banking_transactions WHERE ${clauses.join(' AND ')} ORDER BY occurred_at, transaction_id`, params);
-      return rows.map(row => structuredClone(row.record));
+      return rows.map(row => fromRecord(row.record));
     },
   });
 
@@ -111,7 +120,7 @@ export async function createPostgresBankingCore({ connectionString, source = see
       assertId(owner); assertId(record.operationId);
       await sql.begin(async tx => {
         const [row] = await tx.unsafe('SELECT record FROM banking_operations WHERE owner_id = $1 AND operation_id = $2 FOR UPDATE', [owner, record.operationId]);
-        const existing = row?.record;
+        const existing = fromRecord(row?.record);
         if (existing && (existing.action !== record.action || existing.fingerprint !== record.fingerprint)) throw new BankingError('IDEMPOTENCY_CONFLICT', '同一操作编号不能更改动作或参数，请先查询原操作', true);
         if (existing?.decision && record.decision && canonical({ previewHash: existing.decision.previewHash, decision: existing.decision.decision, confirmedStepIds: existing.decision.confirmedStepIds }) !== canonical({ previewHash: record.decision.previewHash, decision: record.decision.decision, confirmedStepIds: record.decision.confirmedStepIds })) throw new BankingError('IDEMPOTENCY_CONFLICT', '此操作已有不同的确认决定', true);
         if (existing?.receipt && !record.receipt) return;
@@ -120,7 +129,7 @@ export async function createPostgresBankingCore({ connectionString, source = see
           `INSERT INTO banking_operations (owner_id, operation_id, action, fingerprint, state, record)
            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
            ON CONFLICT (owner_id, operation_id) DO UPDATE SET action = EXCLUDED.action, fingerprint = EXCLUDED.fingerprint, state = EXCLUDED.state, record = EXCLUDED.record, updated_at = now()`,
-          [owner, record.operationId, record.action, record.fingerprint, record.state, JSON.stringify(record)],
+          [owner, record.operationId, record.action, record.fingerprint, record.state, tx.json(record)],
         );
       });
     },
@@ -134,7 +143,7 @@ export async function createPostgresBankingCore({ connectionString, source = see
     async commitCard(owner, record, effect, makeReceipt) {
       return sql.begin(async tx => {
         const [operationRow] = await tx.unsafe('SELECT record FROM banking_operations WHERE owner_id = $1 AND operation_id = $2 FOR UPDATE', [owner, record.operationId]);
-        const persisted = operationRow?.record;
+        const persisted = fromRecord(operationRow?.record);
         if (!persisted) throw new BankingError('OPERATION_NOT_FOUND', '未取得此操作的记录', true);
         if (persisted.receipt) return structuredClone(persisted.receipt);
         if (persisted.action !== effect.action || persisted.state !== 'executing' || persisted.decision?.decision !== 'confirm' || persisted.preview?.previewHash !== record.preview?.previewHash) throw new BankingError('INVALID_STATE', '卡片操作未处于已确认的执行状态', true);
@@ -144,14 +153,14 @@ export async function createPostgresBankingCore({ connectionString, source = see
         const receipt = makeReceipt();
         persisted.receipt = receipt;
         persisted.state = 'succeeded';
-        await tx.unsafe('UPDATE banking_operations SET state = $3, record = $4::jsonb, updated_at = now() WHERE owner_id = $1 AND operation_id = $2', [owner, record.operationId, persisted.state, JSON.stringify(persisted)]);
+        await tx.unsafe('UPDATE banking_operations SET state = $3, record = $4::jsonb, updated_at = now() WHERE owner_id = $1 AND operation_id = $2', [owner, record.operationId, persisted.state, tx.json(persisted)]);
         return structuredClone(receipt);
       });
     },
     async commitTransfer(owner, record, effect, at, makeReceipt) {
       return sql.begin(async tx => {
         const [operationRow] = await tx.unsafe('SELECT record FROM banking_operations WHERE owner_id = $1 AND operation_id = $2 FOR UPDATE', [owner, record.operationId]);
-        const persisted = operationRow?.record;
+        const persisted = fromRecord(operationRow?.record);
         if (!persisted) throw new BankingError('OPERATION_NOT_FOUND', '未取得此操作的记录，请保留原编号继续核实', true);
         if (persisted.receipt) return structuredClone(persisted.receipt);
         if (persisted.action !== 'transfer_money' || persisted.state !== 'executing' || persisted.decision?.decision !== 'confirm' || persisted.preview?.previewHash !== record.preview?.previewHash) {
@@ -181,14 +190,14 @@ export async function createPostgresBankingCore({ connectionString, source = see
         await tx.unsafe(
           `INSERT INTO banking_transactions (owner_id, transaction_id, account_id, operation_id, occurred_at, amount_fen, record)
            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
-          [owner, transaction.id, transaction.accountId, transaction.operationId, transaction.occurredAt, transaction.amountFen, JSON.stringify(transaction)],
+          [owner, transaction.id, transaction.accountId, transaction.operationId, transaction.occurredAt, transaction.amountFen, tx.json(transaction)],
         );
         const receipt = makeReceipt(transaction);
         persisted.receipt = receipt;
         persisted.state = 'succeeded';
         await tx.unsafe(
           'UPDATE banking_operations SET state = $3, record = $4::jsonb, updated_at = now() WHERE owner_id = $1 AND operation_id = $2',
-          [owner, record.operationId, persisted.state, JSON.stringify(persisted)],
+          [owner, record.operationId, persisted.state, tx.json(persisted)],
         );
         return structuredClone(receipt);
       });

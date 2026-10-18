@@ -1,0 +1,15 @@
+.git
+.next
+out
+node_modules
+coverage
+.env*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.zip
+*.tsbuildinfo
+next-env.d.ts
+docs/verification
+*.log

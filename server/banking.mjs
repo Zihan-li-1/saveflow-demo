@@ -5,6 +5,7 @@ import { dispatchBanking } from '../src/banking-core/dispatch.mjs';
 import { legacyRequest } from '../src/banking-core/legacy-adapter.mjs';
 import { WIRE_VERSION, fromWire, toWire } from '../src/banking-core/wire.mjs';
 import { canonical } from '../src/banking-core/errors.mjs';
+import { isTrialOperationId } from '../src/lib/trial-preview.mjs';
 
 async function bodyJson(request) {
   if (request.headers.get('content-type')?.split(';')[0].trim() !== 'application/json') throw new BankingError('VALIDATION_ERROR', '需要 application/json');
@@ -40,6 +41,9 @@ export async function handleBanking(request, { env = process.env, core: provided
     if (origin && origin !== new URL(request.url).origin) throw new BankingError('FORBIDDEN', '不允许跨来源请求');
     const body = await bodyJson(request);
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new BankingError('VALIDATION_ERROR', '请求体必须为对象');
+    if ([body.input?.operation_id, body.input?.operationId, body.operationId, body.operation_id].some(isTrialOperationId)) {
+      throw new BankingError('FORBIDDEN', 'TrueForge 试点操作仅供预览，不能交给网站 Core 确认、执行或查询。');
+    }
     if (legacy) {
       const { action, ...input } = body;
       const data = await legacyRequest(action, input, request.headers.get('Idempotency-Key') ?? '', core);

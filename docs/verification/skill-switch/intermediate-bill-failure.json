@@ -1,0 +1,122 @@
+{
+  "at": "2026-10-17T11:05:12.057Z",
+  "realTrueforgeMcpHttpUi": true,
+  "checks": [
+    "转账预览 → 改成300元",
+    "转账预览 → 查看我的卡，单独凭据/真实候选，历史保留",
+    "转账预览 → 卡片查询 → 返回修改原转账，账户/收款人不变，旧版本仍禁用"
+  ],
+  "requests": [
+    {
+      "message": "从模拟活期账户转账500元给房东王先生",
+      "elapsedMs": 1933,
+      "status": 200,
+      "code": "OK",
+      "sentToken": false,
+      "action": "transfer.create",
+      "resultStatus": "awaiting_confirmation",
+      "operationId": "tfpreview:op_0002558e-804f-485f-890e-07ea41d93a2f",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 50000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 450000,
+        "availableBalanceAfterFen": 450000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "改成300元",
+      "elapsedMs": 1937,
+      "status": 200,
+      "code": "OK",
+      "sentToken": true,
+      "action": "transfer.create",
+      "resultStatus": "awaiting_confirmation",
+      "operationId": "tfpreview:op_82a9c3ef-142d-4fd1-be65-c746d122ffc8",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 30000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 470000,
+        "availableBalanceAfterFen": 470000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "查看我的卡",
+      "elapsedMs": 1737,
+      "status": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "sentToken": false,
+      "action": "card.get",
+      "resultStatus": "needs_clarification",
+      "slot": "card_ref"
+    },
+    {
+      "message": "选择真实卡片候选",
+      "elapsedMs": 1971,
+      "status": 200,
+      "code": "OK",
+      "sentToken": true,
+      "action": "card.get",
+      "resultStatus": "card_result"
+    },
+    {
+      "message": "原预览修改为250元",
+      "elapsedMs": 2185,
+      "status": 200,
+      "code": "OK",
+      "sentToken": true,
+      "action": "transfer.create",
+      "resultStatus": "awaiting_confirmation",
+      "operationId": "tfpreview:op_09973a28-aaa4-4d7a-85a2-fdeeb16cb808",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 25000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 475000,
+        "availableBalanceAfterFen": 475000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "查询8月账单",
+      "elapsedMs": 1183,
+      "status": 502,
+      "code": "TRUEFORGE_FORMAT_ERROR",
+      "sentToken": false,
+      "resultStatus": "error"
+    }
+  ],
+  "errors": [],
+  "success": false,
+  "error": "Expected values to be strictly equal:\n\n502 !== 200\n"
+}

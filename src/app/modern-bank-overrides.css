@@ -22,3 +22,7 @@
 .banking-preview-card p { margin: 5px 0 0; color: #536171; font-size: 12px; }
 .card-action-preview .secondary-button { margin-top: 12px; }
 .card-action-preview .secondary-button:disabled { opacity: .75; cursor: default; }
+.transfer-preview-actions, .transfer-preview-edit { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.transfer-preview-edit label { display: flex; align-items: center; gap: 8px; }
+.transfer-preview-edit input { width: 160px; padding: 8px; border: 1px solid #ccd5e0; border-radius: 8px; }
+.transfer-preview-actions button:disabled { opacity: .5; cursor: not-allowed; }

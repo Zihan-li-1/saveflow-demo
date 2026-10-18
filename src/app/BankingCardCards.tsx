@@ -1,6 +1,7 @@
 "use client";
 
 import type { BankingAgentData } from "@/lib/banking-agent-client";
+import { isTrialPreview } from "@/lib/trial-preview.mjs";
 
 const yuan = (fen: unknown) => `¥${(Number(fen) / 100).toFixed(2)}`;
 const cardStatus = (status: unknown) => status === "frozen" ? "已冻结" : "正常";
@@ -22,18 +23,21 @@ export function BankingCardPreview({ data, active, busy, onConfirm, onReject, on
   const preview = data?.preview;
   const effect = (preview?.exactEffects as Effect[] | undefined)?.[0];
   if (!data || !effect || !preview) return null;
+  const trial = isTrialPreview(data);
   const operation = data.action === "card.set_budget" ? "设置月消费预算" : data.action === "card.freeze" ? "冻结卡片" : "解冻卡片";
   const change = data.action === "card.set_budget" ? `${yuan(effect.before.monthlyBudgetFen)} → ${yuan(effect.after.monthlyBudgetFen)}` : `${cardStatus(effect.before.status)} → ${cardStatus(effect.after.status)}`;
   return <div className="banking-preview-card card-action-preview">
-    <div><b>卡片操作预览</b><span>{active ? "等待确认" : "已失效"}</span></div>
+    <div><b>卡片操作预览</b><span>{trial ? data.previewCurrent === false ? "旧预览 · 已替换" : "仅供预览 · 尚未执行" : active ? "等待确认" : "已失效"}</span></div>
     <strong>{effect.cardName}</strong>
     <p>操作：{operation}</p>
     <p>变更前后：{change}</p>
     <small>卡片版本 {effect.cardVersion} · 风险等级 {String(data.risk?.riskLevel || "未知")} · 有效期至 {String(preview.expiresAt || "未知")}</small>
     {Array.isArray(preview.warnings) && preview.warnings.map((warning, index) => <small key={index}>{String(warning)}</small>)}
     <small>预览哈希：{String(preview.previewHash).slice(0, 16)}…</small>
-    <button type="button" className="primary-button" onClick={() => onConfirm(data)} disabled={!active || busy}>{busy ? "处理中…" : "确认并执行"}</button>
-    {active && <button type="button" className="secondary-button" onClick={() => onReject(data)} disabled={busy}>取消本次操作</button>}
-    <button type="button" className="secondary-button" onClick={() => onCheck(data)} disabled={busy}>查询操作状态</button>
+    {trial ? <small>仅供预览，不支持确认或执行。可在聊天中改金额、换卡或取消。</small> : <>
+      <button type="button" className="primary-button" onClick={() => onConfirm(data)} disabled={!active || busy}>{busy ? "处理中…" : "确认并执行"}</button>
+      {active && <button type="button" className="secondary-button" onClick={() => onReject(data)} disabled={busy}>取消本次操作</button>}
+      <button type="button" className="secondary-button" onClick={() => onCheck(data)} disabled={busy}>查询操作状态</button>
+    </>}
   </div>;
 }

@@ -1,0 +1,5 @@
+     action     |   state   | json_type | has_fingerprint_field | count 
+----------------+-----------+-----------+-----------------------+-------
+ transfer_money | preparing | string    | f                     |     2
+(1 row)
+

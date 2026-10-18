@@ -1,0 +1,10 @@
+{
+  "realSdkAndHttp": true,
+  "modelOrMcpEndToEnd": false,
+  "fault": "stalled SSE before tool execution",
+  "elapsedMs": 25025,
+  "stalled": 1,
+  "cancelRequests": 1,
+  "code": "TRUEFORGE_TIMEOUT",
+  "httpStatus": 504
+}

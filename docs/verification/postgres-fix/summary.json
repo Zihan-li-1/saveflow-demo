@@ -1,0 +1,54 @@
+﻿{
+    "date":  "2026-10-18",
+    "branch":  "spike/trueforge-harness",
+    "originalPostgres":  {
+                             "failed":  0,
+                             "skipped":  0,
+                             "total":  189,
+                             "passed":  189
+                         },
+    "finalPostgres":  {
+                          "failed":  0,
+                          "skipped":  0,
+                          "total":  194,
+                          "passed":  194
+                      },
+    "mock":  {
+                 "failed":  0,
+                 "skipped":  7,
+                 "total":  194,
+                 "passed":  187
+             },
+    "quality":  {
+                    "nextTypegen":  "passed",
+                    "typecheck":  "passed",
+                    "productionDockerBuild":  "passed",
+                    "lint":  "passed"
+                },
+    "realHttp":  {
+                     "failed":  0,
+                     "total":  16,
+                     "passed":  16
+                 },
+    "realUi":  {
+                   "assertionsPassed":  true,
+                   "requests":  10
+               },
+    "corePersistencePassed":  true,
+    "endToEndContinuationPersistencePassed":  false,
+    "overallAcceptancePassed":  false,
+    "safeToMergeMain":  false,
+    "realFundsEnabled":  false,
+    "gitCommitCreated":  false,
+    "pushed":  false,
+    "merged":  false,
+    "deployed":  false,
+    "blockers":  [
+                     "tfm1 adapter state is process-local",
+                     "tfb1 bill adapter state is process-local",
+                     "tfg1 bridge alias/replay state is process-local"
+                 ],
+    "notVerified":  [
+                        "TrueForge host service restart and disaster recovery"
+                    ]
+}

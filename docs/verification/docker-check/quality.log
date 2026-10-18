@@ -1,0 +1,18 @@
+docker :  Container saveflow-local-check-tests-run-8287396c8bd3 Creating 
+At line:2 char:1
++ docker compose --env-file .env.local --profile test run --rm --no-dep ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ( Container save...c8bd3 Creating :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+ Container saveflow-local-check-tests-run-8287396c8bd3 Created 
+
+> saveflow-demo@0.1.0 lint
+> eslint
+
+Generating route types...
+✓ Types generated successfully
+
+> saveflow-demo@0.1.0 typecheck
+> tsc --noEmit
+

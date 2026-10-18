@@ -1,0 +1,9 @@
+{
+  "realHttpChecks": [],
+  "fixtureChecks": [],
+  "screenshots": [
+    "before-desktop-page.png",
+    "before-desktop-card.png"
+  ],
+  "success": true
+}
