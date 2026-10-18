@@ -39,8 +39,8 @@ export function createBankingCore(options = {}) {
   /** @type {import('./contracts').BankingOperationStore} */
   const store = options.store ?? new OperationStore();
   const now = options.now ?? Date.now;
-  const policy = Object.freeze({ version: 'mock-transfer-v1', maxTransferFen: 10000000, previewTtlMs: 300000, ...options.policy });
-  assertFen(policy.maxTransferFen); assertFen(policy.previewTtlMs);
+  const policy = Object.freeze({ version: 'mock-transfer-v1', maxTransferFen: 10000000, previewTtlMs: 300000, largeTransferFen: 100000, ...options.policy });
+  assertFen(policy.maxTransferFen); assertFen(policy.previewTtlMs); assertFen(policy.largeTransferFen);
   /** @type {import('./contracts').AuditEvent[]} */
   const audit = [];
   /** @type {Map<string, Promise<import('./contracts').ActionResult<import('./contracts').ActionReceipt>>>} */
@@ -84,7 +84,10 @@ export function createBankingCore(options = {}) {
       if (input.amountFen > policy.maxTransferFen) throw new BankingError('LIMIT_EXCEEDED', '超过 Mock 单笔转账限额');
       return true;
     });
-    return { allowed: result.ok, riskLevel: 'L3', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', warnings: ['合成数据模拟转账，不接真实银行；此确认仅用于 Mock。'], ...(!result.ok ? { error: result.error } : {}) };
+    const largeTransfer = input.amountFen > policy.largeTransferFen;
+    const warnings = ['合成数据模拟转账，不接真实银行；此确认仅用于 Mock。'];
+    if (largeTransfer) warnings.push(`大额转账（>¥${(policy.largeTransferFen / 100).toFixed(2)}）需短信验证码（演示码 123456）。`);
+    return { allowed: result.ok, riskLevel: 'L3', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', requiredVerification: largeTransfer ? 'mock_sms' : 'none', ...(largeTransfer ? { verificationCode: '123456' } : {}), warnings, ...(!result.ok ? { error: result.error } : {}) };
   }
   /** @param {import('./contracts').TransferInput} input @returns {Promise<import('./contracts').TransferEffect>} */
   async function effectFor(input) {

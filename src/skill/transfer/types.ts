@@ -30,7 +30,9 @@ export interface Payee {
   /** 收款人姓名 */
   name: string;
   /** 别名（口语称呼），用于 payee_ref 匹配 */
-  aliases?: string[];
+  aliases: string[];
+  /** 脱敏账号（如 "****1001"），用于候选列表展示，与 runtime.mjs 对齐 */
+  accountNoMasked: string;
 }
 
 /** 账户实体（由 FinancialContextRepository 提供） */
@@ -52,6 +54,11 @@ export interface FinancialContextRepository {
   /** 按收款人姓名（含别名）查询收款人列表（可能 0 / 1 / 多个） */
   queryPayeesByName(name: string): Promise<Payee[]> | Payee[];
 }
+
+/** 澄清续接时用户已选定的实体（key 为槽位名；entityId 即服务端 entity_id） */
+export type SlotSelections = Partial<
+  Record<"source_account_ref" | "payee_ref", { entityId?: string; optionId?: string }>
+>;
 
 /** 解析后的实体引用（对齐 wire.mjs 的 references 结构） */
 export interface EntityReference {

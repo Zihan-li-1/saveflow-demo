@@ -31,6 +31,8 @@ export type DispatchResult =
       source: "parser" | "resolver";
       missingSlots?: string[];
       question?: string;
+      slot?: string;
+      reason?: string;
       candidates?: unknown[];
     }
   | {
