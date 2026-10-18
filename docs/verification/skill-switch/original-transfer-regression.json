@@ -1,0 +1,140 @@
+{
+  "at": "2026-10-17T11:09:37.494Z",
+  "realTrueforgeAndDeepseekAndMcp": true,
+  "checks": [
+    "exact two-message reproduction: 500→400, same resolved payer/payee, new formal preview, full five-message history",
+    "refresh restores messages/opaque continuation, requires access code and consent again, sends no automatic request",
+    "amount form prevents reload and resumes restored Session; identical replay returns same operation without new preview",
+    "payee form uses real disambiguation choices and preserves payer/amount; no guessed IDs",
+    "chat confirmation blocked, cancel button ends session, direct Core execution forbidden, cancelled credentials stale, all fifteen messages retained"
+  ],
+  "requests": [
+    {
+      "message": "从模拟活期账户转账500元给房东王先生",
+      "elapsedMs": 1796,
+      "status": 200,
+      "code": "OK",
+      "source": "trueforge-mcp",
+      "operationId": "tfpreview:op_50f1496b-bf35-4bc0-a684-1c19c7dc71ec",
+      "previewHash": "f5b88223c7c915f4499be7fc88071daeab6f0435299d08c1b8ee4cfbd28be419",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 50000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 450000,
+        "availableBalanceAfterFen": 450000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "改成转账400元",
+      "elapsedMs": 2000,
+      "status": 200,
+      "code": "OK",
+      "source": "trueforge-mcp",
+      "operationId": "tfpreview:op_eb04c3ca-6294-4377-b256-ccff9f7eadca",
+      "previewHash": "e91abc99f02dd55d2419892668f366046d3828805b5fe4100c1dd22ce3eab164",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 40000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 460000,
+        "availableBalanceAfterFen": 460000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "card: 修改金额350",
+      "elapsedMs": 2942,
+      "status": 200,
+      "code": "OK",
+      "source": "trueforge-mcp",
+      "operationId": "tfpreview:op_3a0fe39b-7d75-4191-90be-b8e3a499e8a4",
+      "previewHash": "e750e2886d335ed2d49dc18e932aab7e10c5f5ab9e73e37552b50d87e1dc3b7f",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 35000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 465000,
+        "availableBalanceAfterFen": 465000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "card: 修改收款人为王先生",
+      "elapsedMs": 3229,
+      "status": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "source": "trueforge-mcp",
+      "slot": "payee_ref"
+    },
+    {
+      "message": "candidate: 王强",
+      "elapsedMs": 2689,
+      "status": 200,
+      "code": "OK",
+      "source": "trueforge-mcp",
+      "operationId": "tfpreview:op_d7688237-eeae-420e-99ef-4d663c6a76bc",
+      "previewHash": "8d818653ec4950830057147cc947cd75d3b42c80dc9d0ce7019410489fd348e8",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_004",
+        "payeeName": "王强",
+        "accountNoMasked": "****1004",
+        "amountFen": 35000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 465000,
+        "availableBalanceAfterFen": 465000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "确认转账",
+      "elapsedMs": 87,
+      "status": 403,
+      "code": "PREVIEW_ONLY"
+    },
+    {
+      "message": "card: 取消",
+      "elapsedMs": 454,
+      "status": 200,
+      "code": "OK",
+      "source": "trueforge-mcp"
+    }
+  ],
+  "browserErrors": [],
+  "success": true
+}

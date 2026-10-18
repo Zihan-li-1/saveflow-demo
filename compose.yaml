@@ -1,0 +1,91 @@
+name: saveflow-local-check
+services:
+  web:
+    image: saveflow-docker-test:local
+    build:
+      context: .
+      target: runtime
+    init: true
+    ports:
+      - "127.0.0.1:4300:3000"
+    environment:
+      SAVEFLOW_ACCESS_CODE: ${SAVEFLOW_ACCESS_CODE:?Use --env-file .env.local}
+      CONTINUATION_TOKEN_SECRET: ${CONTINUATION_TOKEN_SECRET:?Use --env-file .env.local}
+      SAVEFLOW_TRUEFORGE_BILL_ENABLED: "true"
+      SAVEFLOW_TRUEFORGE_READ_ENABLED: "true"
+      SAVEFLOW_TRUEFORGE_TRANSFER_ENABLED: "true"
+      SAVEFLOW_TRUEFORGE_CARD_PREVIEW_ENABLED: "true"
+      TRUEFORGE_BASE_URL: http://host.docker.internal:8790
+      TRUEFORGE_MODEL: ${TRUEFORGE_MODEL:-test/deepseek-v4-1-flash}
+      TRUEFORGE_TOKEN: ${TRUEFORGE_TOKEN:-}
+      TRUEFORGE_MCP_SERVER: saveflow-docker-mcp
+      TRUEFORGE_SKILL_MCP_SERVER: saveflow-docker-bridge
+      SAVEFLOW_TRUEFORGE_AUDIT_FILE: /tmp/trueforge-audit.jsonl
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      QWEN_MODEL: ${QWEN_MODEL:-qwen-plus}
+      QWEN_BASE_URL: ${QWEN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      DATABASE_URL: ""
+      ALLOW_EPHEMERAL_BANKING: "true"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  mcp:
+    image: saveflow-docker-test:local
+    command: [node, server/mcp/saveflow-trial.mjs]
+    init: true
+    ports:
+      - "127.0.0.1:4333:3333"
+    environment:
+      SAVEFLOW_MCP_HOST: 0.0.0.0
+      CONTINUATION_TOKEN_SECRET: ${CONTINUATION_TOKEN_SECRET:?Use --env-file .env.local}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3333/mcp').then(r=>process.exit(r.status===405?0:1)).catch(()=>process.exit(1))"]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  bridge:
+    image: saveflow-docker-test:local
+    command: [node, server/mcp/trueforge-token-bridge.mjs]
+    init: true
+    ports:
+      - "127.0.0.1:4334:3334"
+    environment:
+      SAVEFLOW_BRIDGE_HOST: 0.0.0.0
+      SAVEFLOW_BRIDGE_UPSTREAM_URL: http://mcp:3333/mcp
+    depends_on:
+      mcp:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3334/mcp').then(r=>process.exit(r.status===405?0:1)).catch(()=>process.exit(1))"]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  test-db:
+    image: postgres:17-bookworm
+    profiles: [test]
+    environment:
+      POSTGRES_USER: saveflow_test
+      POSTGRES_PASSWORD: local-isolated-test-only
+      POSTGRES_DB: saveflow_test
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U saveflow_test -d saveflow_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+  tests:
+    image: saveflow-docker-tests:local
+    profiles: [test]
+    build:
+      context: .
+      target: test
+    depends_on:
+      test-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://saveflow_test:local-isolated-test-only@test-db:5432/saveflow_test
+      BANKING_TEST_DATABASE_URL: postgresql://saveflow_test:local-isolated-test-only@test-db:5432/saveflow_test
+    command: [sh, -c, "npm run db:migrate && npm test && npm run lint && npx next typegen && npm run typecheck"]

@@ -1,0 +1,1230 @@
+{
+  "at": "2026-10-18T10:37:15.284Z",
+  "branch": "spike/trueforge-harness",
+  "head": "eef277032ea7274d45342ba2a3b53b4f8098cf1e",
+  "main": "07d5667599601fd0b4ef97d82082362946876b8f",
+  "envLocalIgnored": true,
+  "envLocalTracked": false,
+  "configuredSecretCount": 2,
+  "scannedGitFiles": 298,
+  "scannedStaticFiles": 41,
+  "findings": [],
+  "runtimeBoundary": {
+    "staticFiles": 41,
+    "findings": [],
+    "envFilePresent": false,
+    "uid": 1000,
+    "websitePostgresConfigured": true,
+    "hashes": {
+      "src/banking-core/postgres-store.mjs": "f6675916cdb7bda10c39e6c438233963713455cdb97732f21efa348f44a0ed2d",
+      "server/mcp/saveflow-trial.mjs": "6c3e36525778d797d072e2706c186391a1a10ce3cc0607adee4205dc8c8ef1c3"
+    },
+    "sourceHashMatches": true
+  },
+  "trackedGeneratedFilesToExcludeFromCommit": [
+    "next-env.d.ts",
+    "tsconfig.tsbuildinfo"
+  ],
+  "pendingFileCount": 193,
+  "files": [
+    {
+      "path": ".dockerignore",
+      "generated": false
+    },
+    {
+      "path": "Dockerfile",
+      "generated": false
+    },
+    {
+      "path": "compose.postgres.yaml",
+      "generated": false
+    },
+    {
+      "path": "compose.yaml",
+      "generated": false
+    },
+    {
+      "path": "docs/banking-bill-card-ui.md",
+      "generated": false
+    },
+    {
+      "path": "docs/docker-test-report.md",
+      "generated": false
+    },
+    {
+      "path": "docs/trueforge-balance-recovery.md",
+      "generated": false
+    },
+    {
+      "path": "docs/trueforge-bill-adapter.md",
+      "generated": false
+    },
+    {
+      "path": "docs/trueforge-multiskill.md",
+      "generated": false
+    },
+    {
+      "path": "docs/trueforge-skill-switch.md",
+      "generated": false
+    },
+    {
+      "path": "docs/trueforge-submit-review.md",
+      "generated": false
+    },
+    {
+      "path": "docs/trueforge-transfer-debug.md",
+      "generated": false
+    },
+    {
+      "path": "docs/trueforge-trial.md",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/balance-recovery/insufficient-recovery.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/balance-recovery/recovered-preview.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/balance-recovery/report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/balance-recovery/tests.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/balance-recovery/trace-checks.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/balance-recovery/trueforge-events.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/balance-recovery/user-before-events.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/bill-card/after-desktop-card.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/bill-card/after-desktop-page.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/bill-card/after-mobile-card.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/bill-card/after-mobile-page.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/bill-card/after-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/bill-card/after-zero-card.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/bill-card/after-zero-page.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/bill-card/before-desktop-card.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/bill-card/before-desktop-page.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/bill-card/before-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/bill-card/fixture-long-mobile-card.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/bill-card/fixture-long-mobile-page.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/build.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/containers.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/desktop.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/driver-selector-failure.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/environment.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/host-final-lint.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/http-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/image-boundary.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/mobile.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/mock-tests.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/postgres-record-evidence.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/quality.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/tests.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/trace-checks.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/trueforge-events.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/docker-check/ui-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-build-before-sync.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/lint-before-sync.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/mock-before-sync.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/postgres-before-sync.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/typecheck-before-sync.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/typegen-before-sync.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/desktop.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/final-lint.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/http-rate-window-attempt.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/http-rate-window-second-attempt.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/http-rate-window-third-attempt.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/http-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/http-run.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/images-build.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/mobile.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/mock-tests.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/persistence-driver-first-attempt.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/persistence-driver-order-attempt.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/persistence-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/persistence-run.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/persistent-services.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/postgres-original-189.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/postgres-regression-first-attempt.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/postgres-tests.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/proposed-commits.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/submission-audit.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/submission-audit.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/summary.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/test-image-build.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/trueforge-events.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/ui-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/postgres-fix/ui-run.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/skill-switch/after-ui.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/skill-switch/before-ui.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/skill-switch/intermediate-bill-events.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/skill-switch/intermediate-bill-failure.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/skill-switch/original-transfer-regression.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/skill-switch/switch-history.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/skill-switch/tests.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/skill-switch/trace-checks.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/skill-switch/trueforge-events.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/transfer-debug/after-events.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/transfer-debug/after-ui.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/transfer-debug/before-events.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/transfer-debug/before-ui.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/transfer-debug/card-ui-regression.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/transfer-debug/intermediate-confirm-failure.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/transfer-debug/read-ui-regression.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/transfer-debug/tests.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/transfer-debug/trace-checks.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/transfer-debug/transfer-history.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-BILL_SUMMARY_FAILED-ui-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-TRUEFORGE_UNAVAILABLE-ui-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-bill-ui.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-A-final/events.jsonl",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-A-final/report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-A-restored/events.jsonl",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-A-restored/products-mobile.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-A-restored/products.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-A-restored/report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-A-restored/subscriptions.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-A/events.jsonl",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-A/products-mobile.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-A/products.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-A/report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-A/subscriptions.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-B/events.jsonl",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-B/report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-B/skills-tests.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-B/transfer.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-C-frozen/events.jsonl",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-C-frozen/report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-C-frozen/unfreeze.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-C/budget-edit.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-C/events.jsonl",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-C/final-tests.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-C/freeze.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-C/report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-C/timeout.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-multi-F-unavailable/report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-timeout-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-ui-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/trueforge-zero-ui.png",
+      "generated": false
+    },
+    {
+      "path": "scripts/audit-trial-submission.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/configure-trueforge-bridge.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/configure-trueforge-docker.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/diagnose-skill-switch-before.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/diagnose-transfer-before.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/inspect-trueforge-transfer.py",
+      "generated": false
+    },
+    {
+      "path": "scripts/serve-container.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/serve-frozen-trial-mcp.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-banking-bill-ui.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-docker-http.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-docker-persistence.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-docker-ui.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-skill-switch-ui.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-transfer-balance-ui.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-transfer-continuation-ui.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-trueforge-bill.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-trueforge-skills-timeout.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-trueforge-skills-ui.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-trueforge-ui.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/banking-orchestrator.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/mcp/saveflow-trial.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/mcp/trueforge-token-bridge.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/trueforge-bill-adapter.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/trueforge-client.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/trueforge-skill-adapter.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/trueforge-tool-result.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/app/BankingBillCard.tsx",
+      "generated": false
+    },
+    {
+      "path": "src/app/BankingReadCards.tsx",
+      "generated": false
+    },
+    {
+      "path": "src/app/BankingTransferPreview.tsx",
+      "generated": false
+    },
+    {
+      "path": "src/app/banking-bill-card.css",
+      "generated": false
+    },
+    {
+      "path": "src/app/banking-trial-cards.css",
+      "generated": false
+    },
+    {
+      "path": "src/lib/banking-chat-storage.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/banking-flow-state.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/bill-display.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/trial-preview.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/lib/trueforge-routing.mjs",
+      "generated": false
+    },
+    {
+      "path": "tests/banking-agent-auth.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/banking-bill-card.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/fixtures/trueforge-bill-turn.json",
+      "generated": false
+    },
+    {
+      "path": "tests/saveflow-trial.test.mjs",
+      "generated": false
+    },
+    {
+      "path": "tests/trueforge-bill.test.mjs",
+      "generated": false
+    },
+    {
+      "path": "tests/trueforge-preview-client.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/trueforge-skills.test.mjs",
+      "generated": false
+    },
+    {
+      "path": ".env.example",
+      "generated": false
+    },
+    {
+      "path": ".gitignore",
+      "generated": false
+    },
+    {
+      "path": "CLAUDE.md",
+      "generated": false
+    },
+    {
+      "path": "README.md",
+      "generated": false
+    },
+    {
+      "path": "docs/Banking-Agent-API.md",
+      "generated": false
+    },
+    {
+      "path": "docs/Banking-Agent-Integration.md",
+      "generated": false
+    },
+    {
+      "path": "docs/Banking-Core.md",
+      "generated": false
+    },
+    {
+      "path": "docs/Card-Actions.md",
+      "generated": false
+    },
+    {
+      "path": "docs/Intent-Diagnostics.md",
+      "generated": false
+    },
+    {
+      "path": "docs/Qwen接入与部署.md",
+      "generated": false
+    },
+    {
+      "path": "docs/intent-action-status.md",
+      "generated": false
+    },
+    {
+      "path": "docs/intent-contracts.md",
+      "generated": false
+    },
+    {
+      "path": "docs/iteration-handoff-transfer-bill.md",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/banking-agent-tests.log",
+      "generated": false
+    },
+    {
+      "path": "docs/架构审查-2026-09-22.md",
+      "generated": false
+    },
+    {
+      "path": "docs/状态机与接口配置.md",
+      "generated": false
+    },
+    {
+      "path": "eslint.config.mjs",
+      "generated": false
+    },
+    {
+      "path": "migrations/001_banking_persistence.sql",
+      "generated": false
+    },
+    {
+      "path": "migrations/002_cards.sql",
+      "generated": false
+    },
+    {
+      "path": "netlify.toml",
+      "generated": false
+    },
+    {
+      "path": "netlify/functions/agent.mjs",
+      "generated": false
+    },
+    {
+      "path": "netlify/functions/banking-agent.mjs",
+      "generated": false
+    },
+    {
+      "path": "netlify/functions/banking.mjs",
+      "generated": false
+    },
+    {
+      "path": "netlify/functions/saveflow.mjs",
+      "generated": false
+    },
+    {
+      "path": "next-env.d.ts",
+      "generated": true
+    },
+    {
+      "path": "next.config.ts",
+      "generated": false
+    },
+    {
+      "path": "package-lock.json",
+      "generated": false
+    },
+    {
+      "path": "package.json",
+      "generated": false
+    },
+    {
+      "path": "postcss.config.mjs",
+      "generated": false
+    },
+    {
+      "path": "schemas/card-actions.schema.json",
+      "generated": false
+    },
+    {
+      "path": "schemas/card-resolved-actions.schema.json",
+      "generated": false
+    },
+    {
+      "path": "scripts/demo-banking.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/dev-qwen.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/migrate-banking.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-qwen.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/banking-agent.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/banking-clarification-parser.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/banking-intent-parser.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/banking.mjs",
+      "generated": false
+    },
+    {
+      "path": "server/qwen.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/agent/clarification/choice-resolver.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/agent/clarification/clarification-result.ts",
+      "generated": false
+    },
+    {
+      "path": "src/agent/clarification/continuation-token.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/agent/clarification/merge-intent.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/agent/dispatch-result.ts",
+      "generated": false
+    },
+    {
+      "path": "src/agent/dispatcher.ts",
+      "generated": false
+    },
+    {
+      "path": "src/agent/handlers/bill-handler.ts",
+      "generated": false
+    },
+    {
+      "path": "src/agent/handlers/card-handler.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/agent/handlers/card-handler.ts",
+      "generated": false
+    },
+    {
+      "path": "src/agent/handlers/transfer-handler.ts",
+      "generated": false
+    },
+    {
+      "path": "src/agent/parsed-intent.ts",
+      "generated": false
+    },
+    {
+      "path": "src/agent/runtime.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/agent/transfer-orchestrator.ts",
+      "generated": false
+    },
+    {
+      "path": "src/agent/validate-parsed-intent.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/agent/validate-parsed-intent.ts",
+      "generated": false
+    },
+    {
+      "path": "src/app/BankingCardCards.tsx",
+      "generated": false
+    },
+    {
+      "path": "src/app/api/saveflow/route.ts",
+      "generated": false
+    },
+    {
+      "path": "src/app/favicon.ico",
+      "generated": false
+    },
+    {
+      "path": "src/app/globals.css",
+      "generated": false
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "generated": false
+    },
+    {
+      "path": "src/app/modern-bank-overrides.css",
+      "generated": false
+    },
+    {
+      "path": "src/app/page.tsx",
+      "generated": false
+    },
+    {
+      "path": "src/app/scroll-fixes.css",
+      "generated": false
+    },
+    {
+      "path": "src/banking-core/action-machine.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/banking-core/api-contracts.ts",
+      "generated": false
+    },
+    {
+      "path": "src/banking-core/contracts.ts",
+      "generated": false
+    },
+    {
+      "path": "src/banking-core/core.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/banking-core/dispatch.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/banking-core/errors.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/banking-core/index.ts",
+      "generated": false
+    },
+    {
+      "path": "src/banking-core/legacy-adapter.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/banking-core/operation-store.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/banking-core/postgres-store.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/banking-core/repository.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/banking-core/wire.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/data/saveflow_mock_data.json",
+      "generated": false
+    },
+    {
+      "path": "src/lib/agent-client.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/api/banking-client.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/api/client.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/api/config.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/api/contracts.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/api/mock.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/banking-agent-client.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/flow-machine.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/format.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/saveflow-mock.ts",
+      "generated": false
+    },
+    {
+      "path": "src/lib/use-saveflow.ts",
+      "generated": false
+    },
+    {
+      "path": "src/skill/transfer/index.ts",
+      "generated": false
+    },
+    {
+      "path": "src/skill/transfer/prepare_transfer.ts",
+      "generated": false
+    },
+    {
+      "path": "src/skill/transfer/repository-adapter.ts",
+      "generated": false
+    },
+    {
+      "path": "src/skill/transfer/resolve_payee.ts",
+      "generated": false
+    },
+    {
+      "path": "src/skill/transfer/types.ts",
+      "generated": false
+    },
+    {
+      "path": "src/skills/bill/bill-skill.ts",
+      "generated": false
+    },
+    {
+      "path": "src/skills/bill/index.ts",
+      "generated": false
+    },
+    {
+      "path": "src/skills/card/card-skill.mjs",
+      "generated": false
+    },
+    {
+      "path": "src/skills/card/index.ts",
+      "generated": false
+    },
+    {
+      "path": "src/skills/schemas.ts",
+      "generated": false
+    },
+    {
+      "path": "tests/agent-dispatcher.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/banking-agent-http.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/banking-agent-integration.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/banking-card-client.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/banking-clarification.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/banking-core.test.mjs",
+      "generated": false
+    },
+    {
+      "path": "tests/banking-http.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/banking-intent-parser.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/card-agent.test.mjs",
+      "generated": false
+    },
+    {
+      "path": "tests/card-core.test.mjs",
+      "generated": false
+    },
+    {
+      "path": "tests/card-skill.test.mjs",
+      "generated": false
+    },
+    {
+      "path": "tests/fixtures/banking-agent/account-choice-request.json",
+      "generated": false
+    },
+    {
+      "path": "tests/fixtures/banking-agent/account-clarification.json",
+      "generated": false
+    },
+    {
+      "path": "tests/fixtures/banking-agent/bill-result.json",
+      "generated": false
+    },
+    {
+      "path": "tests/fixtures/banking-agent/error.json",
+      "generated": false
+    },
+    {
+      "path": "tests/fixtures/banking-agent/generate.mjs",
+      "generated": false
+    },
+    {
+      "path": "tests/fixtures/banking-agent/http-worker.mjs",
+      "generated": false
+    },
+    {
+      "path": "tests/fixtures/banking-agent/month-clarification.json",
+      "generated": false
+    },
+    {
+      "path": "tests/fixtures/banking-agent/payee-clarification.json",
+      "generated": false
+    },
+    {
+      "path": "tests/fixtures/banking-agent/transfer-preview.json",
+      "generated": false
+    },
+    {
+      "path": "tests/flow.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/parsed-intent.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/postgres-persistence.test.mjs",
+      "generated": false
+    },
+    {
+      "path": "tests/qwen.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tests/transfer-orchestrator.test.cjs",
+      "generated": false
+    },
+    {
+      "path": "tsconfig.json",
+      "generated": false
+    },
+    {
+      "path": "tsconfig.tsbuildinfo",
+      "generated": true
+    }
+  ],
+  "sourceHashes": {
+    "src/banking-core/postgres-store.mjs": "f6675916cdb7bda10c39e6c438233963713455cdb97732f21efa348f44a0ed2d",
+    "tests/postgres-persistence.test.mjs": "0259ae01802e77c9bbb77ec6d2a84b08b8313b76a0bde81fd09b895c262aae77",
+    "server/mcp/saveflow-trial.mjs": "6c3e36525778d797d072e2706c186391a1a10ce3cc0607adee4205dc8c8ef1c3",
+    "compose.yaml": "4a735dff4c477bc9df2ab574a6fdec389ee35815fdd4779d6734e4b38d2b32de",
+    "compose.postgres.yaml": "7fee1a8a2b27f934292f523af01a613dec43de175dda0b5b5e0a60b8b1e81087"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "at": "2026-10-17T12:53:22.403Z",
+  "url": "http://127.0.0.1:4300",
+  "actualDockerHttpMcpAndHostTrueforge": true,
+  "requests": [
+    {
+      "message": "查询2026年8月账单",
+      "httpStatus": 200,
+      "code": "OK",
+      "elapsedMs": 1765,
+      "sentContinuation": false,
+      "status": "bill_result",
+      "action": "bill.summary",
+      "bill": {
+        "month": "2026-08",
+        "totalIncomeFen": 1200000,
+        "totalExpenseFen": 846000,
+        "transactionCount": 12,
+        "categoryTotals": {
+          "房租": 300000,
+          "餐饮": 145000,
+          "交通": 40000,
+          "通信": 10000,
+          "日用品": 50000,
+          "娱乐": 112000,
+          "购物": 128000,
+          "订阅": 9000,
+          "其他": 52000
+        }
+      }
+    }
+  ],
+  "checks": [],
+  "browserErrors": [],
+  "success": false,
+  "error": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.banking-bill-card') to be visible\u001b[22m\n"
+}

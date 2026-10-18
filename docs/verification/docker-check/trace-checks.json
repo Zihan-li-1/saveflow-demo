@@ -1,0 +1,29 @@
+{
+  "success": true,
+  "containerMcpConnectorsOnly": true,
+  "sessions": [
+    {
+      "sessionTag": "10e80c48f60d770b",
+      "connector": "saveflow-docker-mcp",
+      "tool": "bill_summary",
+      "calls": 1,
+      "continuousTurns": true
+    },
+    {
+      "sessionTag": "a6a82435c001cf92",
+      "connector": "saveflow-docker-bridge",
+      "tool": "transfer_preview",
+      "calls": 6,
+      "continuousTurns": true
+    },
+    {
+      "sessionTag": "1ddd87e51d16651b",
+      "connector": "saveflow-docker-bridge",
+      "tool": "card_get",
+      "calls": 1,
+      "continuousTurns": true
+    }
+  ],
+  "realToolCalls": 8,
+  "confirmOrExecuteTools": 0
+}

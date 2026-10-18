@@ -1,0 +1,242 @@
+{
+  "at": "2026-10-17T11:06:56.675Z",
+  "realTrueforgeMcpHttpUi": true,
+  "checks": [
+    "转账预览 → 改成300元",
+    "转账预览 → 查看我的卡，单独凭据/真实候选，历史保留",
+    "转账预览 → 卡片查询 → 返回修改原转账，账户/收款人不变，旧版本仍禁用",
+    "转账预览 → 查询8月账单：真实账单 Skill 澄清年份 → 2026年8月真实统计",
+    "伪造跨动作携带转账凭据被服务端拒绝",
+    "转账预览 → 取消 → 新转账使用新操作会话",
+    "刷新后跨 Skill 查询，并返回修改刷新前的独立转账",
+    "含糊/混合请求只澄清，不套用转账凭据",
+    "确认仍禁用，直接 Core 执行仍403"
+  ],
+  "requests": [
+    {
+      "message": "从模拟活期账户转账500元给房东王先生",
+      "elapsedMs": 1517,
+      "status": 200,
+      "code": "OK",
+      "sentToken": false,
+      "action": "transfer.create",
+      "resultStatus": "awaiting_confirmation",
+      "operationId": "tfpreview:op_d7745638-f551-4133-ac27-aa1b4000675c",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 50000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 450000,
+        "availableBalanceAfterFen": 450000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "改成300元",
+      "elapsedMs": 1778,
+      "status": 200,
+      "code": "OK",
+      "sentToken": true,
+      "action": "transfer.create",
+      "resultStatus": "awaiting_confirmation",
+      "operationId": "tfpreview:op_e9db13ed-8a92-4b74-8437-27b7cca6b655",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 30000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 470000,
+        "availableBalanceAfterFen": 470000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "查看我的卡",
+      "elapsedMs": 1495,
+      "status": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "sentToken": false,
+      "action": "card.get",
+      "resultStatus": "needs_clarification",
+      "slot": "card_ref"
+    },
+    {
+      "message": "选择真实卡片候选",
+      "elapsedMs": 2130,
+      "status": 200,
+      "code": "OK",
+      "sentToken": true,
+      "action": "card.get",
+      "resultStatus": "card_result"
+    },
+    {
+      "message": "原预览修改为250元",
+      "elapsedMs": 2050,
+      "status": 200,
+      "code": "OK",
+      "sentToken": true,
+      "action": "transfer.create",
+      "resultStatus": "awaiting_confirmation",
+      "operationId": "tfpreview:op_f1972a67-d319-472f-9e7d-42aa43ff6d14",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 25000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 475000,
+        "availableBalanceAfterFen": 475000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "查询8月账单",
+      "elapsedMs": 1512,
+      "status": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "sentToken": false,
+      "action": "bill.summary",
+      "resultStatus": "needs_clarification",
+      "slot": "month"
+    },
+    {
+      "message": "2026年8月",
+      "elapsedMs": 1354,
+      "status": 200,
+      "code": "OK",
+      "sentToken": true,
+      "action": "bill.summary",
+      "resultStatus": "bill_result",
+      "bill": {
+        "month": "2026-08",
+        "totalIncomeFen": 1200000,
+        "totalExpenseFen": 846000,
+        "transactionCount": 12,
+        "categoryTotals": {
+          "房租": 300000,
+          "餐饮": 145000,
+          "交通": 40000,
+          "通信": 10000,
+          "日用品": 50000,
+          "娱乐": 112000,
+          "购物": 128000,
+          "订阅": 9000,
+          "其他": 52000
+        }
+      }
+    },
+    {
+      "message": "卡片查询中强行携带转账token",
+      "status": 400,
+      "code": "CONTINUATION_ACTION_MISMATCH"
+    },
+    {
+      "message": "取消原转账",
+      "elapsedMs": 937,
+      "status": 200,
+      "code": "OK",
+      "sentToken": true,
+      "action": "transfer.create",
+      "resultStatus": "cancelled"
+    },
+    {
+      "message": "从模拟活期账户转账200元给房东王先生",
+      "elapsedMs": 1867,
+      "status": 200,
+      "code": "OK",
+      "sentToken": false,
+      "action": "transfer.create",
+      "resultStatus": "awaiting_confirmation",
+      "operationId": "tfpreview:op_dc92eb80-7cf6-456a-95fc-c4fd1376351b",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 20000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 480000,
+        "availableBalanceAfterFen": 480000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "查看我的卡",
+      "elapsedMs": 1550,
+      "status": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "sentToken": false,
+      "action": "card.get",
+      "resultStatus": "needs_clarification",
+      "slot": "card_ref"
+    },
+    {
+      "message": "选择真实卡片候选",
+      "elapsedMs": 1926,
+      "status": 200,
+      "code": "OK",
+      "sentToken": true,
+      "action": "card.get",
+      "resultStatus": "card_result"
+    },
+    {
+      "message": "原预览修改为150元",
+      "elapsedMs": 1924,
+      "status": 200,
+      "code": "OK",
+      "sentToken": true,
+      "action": "transfer.create",
+      "resultStatus": "awaiting_confirmation",
+      "operationId": "tfpreview:op_295d3fd5-e548-4063-8a86-b2f53da06e00",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 15000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 485000,
+        "availableBalanceAfterFen": 485000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    }
+  ],
+  "errors": [],
+  "success": true
+}

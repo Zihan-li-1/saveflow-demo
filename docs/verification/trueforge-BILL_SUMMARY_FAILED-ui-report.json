@@ -1,0 +1,20 @@
+{
+  "realServices": true,
+  "checks": [
+    {
+      "expectedError": "BILL_SUMMARY_FAILED",
+      "visibleError": "error displayed without a business card"
+    }
+  ],
+  "requests": [
+    {
+      "message": "查询 2026 年 8 月账单",
+      "elapsedMs": 1827,
+      "httpStatus": 502,
+      "code": "BILL_SUMMARY_FAILED",
+      "requestId": "cc4895c5-ff03-4e11-9bbe-9927d867d6f0",
+      "status": "error"
+    }
+  ],
+  "success": true
+}

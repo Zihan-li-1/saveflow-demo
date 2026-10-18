@@ -1,0 +1,20 @@
+{
+  "realServices": true,
+  "checks": [
+    {
+      "expectedError": "TRUEFORGE_UNAVAILABLE",
+      "visibleError": "error displayed without a business card"
+    }
+  ],
+  "requests": [
+    {
+      "message": "查询 2026 年 8 月账单",
+      "elapsedMs": 68,
+      "httpStatus": 502,
+      "code": "TRUEFORGE_UNAVAILABLE",
+      "requestId": "31ac3fa1-4558-4535-8bc6-5ac5e2430bd2",
+      "status": "error"
+    }
+  ],
+  "success": true
+}

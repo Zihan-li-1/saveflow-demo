@@ -1,0 +1,111 @@
+{
+  "at": "2026-10-17T08:59:56.192Z",
+  "scenarios": [
+    {
+      "first": "从模拟活期账户转账500元给房东王先生",
+      "responses": [
+        {
+          "message": "从模拟活期账户转账500元给房东王先生",
+          "httpStatus": 503,
+          "code": "MODEL_AUTH_ERROR",
+          "data": {
+            "status": "error",
+            "error": {
+              "code": "MODEL_AUTH_ERROR",
+              "message": "模型服务未配置。"
+            }
+          },
+          "previewCount": 0,
+          "rowCount": 3,
+          "buttonCount": 0
+        }
+      ],
+      "rowsBeforeRefresh": 3,
+      "rowsAfterRefresh": 1
+    },
+    {
+      "first": "从模拟活期账户给房东王先生转500元",
+      "responses": [
+        {
+          "message": "从模拟活期账户给房东王先生转500元",
+          "httpStatus": 200,
+          "code": "OK",
+          "data": {
+            "status": "awaiting_confirmation",
+            "action": "transfer.create",
+            "operationId": "tfpreview:op_2abc7d6e-54f9-4dbe-b5e6-6b1e8799f817",
+            "preview": {
+              "planId": "plan_a6e30f4a-b92a-4399-9852-60bd06757f25",
+              "stepIds": [
+                "step_8ac1f2c2-4ee4-42db-8c51-859ef8599d0a"
+              ],
+              "summary": "从模拟活期账户向房东王先生（****1003）模拟转账 ¥500.00，手续费 ¥0.00，模拟即时到账。",
+              "exactEffects": [
+                {
+                  "kind": "transfer_out",
+                  "fromAccountId": "ACC-CHECKING",
+                  "accountName": "模拟活期账户",
+                  "payeeId": "payee_003",
+                  "payeeName": "房东王先生",
+                  "accountNoMasked": "****1003",
+                  "amountFen": 50000,
+                  "feeFen": 0,
+                  "currency": "CNY",
+                  "balanceBeforeFen": 500000,
+                  "balanceAfterFen": 450000,
+                  "availableBalanceAfterFen": 450000,
+                  "accountVersion": 0,
+                  "memo": "",
+                  "arrival": "mock_immediate"
+                }
+              ],
+              "riskLevel": "L3",
+              "warnings": [
+                "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+              ],
+              "expiresAt": "2026-10-17T09:04:59.064Z",
+              "previewHash": "8bbab3f2733940ac4dd14f306841ea4328d68236ee8f5e10a7b995490da1d4f5",
+              "contextSnapshotId": "saveflow-phase1-fixed-v1:0"
+            },
+            "risk": {
+              "allowed": true,
+              "riskLevel": "L3",
+              "policyVersion": "mock-transfer-v1",
+              "requiredConfirmation": "mock_explicit",
+              "warnings": [
+                "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+              ]
+            },
+            "previewOnly": true,
+            "executionAllowed": false,
+            "source": "trueforge-mcp",
+            "continuationToken": "[redacted]"
+          },
+          "previewCount": 1,
+          "rowCount": 3,
+          "buttonCount": 0
+        },
+        {
+          "message": "改成转账400元",
+          "httpStatus": 200,
+          "code": "NEEDS_CLARIFICATION",
+          "data": {
+            "kind": "clarification",
+            "status": "needs_clarification",
+            "action": "transfer.create",
+            "question": "要转多少钱？例如 500 元。",
+            "slot": "amount",
+            "choices": [],
+            "source": "trueforge-mcp",
+            "continuationToken": "[redacted]"
+          },
+          "previewCount": 0,
+          "rowCount": 4,
+          "buttonCount": 0
+        }
+      ],
+      "rowsBeforeRefresh": 4,
+      "rowsAfterRefresh": 1
+    }
+  ]
+}
