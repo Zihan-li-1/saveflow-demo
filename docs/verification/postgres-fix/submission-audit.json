@@ -1,12 +1,12 @@
 {
-  "at": "2026-10-18T10:46:01.843Z",
+  "at": "2026-10-18T10:53:01.633Z",
   "branch": "spike/trueforge-harness",
-  "head": "b6eeee051f9f0ecb3c1974e7458e7c98471a4702",
+  "head": "49c32a50eb0c6bbd8e561bae1b334cf19b84411b",
   "main": "07d5667599601fd0b4ef97d82082362946876b8f",
   "envLocalIgnored": true,
   "envLocalTracked": false,
   "configuredSecretCount": 2,
-  "scannedGitFiles": 318,
+  "scannedGitFiles": 324,
   "scannedStaticFiles": 41,
   "findings": [],
   "runtimeBoundary": {
@@ -25,74 +25,30 @@
     "next-env.d.ts",
     "tsconfig.tsbuildinfo"
   ],
-  "pendingFileCount": 21,
+  "pendingFileCount": 10,
   "files": [
     {
-      "path": "docs/verification/netlify-preview/docker-build-final.log",
+      "path": "docs/netlify-preview-report.md",
       "generated": false
     },
     {
-      "path": "docs/verification/netlify-preview/docker-build-network-attempt.log",
+      "path": "docs/verification/netlify-preview/deployment-report.json",
       "generated": false
     },
     {
-      "path": "docs/verification/netlify-preview/docker-desktop.png",
+      "path": "docs/verification/netlify-preview/preview-access-report.json",
       "generated": false
     },
     {
-      "path": "docs/verification/netlify-preview/docker-http-final.log",
+      "path": "docs/verification/netlify-preview/preview-blocked.png",
       "generated": false
     },
     {
-      "path": "docs/verification/netlify-preview/docker-http-report.json",
+      "path": "docs/verification/netlify-preview/preview-ui-report.json",
       "generated": false
     },
     {
-      "path": "docs/verification/netlify-preview/docker-mobile.png",
-      "generated": false
-    },
-    {
-      "path": "docs/verification/netlify-preview/docker-ui-final.log",
-      "generated": false
-    },
-    {
-      "path": "docs/verification/netlify-preview/docker-ui-report.json",
-      "generated": false
-    },
-    {
-      "path": "docs/verification/netlify-preview/lint-final.log",
-      "generated": false
-    },
-    {
-      "path": "docs/verification/netlify-preview/mock-final.log",
-      "generated": false
-    },
-    {
-      "path": "docs/verification/netlify-preview/postgres-final.log",
-      "generated": false
-    },
-    {
-      "path": "docs/verification/netlify-preview/preview-driver-lint.log",
-      "generated": false
-    },
-    {
-      "path": "docs/verification/netlify-preview/services-final.log",
-      "generated": false
-    },
-    {
-      "path": "docs/verification/netlify-preview/typecheck-final.log",
-      "generated": false
-    },
-    {
-      "path": "docs/verification/netlify-preview/typegen-final.log",
-      "generated": false
-    },
-    {
-      "path": "docs/verification/netlify-preview/upstream-contracts.log",
-      "generated": false
-    },
-    {
-      "path": "scripts/verify-netlify-preview.mjs",
+      "path": "docs/verification/netlify-preview/preview-ui-run.log",
       "generated": false
     },
     {
@@ -348,7 +304,43 @@
       "generated": false
     },
     {
+      "path": "docs/verification/netlify-preview/docker-build-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-build-network-attempt.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-desktop.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-http-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-http-report.json",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-mobile.png",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-ui-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/docker-ui-report.json",
+      "generated": false
+    },
+    {
       "path": "docs/verification/netlify-preview/lint-before-sync.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/lint-final.log",
       "generated": false
     },
     {
@@ -356,7 +348,23 @@
       "generated": false
     },
     {
+      "path": "docs/verification/netlify-preview/mock-final.log",
+      "generated": false
+    },
+    {
       "path": "docs/verification/netlify-preview/postgres-before-sync.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/postgres-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/preview-driver-lint.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/services-final.log",
       "generated": false
     },
     {
@@ -364,7 +372,19 @@
       "generated": false
     },
     {
+      "path": "docs/verification/netlify-preview/typecheck-final.log",
+      "generated": false
+    },
+    {
       "path": "docs/verification/netlify-preview/typegen-before-sync.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/typegen-final.log",
+      "generated": false
+    },
+    {
+      "path": "docs/verification/netlify-preview/upstream-contracts.log",
       "generated": false
     },
     {
@@ -801,6 +821,10 @@
     },
     {
       "path": "scripts/verify-docker-ui.mjs",
+      "generated": false
+    },
+    {
+      "path": "scripts/verify-netlify-preview.mjs",
       "generated": false
     },
     {

@@ -26,7 +26,9 @@ async function send(message, action) {
   const pending = page.waitForResponse(r => r.url().endsWith('/api/banking-agent') && r.request().method() === 'POST', { timeout: 35000 });
   void pending.catch(() => {});
   if (action) await action(); else { await page.locator('.composer input').fill(message); await page.locator('.composer input').press('Enter'); }
-  const response = await pending, json = await response.json(), sent = response.request().postDataJSON();
+  const response = await pending, sent = response.request().postDataJSON();
+  let json;
+  try { json = await response.json(); } catch { json = { code: 'NON_JSON_RESPONSE' }; }
   report.requests.push({ message, status: response.status(), code: json.code, requestId: json.requestId, netlifyRequestId: response.headers()['x-nf-request-id'],
     sentContinuation: !!sent.continuationToken, resultStatus: json.data?.status, source: json.data?.source, previewOnly: json.data?.previewOnly,
     amountFen: json.data?.preview?.exactEffects?.[0]?.amountFen });
@@ -41,6 +43,11 @@ async function select(r, text) {
 }
 try {
   const response = await page.goto(base.origin);
+  if (response.status() === 401 || response.status() === 403) {
+    report.failures.push({ name: 'Netlify preview entry access', status: response.status(), netlifyRequestId: response.headers()['x-nf-request-id'],
+      classification: 'Netlify access protection before SaveFlow UI/API; business functions and continuation state not exercised' });
+    const blocked = new Error('PREVIEW_ENTRY_BLOCKED'); blocked.code = 'PREVIEW_ENTRY_BLOCKED'; throw blocked;
+  }
   assert.equal(response.status(), 200);
   await page.locator('.composer input').waitFor();
   report.checks.push('preview page loads and hydrates');
@@ -79,11 +86,13 @@ try {
   report.mobileHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
   await page.screenshot({ path: `${dir}/preview-mobile.png`, fullPage: true });
   if (report.browserErrors.length || report.mobileHorizontalOverflow) report.failures.push({ name: 'browser layout/runtime', classification: 'UI' });
-} catch {
-  report.failures.push({ name: 'verification stopped', classification: 'browser/network/dependency; remaining steps not verified' });
+} catch (error) {
+  if (error.code !== 'PREVIEW_ENTRY_BLOCKED') report.failures.push({ name: 'verification stopped', classification: 'browser/network/dependency; remaining steps not verified' });
+  await page.screenshot({ path: `${dir}/preview-blocked.png`, fullPage: true }).catch(() => {});
 } finally {
   await browser.close();
   report.demoBusinessAcceptancePassed = report.failures.length === 0;
+  if (!report.requests.length) report.notVerified = ['original cards UI', 'bill query', 'card query', 'transfer clarification', 'account/payee selection', 'amount edit', 'preview cancellation', 'chat confirmation guard', 'cross-request continuation'];
   await writeFile(`${dir}/preview-ui-report.json`, JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify(report, null, 2));
   if (!report.demoBusinessAcceptancePassed) process.exitCode = 1;

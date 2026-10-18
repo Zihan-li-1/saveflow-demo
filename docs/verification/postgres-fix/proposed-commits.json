@@ -4,22 +4,13 @@
     {
       "title": "feat(trueforge): add restricted query and preview trial harness",
       "files": [
-        "docs/verification/netlify-preview/docker-build-final.log",
-        "docs/verification/netlify-preview/docker-build-network-attempt.log",
-        "docs/verification/netlify-preview/docker-desktop.png",
-        "docs/verification/netlify-preview/docker-http-final.log",
-        "docs/verification/netlify-preview/docker-http-report.json",
-        "docs/verification/netlify-preview/docker-mobile.png",
-        "docs/verification/netlify-preview/docker-ui-final.log",
-        "docs/verification/netlify-preview/docker-ui-report.json",
-        "docs/verification/netlify-preview/lint-final.log",
-        "docs/verification/netlify-preview/mock-final.log",
-        "docs/verification/netlify-preview/postgres-final.log",
-        "docs/verification/netlify-preview/preview-driver-lint.log",
-        "docs/verification/netlify-preview/services-final.log",
-        "docs/verification/netlify-preview/typecheck-final.log",
-        "docs/verification/netlify-preview/typegen-final.log",
-        "docs/verification/netlify-preview/upstream-contracts.log",
+        "README.md",
+        "docs/netlify-preview-report.md",
+        "docs/verification/netlify-preview/deployment-report.json",
+        "docs/verification/netlify-preview/preview-access-report.json",
+        "docs/verification/netlify-preview/preview-blocked.png",
+        "docs/verification/netlify-preview/preview-ui-report.json",
+        "docs/verification/netlify-preview/preview-ui-run.log",
         "scripts/verify-netlify-preview.mjs"
       ]
     },
@@ -29,10 +20,7 @@
     },
     {
       "title": "test(docker): verify isolated PostgreSQL persistence and document continuation blockers",
-      "files": [
-        "docs/verification/postgres-fix/proposed-commits.json",
-        "docs/verification/postgres-fix/submission-audit.json"
-      ]
+      "files": []
     }
   ],
   "exclude": [

@@ -1,0 +1,31 @@
+{
+  "at": "2026-10-18T10:50:43.643Z",
+  "url": "https://deploy-preview-13--startling-flan-ed8dcb.netlify.app",
+  "checks": [
+    {
+      "path": "/",
+      "status": 401,
+      "contentType": "text/html; charset=utf-8",
+      "wwwAuthenticate": null,
+      "requestId": "01M57A5G90518PSJX711XVQBFA",
+      "netlifyLoginPage": true
+    },
+    {
+      "path": "/api/banking-agent",
+      "status": 401,
+      "contentType": "text/html; charset=utf-8",
+      "wwwAuthenticate": null,
+      "requestId": "01M57A5G98YSS6F2BFW38E240A",
+      "netlifyLoginPage": true
+    },
+    {
+      "path": "/api/banking",
+      "status": 401,
+      "contentType": "text/html; charset=utf-8",
+      "wwwAuthenticate": null,
+      "requestId": "01M57A5G9RCR1CVHM5A5SM9YZA",
+      "netlifyLoginPage": true
+    }
+  ],
+  "classification": "edge access gate; application behavior not exercised"
+}

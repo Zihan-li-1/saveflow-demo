@@ -1,0 +1,28 @@
+{
+  "at": "2026-10-18T10:50:40.986Z",
+  "url": "https://deploy-preview-13--startling-flan-ed8dcb.netlify.app",
+  "checks": [],
+  "failures": [
+    {
+      "name": "Netlify preview entry access",
+      "status": 401,
+      "netlifyRequestId": "01M57A5ETQXK56ZKVBPW5DXEAZ",
+      "classification": "Netlify access protection before SaveFlow UI/API; business functions and continuation state not exercised"
+    }
+  ],
+  "requests": [],
+  "browserErrors": [],
+  "trueforgeObserved": false,
+  "demoBusinessAcceptancePassed": false,
+  "notVerified": [
+    "original cards UI",
+    "bill query",
+    "card query",
+    "transfer clarification",
+    "account/payee selection",
+    "amount edit",
+    "preview cancellation",
+    "chat confirmation guard",
+    "cross-request continuation"
+  ]
+}
