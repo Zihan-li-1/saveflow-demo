@@ -16,6 +16,10 @@
 # next.js
 /.next/
 /out/
+/.netlify/
+/.trueforge/
+*.sqlite
+*.sqlite-*
 
 # production
 /build

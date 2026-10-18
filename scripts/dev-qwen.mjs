@@ -3,11 +3,12 @@ import { Readable } from 'node:stream';
 import next from 'next';
 import { handleAgent } from '../server/qwen.mjs';
 import { handleBanking } from '../server/banking.mjs';
-import { handleBankingAgent } from '../server/banking-agent.mjs';
+import { bankingAuthConfigStatus, handleBankingAgent } from '../server/banking-agent.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const app = next({ dev: true, hostname: '127.0.0.1', port });
 await app.prepare(); // Next loads .env.local into server environment.
+console.info(JSON.stringify({ event: 'banking_auth_config', ...bankingAuthConfigStatus(), trueforgeBillEnabled: process.env.SAVEFLOW_TRUEFORGE_BILL_ENABLED === 'true' }));
 const nextHandler = app.getRequestHandler();
 const visits = [];
 const server = http.createServer(async (req, res) => {

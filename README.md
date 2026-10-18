@@ -1,5 +1,7 @@
 # SaveFlow Demo
 
+本地 Docker 运行方式与实际检测结果见 [Docker 检测报告](docs/docker-test-report.md)。容器网页：http://127.0.0.1:4300/。PostgreSQL JSONB 与 Core 持久化回归已通过；TrueForge 多轮续接仍有独立内存状态风险，须按部署预览实测结果判断竞赛 Demo 可用性。
+
 对应公共网址：https://startling-flan-ed8dcb.netlify.app/
 
 已完成 B 项目 Banking Core：公共类型、统一 FinancialContextRepository、Mock 转账预览/风险/确认/幂等执行/回执、HTTP 及旧接口适配。交接规范见 [Banking Core 合同与验收](docs/Banking-Core.md)。本次修改未发布到上述网址。
