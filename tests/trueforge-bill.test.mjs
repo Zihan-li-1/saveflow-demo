@@ -119,6 +119,18 @@ test('all month-only and vague period bill requests receive a specific follow-up
   }
 });
 
+test('unlisted fuzzy time wording clarifies instead of falling through or guessing', async () => {
+  for (const message of ['查看上个月账单', '看假期期间的账单', '我想看看那段时间的账单', '查询年初账单']) {
+    assert.ok(shouldRouteTrueforgeBill(body(message), env), message);
+    const adapter = createTrueforgeBillAdapter({ env, client: fakeClient([missingTurn()]) });
+    const result = await adapter.handle(body(message), { scope });
+    assert.equal(result.code, 'NEEDS_CLARIFICATION');
+    assert.equal(result.data.question, '请提供明确的账单年月，例如 2026 年 8 月。');
+    assert.equal(result.data.status, 'needs_clarification');
+    assert.equal(result.data.data, undefined);
+  }
+});
+
 test('signed tokens reject tampering, raw session IDs, other scopes, restart, and expiry', async () => {
   let clock = 1000;
   const client = fakeClient([missingTurn()]);
@@ -166,8 +178,8 @@ test('malformed, unlinked, wrong-month, forged-source and duplicate results cann
 });
 
 test('the router accepts only explicit narrow bill queries and trial continuation tokens', () => {
-  for (const message of ['查询 2026 年 8 月账单', '查账单', '查看2026-08的账单', '查2026年13月账单']) assert.equal(shouldRouteTrueforgeBill(body(message), env), true);
-  for (const message of ['给张三转500元', '冻结我的卡', '查看我的卡', '取消订阅', '账单查完给张三转账', '聊聊账单', '这个月呢', '查上月账单', '查2026年8月账单并执行转账']) assert.equal(shouldRouteTrueforgeBill(body(message), env), false);
+  for (const message of ['查询 2026 年 8 月账单', '查账单', '查看2026-08的账单', '查2026年13月账单', '查上月账单']) assert.equal(shouldRouteTrueforgeBill(body(message), env), true);
+  for (const message of ['给张三转500元', '冻结我的卡', '查看我的卡', '取消订阅', '账单查完给张三转账', '聊聊账单', '这个月呢', '查2026年8月账单并执行转账']) assert.equal(shouldRouteTrueforgeBill(body(message), env), false);
   assert.equal(shouldRouteTrueforgeBill({ message: '查账单', continuationToken: 'legacy-token' }, env), false);
   assert.equal(shouldRouteTrueforgeBill(body('查账单'), { ...env, SAVEFLOW_TRUEFORGE_BILL_ENABLED: 'false' }), false);
 });

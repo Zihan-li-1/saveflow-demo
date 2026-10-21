@@ -7,7 +7,16 @@ const YEAR_ONLY = '\\d{4}\\s*年';
 const CHINESE_MONTH = '(?:十[一二]?|[一二三四五六七八九])\\s*月';
 const FUZZY_PERIOD = '(?:最近|近期|前段时间|今年|去年|上半年|下半年|最近\\s*\\d+\\s*个?月|前\\s*\\d+\\s*个?月)';
 const BILL_QUERY = new RegExp(`^(?:请\\s*|帮我\\s*)?(?:查询|查看|查|看看|看)?\\s*(${YEAR_MONTH}|${YEAR_ONLY}|\\d{1,2}\\s*月|${CHINESE_MONTH}|${FUZZY_PERIOD})?\\s*(?:的\\s*)?(?:月账单|账单)(?:汇总)?[。！？!?]?$`);
-export const matchBillQuery = message => typeof message === 'string' ? BILL_QUERY.exec(message.trim()) : null;
+const INCOMPLETE_BILL_QUERY = /^(?:请\s*|帮我\s*)?(?:我想\s*)?(?:查询|查看|查|看看|看)\s*([^，。,；;!?！？]{0,40}?)\s*(?:的\s*)?(?:月账单|账单)(?:汇总)?[。！？!?]?$/;
+const OTHER_TASK = /转账|付款|汇款|卡片?|冻结|解冻|预算|订阅|理财|产品|确认|执行/;
+export function matchBillQuery(message) {
+  if (typeof message !== 'string') return null;
+  const value = message.trim();
+  const exact = BILL_QUERY.exec(value);
+  if (exact) return exact;
+  const incomplete = INCOMPLETE_BILL_QUERY.exec(value);
+  return incomplete && !OTHER_TASK.test(incomplete[1]) ? incomplete : null;
+}
 
 function chineseMonthNumber(value) {
   const digits = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };

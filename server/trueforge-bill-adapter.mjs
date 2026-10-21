@@ -23,7 +23,8 @@ function monthFrom(raw) {
   }
   const parts = raw.match(/^(\d{4})(?:\s*年\s*|-)(\d{1,2})\s*月?$/);
   const month = parts && `${parts[1]}-${parts[2].padStart(2, '0')}`;
-  if (!month || !MONTH.test(month)) throw trueforgeError('INVALID_MONTH', '请提供有效年月，例如 2026 年 8 月。', 400);
+  if (parts && !MONTH.test(month)) throw trueforgeError('INVALID_MONTH', '请提供有效年月，例如 2026 年 8 月。', 400);
+  if (!month) return undefined; // Unrecognized time wording is incomplete, so ask instead of guessing.
   return month;
 }
 
