@@ -7,9 +7,9 @@ import {
   summarizeBills,
 } from '../src/skills/bill/bill-skill.ts';
 
-test('bill.analyze computes comparison, categories and evidence from repository transactions', () => {
+test('bill.analyze computes comparison, categories and evidence from repository transactions', async () => {
   const { repository } = createFinancialContext();
-  const result = analyzeBills(repository, {
+  const result = await analyzeBills(repository, {
     action: 'bill.analyze',
     period: { month: '2026-08', timezone: 'Asia/Shanghai' },
   });
@@ -44,30 +44,30 @@ test('bill summaries exclude transfer_out from consumer expense', () => {
   assert.deepEqual(summary.categoryTotals, { 餐饮: 1200 });
 });
 
-test('bill.analyze validates period and account scope', () => {
+test('bill.analyze validates period and account scope', async () => {
   const { repository } = createFinancialContext();
-  assert.throws(
-    () => analyzeBills(repository, { action: 'bill.analyze', period: { month: '2026-13', timezone: 'Asia/Shanghai' } }),
+  await assert.rejects(
+    analyzeBills(repository, { action: 'bill.analyze', period: { month: '2026-13', timezone: 'Asia/Shanghai' } }),
     /YYYY-MM/
   );
-  assert.throws(
-    () => analyzeBills(repository, { action: 'bill.analyze', period: { month: '2026-08', timezone: 'Asia/Shanghai' }, account_ref: 'missing' }),
+  await assert.rejects(
+    analyzeBills(repository, { action: 'bill.analyze', period: { month: '2026-08', timezone: 'Asia/Shanghai' }, account_ref: 'missing' }),
     /account_ref/
   );
-  assert.throws(
-    () => analyzeBills(repository, { action: 'bill.analyze', period: { start_date: '2026-08-20', end_date: '2026-08-10', timezone: 'Asia/Shanghai' } }),
+  await assert.rejects(
+    analyzeBills(repository, { action: 'bill.analyze', period: { start_date: '2026-08-20', end_date: '2026-08-10', timezone: 'Asia/Shanghai' } }),
     /不能晚于/
   );
-  assert.throws(
-    () => analyzeBills(repository, { action: 'bill.analyze', period: { start_date: '2026-02-30', end_date: '2026-03-01', timezone: 'Asia/Shanghai' } }),
+  await assert.rejects(
+    analyzeBills(repository, { action: 'bill.analyze', period: { start_date: '2026-02-30', end_date: '2026-03-01', timezone: 'Asia/Shanghai' } }),
     /YYYY-MM-DD/
   );
 });
 
-test('bill.analyze supports an inclusive custom date range and equal-length comparison range', () => {
+test('bill.analyze supports an inclusive custom date range and equal-length comparison range', async () => {
   const { repository } = createFinancialContext();
   const period = { start_date: '2026-08-05', end_date: '2026-08-20', timezone: 'Asia/Shanghai' };
-  const result = analyzeBills(repository, { action: 'bill.analyze', period });
+  const result = await analyzeBills(repository, { action: 'bill.analyze', period });
   const expected = repository.getTransactions()
     .filter((transaction) => transaction.type === 'expense' && transaction.occurredAt.slice(0, 10) >= period.start_date && transaction.occurredAt.slice(0, 10) <= period.end_date)
     .reduce((sum, transaction) => sum + transaction.amountFen, 0);
@@ -85,9 +85,9 @@ test('bill.analyze supports an inclusive custom date range and equal-length comp
   assert.ok(result.evidence[0].entity_ids.every((id) => typeof id === 'string'));
 });
 
-test('subscription.list returns current snapshot without claiming cancellation capability', () => {
+test('subscription.list returns current snapshot without claiming cancellation capability', async () => {
   const { repository } = createFinancialContext();
-  const result = listSubscriptions(repository);
+  const result = await listSubscriptions(repository);
   const active = repository.getSubscriptions().filter((subscription) => subscription.status === 'active');
   assert.equal(result.action, 'subscription.list');
   assert.equal(result.active_count, active.length);

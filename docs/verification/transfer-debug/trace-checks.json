@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "sessionCount": 1,
+  "sessionTag": "c8f70e6b27c03316",
+  "model": "test/deepseek-v4-1-flash",
+  "toolDefinitionsSeen": true,
+  "actualToolCalls": 5,
+  "onlyTool": "transfer_preview",
+  "continuousPreviousTurnChain": true,
+  "allContinuationTagsLinked": true,
+  "firstAmountFen": 50000,
+  "editedAmountFen": 40000,
+  "firstAndEditedAccount": "ACC-CHECKING",
+  "firstAndEditedPayee": "payee_003",
+  "confirmExecuteToolCalls": 0
+}

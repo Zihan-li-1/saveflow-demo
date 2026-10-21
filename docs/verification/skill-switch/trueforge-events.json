@@ -1,0 +1,1667 @@
+{
+  "source": "real local TrueForge SQLite (read-only)",
+  "sessions": [
+    {
+      "sessionTag": "2eb302cad9fb5021",
+      "savedAgentName": null,
+      "shared": false,
+      "model": {
+        "name": "test/deepseek-v4-1-flash",
+        "params": {
+          "max_tokens": 4096,
+          "temperature": 0,
+          "parallel_tool_calls": false,
+          "thinking": {
+            "type": "disabled"
+          }
+        }
+      },
+      "mcpServers": [
+        {
+          "name": "saveflow-token-bridge",
+          "enable_tools": [
+            "transfer_preview"
+          ],
+          "disable_tools": [],
+          "preload_tools": [],
+          "require_approval_for_tools": [
+            "@all"
+          ],
+          "preload": true
+        }
+      ],
+      "events": [
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:06:57.535Z",
+          "turnId": "01m54rp8kyaysx1hxewvx1csyc",
+          "previousTurnId": null,
+          "userInputs": [
+            {
+              "userMessage": "从模拟活期账户转账500元给房东王先生",
+              "toolArguments": {
+                "payee_ref": "房东王先生",
+                "source_account_ref": "模拟活期账户",
+                "amount": {
+                  "amount_minor": 50000,
+                  "currency": "CNY"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:06:58.434Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 1505,
+            "output_tokens": 94,
+            "cache_read_tokens": 1280,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 430
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_IwjHqSguBg82V6bpuF606277",
+              "tool_info": {
+                "type": "mcp",
+                "name": "transfer_preview",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "transfer_preview",
+              "arguments": {
+                "payee_ref": "房东王先生",
+                "source_account_ref": "模拟活期账户",
+                "amount": {
+                  "amount_minor": 50000,
+                  "currency": "CNY"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:06:58.436Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:06:58.443Z",
+          "turnId": "01m54rp9gaqz89ywayrz7xygp4",
+          "previousTurnId": "01m54rp8kyaysx1hxewvx1csyc",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:06:58.466Z",
+          "toolCallId": "call_00_IwjHqSguBg82V6bpuF606277",
+          "result": {
+            "ok": true,
+            "code": "OK",
+            "message": "转账正式预览已生成，等待用户确认",
+            "status": "awaiting_confirmation",
+            "action": "transfer.create",
+            "operationId": "op_d7745638-f551-4133-ac27-aa1b4000675c",
+            "preview": {
+              "planId": "plan_5fa75ce8-dac8-4248-9818-78f53f6d7617",
+              "stepIds": [
+                "step_d58d24b1-ba51-470f-bb02-8477f44477cb"
+              ],
+              "summary": "从模拟活期账户向房东王先生（****1003）模拟转账 ¥500.00，手续费 ¥0.00，模拟即时到账。",
+              "exactEffects": [
+                {
+                  "kind": "transfer_out",
+                  "fromAccountId": "ACC-CHECKING",
+                  "accountName": "模拟活期账户",
+                  "payeeId": "payee_003",
+                  "payeeName": "房东王先生",
+                  "accountNoMasked": "****1003",
+                  "amountFen": 50000,
+                  "feeFen": 0,
+                  "currency": "CNY",
+                  "balanceBeforeFen": 500000,
+                  "balanceAfterFen": 450000,
+                  "availableBalanceAfterFen": 450000,
+                  "accountVersion": 0,
+                  "memo": "",
+                  "arrival": "mock_immediate"
+                }
+              ],
+              "riskLevel": "L3",
+              "warnings": [
+                "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+              ],
+              "expiresAt": "2026-10-17T11:11:58.462Z",
+              "previewHash": "4fa736df60595a05a687d198a1703ed24e922b3aef13ad087897615c538a3eb5",
+              "contextSnapshotId": "saveflow-phase1-fixed-v1:0"
+            },
+            "risk": {
+              "allowed": true,
+              "riskLevel": "L3",
+              "policyVersion": "mock-transfer-v1",
+              "requiredConfirmation": "mock_explicit",
+              "warnings": [
+                "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+              ]
+            },
+            "continuationToken": {
+              "present": true,
+              "sha256Tag": "fa93eed4ff0a6dac"
+            },
+            "kind": "awaiting_confirmation",
+            "previewOnly": true,
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:06:58.950Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 2081,
+            "output_tokens": 3,
+            "cache_read_tokens": 1536,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 1006
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:06:58.952Z",
+          "status": "done",
+          "requiredActions": []
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:06:59.031Z",
+          "turnId": "01m54rpa2mq6p79wzqa31paypd",
+          "previousTurnId": "01m54rp9gaqz89ywayrz7xygp4",
+          "userInputs": [
+            {
+              "userMessage": "改成300元",
+              "toolArguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "fa93eed4ff0a6dac"
+                },
+                "message": "改成300元"
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:00.077Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 2133,
+            "output_tokens": 79,
+            "cache_read_tokens": 1920,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 1058
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_N4BigWBU5Gkx9udjBJnD1145",
+              "tool_info": {
+                "type": "mcp",
+                "name": "transfer_preview",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "transfer_preview",
+              "arguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "fa93eed4ff0a6dac"
+                },
+                "message": "改成300元"
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:07:00.079Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:07:00.085Z",
+          "turnId": "01m54rpb3k6v1x6fdpm88vbsev",
+          "previousTurnId": "01m54rpa2mq6p79wzqa31paypd",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:07:00.104Z",
+          "toolCallId": "call_00_N4BigWBU5Gkx9udjBJnD1145",
+          "result": {
+            "ok": true,
+            "code": "OK",
+            "message": "转账正式预览已生成，等待用户确认",
+            "status": "awaiting_confirmation",
+            "action": "transfer.create",
+            "operationId": "op_e9db13ed-8a92-4b74-8437-27b7cca6b655",
+            "preview": {
+              "planId": "plan_67f6abfb-2def-411a-a552-32b5d5e6f22d",
+              "stepIds": [
+                "step_a82e0b0f-d1bb-4d3a-9960-1a343323a621"
+              ],
+              "summary": "从模拟活期账户向房东王先生（****1003）模拟转账 ¥300.00，手续费 ¥0.00，模拟即时到账。",
+              "exactEffects": [
+                {
+                  "kind": "transfer_out",
+                  "fromAccountId": "ACC-CHECKING",
+                  "accountName": "模拟活期账户",
+                  "payeeId": "payee_003",
+                  "payeeName": "房东王先生",
+                  "accountNoMasked": "****1003",
+                  "amountFen": 30000,
+                  "feeFen": 0,
+                  "currency": "CNY",
+                  "balanceBeforeFen": 500000,
+                  "balanceAfterFen": 470000,
+                  "availableBalanceAfterFen": 470000,
+                  "accountVersion": 0,
+                  "memo": "",
+                  "arrival": "mock_immediate"
+                }
+              ],
+              "riskLevel": "L3",
+              "warnings": [
+                "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+              ],
+              "expiresAt": "2026-10-17T11:12:00.101Z",
+              "previewHash": "e15795fbc21e6b8731bb575f3ff2358d89e8d9f82468eb217cf144fc17db67f6",
+              "contextSnapshotId": "saveflow-phase1-fixed-v1:0"
+            },
+            "risk": {
+              "allowed": true,
+              "riskLevel": "L3",
+              "policyVersion": "mock-transfer-v1",
+              "requiredConfirmation": "mock_explicit",
+              "warnings": [
+                "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+              ]
+            },
+            "continuationToken": {
+              "present": true,
+              "sha256Tag": "2a41a5b365fac712"
+            },
+            "kind": "awaiting_confirmation",
+            "previewOnly": true,
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:00.752Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 2708,
+            "output_tokens": 3,
+            "cache_read_tokens": 2176,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 1633
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:07:00.754Z",
+          "status": "done",
+          "requiredActions": []
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:07:04.724Z",
+          "turnId": "01m54rpfmh8kcrprjsxn2an5n3",
+          "previousTurnId": "01m54rpb3k6v1x6fdpm88vbsev",
+          "userInputs": [
+            {
+              "userMessage": "改成转账250元",
+              "toolArguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "2a41a5b365fac712"
+                },
+                "message": "改成转账250元"
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:05.714Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 2764,
+            "output_tokens": 82,
+            "cache_read_tokens": 2560,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 1689
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_LcPaaddms06TA5EX9X6u0693",
+              "tool_info": {
+                "type": "mcp",
+                "name": "transfer_preview",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "transfer_preview",
+              "arguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "2a41a5b365fac712"
+                },
+                "message": "改成转账250元"
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:07:05.718Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:07:05.725Z",
+          "turnId": "01m54rpgkwftg4aqayxsje0yfa",
+          "previousTurnId": "01m54rpfmh8kcrprjsxn2an5n3",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:07:05.746Z",
+          "toolCallId": "call_00_LcPaaddms06TA5EX9X6u0693",
+          "result": {
+            "ok": true,
+            "code": "OK",
+            "message": "转账正式预览已生成，等待用户确认",
+            "status": "awaiting_confirmation",
+            "action": "transfer.create",
+            "operationId": "op_f1972a67-d319-472f-9e7d-42aa43ff6d14",
+            "preview": {
+              "planId": "plan_03153113-7ede-4ce7-95cd-b069c913a29a",
+              "stepIds": [
+                "step_ad2b4983-79b7-4fae-9f84-79cd7f6015ea"
+              ],
+              "summary": "从模拟活期账户向房东王先生（****1003）模拟转账 ¥250.00，手续费 ¥0.00，模拟即时到账。",
+              "exactEffects": [
+                {
+                  "kind": "transfer_out",
+                  "fromAccountId": "ACC-CHECKING",
+                  "accountName": "模拟活期账户",
+                  "payeeId": "payee_003",
+                  "payeeName": "房东王先生",
+                  "accountNoMasked": "****1003",
+                  "amountFen": 25000,
+                  "feeFen": 0,
+                  "currency": "CNY",
+                  "balanceBeforeFen": 500000,
+                  "balanceAfterFen": 475000,
+                  "availableBalanceAfterFen": 475000,
+                  "accountVersion": 0,
+                  "memo": "",
+                  "arrival": "mock_immediate"
+                }
+              ],
+              "riskLevel": "L3",
+              "warnings": [
+                "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+              ],
+              "expiresAt": "2026-10-17T11:12:05.743Z",
+              "previewHash": "ce3f8bb1e7e2eb1d5186714127f85823e1e493c945f9ba09ea98b6eede987990",
+              "contextSnapshotId": "saveflow-phase1-fixed-v1:0"
+            },
+            "risk": {
+              "allowed": true,
+              "riskLevel": "L3",
+              "policyVersion": "mock-transfer-v1",
+              "requiredConfirmation": "mock_explicit",
+              "warnings": [
+                "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+              ]
+            },
+            "continuationToken": {
+              "present": true,
+              "sha256Tag": "36ce968e41333fa8"
+            },
+            "kind": "awaiting_confirmation",
+            "previewOnly": true,
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:06.438Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 3338,
+            "output_tokens": 3,
+            "cache_read_tokens": 2816,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 2263
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:07:06.439Z",
+          "status": "done",
+          "requiredActions": []
+        }
+      ]
+    },
+    {
+      "sessionTag": "8b246f9b11547054",
+      "savedAgentName": null,
+      "shared": false,
+      "model": {
+        "name": "test/deepseek-v4-1-flash",
+        "params": {
+          "max_tokens": 4096,
+          "temperature": 0,
+          "parallel_tool_calls": false,
+          "thinking": {
+            "type": "disabled"
+          }
+        }
+      },
+      "mcpServers": [
+        {
+          "name": "saveflow-token-bridge",
+          "enable_tools": [
+            "card_get"
+          ],
+          "disable_tools": [],
+          "preload_tools": [],
+          "require_approval_for_tools": [
+            "@all"
+          ],
+          "preload": true
+        }
+      ],
+      "events": [
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:07:00.814Z",
+          "turnId": "01m54rpbtdjb4sk2yys9k7xqeg",
+          "previousTurnId": null,
+          "userInputs": [
+            {
+              "userMessage": "查看我的卡",
+              "toolArguments": {
+                "card_ref": "我的卡"
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:01.566Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 1349,
+            "output_tokens": 39,
+            "cache_read_tokens": 1152,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 67,
+              "tool_definitions": 152,
+              "messages": 362
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_XtLnmHjMFd0gxOsWks3N3410",
+              "tool_info": {
+                "type": "mcp",
+                "name": "card_get",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "card_get",
+              "arguments": {
+                "card_ref": "我的卡"
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:07:01.569Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:07:01.579Z",
+          "turnId": "01m54rpcj8dwf5zzhjt8xpc6kv",
+          "previousTurnId": "01m54rpbtdjb4sk2yys9k7xqeg",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:07:01.598Z",
+          "toolCallId": "call_00_XtLnmHjMFd0gxOsWks3N3410",
+          "result": {
+            "ok": true,
+            "code": "NEEDS_CLARIFICATION",
+            "message": "请选择要操作的卡片。",
+            "kind": "needs_clarification",
+            "status": "needs_clarification",
+            "action": "card.get",
+            "question": "请选择要操作的卡片。",
+            "slot": "card_ref",
+            "source": "resolver",
+            "choices": [
+              {
+                "optionId": "opt_c7ecdd1d-ea6c-4044-940b-5bf65ecd3504",
+                "label": "日常虚拟卡（卡片 1）"
+              },
+              {
+                "optionId": "opt_de4bbbf9-fd3f-4fa6-a21c-3c13d3d68491",
+                "label": "娱乐虚拟卡（卡片 2）"
+              }
+            ],
+            "continuationToken": {
+              "present": true,
+              "sha256Tag": "2e93831ab635ccca"
+            },
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:02.246Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 1585,
+            "output_tokens": 3,
+            "cache_read_tokens": 1280,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 67,
+              "tool_definitions": 152,
+              "messages": 598
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:07:02.248Z",
+          "status": "done",
+          "requiredActions": []
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:07:02.556Z",
+          "turnId": "01m54rpdgsdw2er7ybayahgc9z",
+          "previousTurnId": "01m54rpcj8dwf5zzhjt8xpc6kv",
+          "userInputs": [
+            {
+              "userMessage": "用户选择了本次候选",
+              "toolArguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "2e93831ab635ccca"
+                },
+                "choice": {
+                  "optionId": "opt_c7ecdd1d-ea6c-4044-940b-5bf65ecd3504"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:03.576Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 1663,
+            "output_tokens": 106,
+            "cache_read_tokens": 1408,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 67,
+              "tool_definitions": 152,
+              "messages": 676
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_rqtb3ntiTh9tIO78XpJH4844",
+              "tool_info": {
+                "type": "mcp",
+                "name": "card_get",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "card_get",
+              "arguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "2e93831ab635ccca"
+                },
+                "choice": {
+                  "optionId": "opt_c7ecdd1d-ea6c-4044-940b-5bf65ecd3504"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:07:03.579Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:07:03.588Z",
+          "turnId": "01m54rpeh1qbdh800gkpf5gavf",
+          "previousTurnId": "01m54rpdgsdw2er7ybayahgc9z",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:07:03.605Z",
+          "toolCallId": "call_00_rqtb3ntiTh9tIO78XpJH4844",
+          "result": {
+            "ok": true,
+            "code": "OK",
+            "message": "卡片信息已查询",
+            "status": "card_result",
+            "action": "card.get",
+            "data": {
+              "kind": "query",
+              "card": {
+                "id": "CARD-MAIN",
+                "name": "日常虚拟卡",
+                "accountId": "ACC-CHECKING",
+                "status": "active",
+                "monthlyBudgetFen": 500000,
+                "monthlySpentFen": 0,
+                "version": 0,
+                "previewGeneration": 1
+              },
+              "context": {
+                "datasetId": "saveflow-phase1-fixed-v1",
+                "asOf": "2026-09-01T00:00:00+08:00",
+                "currentMonth": "2026-08",
+                "previousMonth": "2026-07",
+                "snapshotId": "saveflow-phase1-fixed-v1:0",
+                "dataSource": "synthetic_demo_only",
+                "currency": "CNY"
+              }
+            },
+            "evidence": [
+              {
+                "source": "synthetic_demo_only",
+                "asOf": "2026-09-01T00:00:00+08:00",
+                "entityIds": [
+                  "CARD-MAIN"
+                ]
+              }
+            ],
+            "kind": "card_result",
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:04.382Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 2006,
+            "output_tokens": 3,
+            "cache_read_tokens": 1664,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 67,
+              "tool_definitions": 152,
+              "messages": 1019
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:07:04.385Z",
+          "status": "done",
+          "requiredActions": []
+        }
+      ]
+    },
+    {
+      "sessionTag": "19bffe67ad7747c1",
+      "savedAgentName": null,
+      "shared": false,
+      "model": {
+        "name": "test/deepseek-v4-1-flash",
+        "params": {
+          "max_tokens": 512,
+          "parallel_tool_calls": false,
+          "thinking": {
+            "type": "disabled"
+          }
+        }
+      },
+      "mcpServers": [
+        {
+          "name": "sv-trial",
+          "enable_tools": [
+            "bill_summary"
+          ],
+          "disable_tools": [],
+          "preload_tools": [],
+          "require_approval_for_tools": [
+            "@write",
+            "@destructive"
+          ],
+          "preload": true
+        }
+      ],
+      "events": [
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:07:06.515Z",
+          "turnId": "01m54rphcjty1sstwcbgk0354c",
+          "previousTurnId": null,
+          "userInputs": [
+            {
+              "userMessage": "查询8月账单",
+              "toolArguments": {}
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:07.211Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 1223,
+            "output_tokens": 22,
+            "cache_read_tokens": 0,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 72,
+              "tool_definitions": 71,
+              "messages": 312
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_frkkKpjCjrVJC1xsCKuG4080",
+              "tool_info": {
+                "type": "mcp",
+                "name": "bill_summary",
+                "server_id": "sv-trial",
+                "server_name": "sv-trial"
+              },
+              "name": "bill_summary",
+              "arguments": {}
+            }
+          ]
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:07:07.216Z",
+          "toolCallId": "call_00_frkkKpjCjrVJC1xsCKuG4080",
+          "result": {
+            "error": [
+              {
+                "type": "text",
+                "text": "{\"ok\":false,\"kind\":\"needs_clarification\",\"missingSlots\":[\"month\"],\"error\":{\"code\":\"MISSING_MONTH\",\"message\":\"缺少 month，请提供 YYYY-MM 格式的月份，例如 2026-08。\"}}"
+              }
+            ]
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:07.950Z",
+          "content": "请补充年月",
+          "usage": {
+            "input_tokens": 1336,
+            "output_tokens": 3,
+            "cache_read_tokens": 1152,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 72,
+              "tool_definitions": 71,
+              "messages": 425
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:07:07.952Z",
+          "status": "done",
+          "requiredActions": []
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:07:08.018Z",
+          "turnId": "01m54rpjvgpbwfb5fdtktr8j93",
+          "previousTurnId": "01m54rphcjty1sstwcbgk0354c",
+          "userInputs": [
+            {
+              "userMessage": "2026年8月",
+              "toolArguments": {
+                "month": "2026-08"
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:08.779Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 1364,
+            "output_tokens": 41,
+            "cache_read_tokens": 1152,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 72,
+              "tool_definitions": 71,
+              "messages": 453
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_aENC8dlOYbick7nLrSUE7895",
+              "tool_info": {
+                "type": "mcp",
+                "name": "bill_summary",
+                "server_id": "sv-trial",
+                "server_name": "sv-trial"
+              },
+              "name": "bill_summary",
+              "arguments": {
+                "month": "2026-08"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:07:08.786Z",
+          "toolCallId": "call_00_aENC8dlOYbick7nLrSUE7895",
+          "result": {
+            "ok": true,
+            "kind": "bill_result",
+            "action": "bill.summary",
+            "data": {
+              "month": "2026-08",
+              "totalIncomeFen": 1200000,
+              "totalExpenseFen": 846000,
+              "transactionCount": 12,
+              "categoryTotals": {
+                "房租": 300000,
+                "餐饮": 145000,
+                "交通": 40000,
+                "通信": 10000,
+                "日用品": 50000,
+                "娱乐": 112000,
+                "购物": 128000,
+                "订阅": 9000,
+                "其他": 52000
+              }
+            },
+            "evidence": [
+              {
+                "source": "synthetic_demo_only",
+                "asOf": "2026-09-01T00:00:00+08:00",
+                "entityIds": [
+                  "TXN-202608-SAL",
+                  "TXN-202608-01-1",
+                  "TXN-202608-02-1",
+                  "TXN-202608-03-1",
+                  "TXN-202608-04-1",
+                  "TXN-202608-05-1",
+                  "TXN-202608-06-1",
+                  "TXN-202608-06-2",
+                  "TXN-202608-07-1",
+                  "TXN-202608-07-2",
+                  "TXN-202608-08-1",
+                  "TXN-202608-09-1"
+                ]
+              }
+            ],
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:09.308Z",
+          "content": "查询完成",
+          "usage": {
+            "input_tokens": 1681,
+            "output_tokens": 2,
+            "cache_read_tokens": 1280,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 72,
+              "tool_definitions": 71,
+              "messages": 770
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:07:09.310Z",
+          "status": "done",
+          "requiredActions": []
+        }
+      ]
+    },
+    {
+      "sessionTag": "8f9bac55b3c72da9",
+      "savedAgentName": null,
+      "shared": false,
+      "model": {
+        "name": "test/deepseek-v4-1-flash",
+        "params": {
+          "max_tokens": 4096,
+          "temperature": 0,
+          "parallel_tool_calls": false,
+          "thinking": {
+            "type": "disabled"
+          }
+        }
+      },
+      "mcpServers": [
+        {
+          "name": "saveflow-token-bridge",
+          "enable_tools": [
+            "transfer_preview"
+          ],
+          "disable_tools": [],
+          "preload_tools": [],
+          "require_approval_for_tools": [
+            "@all"
+          ],
+          "preload": true
+        }
+      ],
+      "events": [
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:07:10.345Z",
+          "turnId": "01m54rpn48jy0tyrbkbch5mep2",
+          "previousTurnId": null,
+          "userInputs": [
+            {
+              "userMessage": "从模拟活期账户转账200元给房东王先生",
+              "toolArguments": {
+                "payee_ref": "房东王先生",
+                "source_account_ref": "模拟活期账户",
+                "amount": {
+                  "amount_minor": 20000,
+                  "currency": "CNY"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:11.416Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 1505,
+            "output_tokens": 94,
+            "cache_read_tokens": 1280,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 430
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_P1nNxGCnUTzteNIyrvYD3509",
+              "tool_info": {
+                "type": "mcp",
+                "name": "transfer_preview",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "transfer_preview",
+              "arguments": {
+                "payee_ref": "房东王先生",
+                "source_account_ref": "模拟活期账户",
+                "amount": {
+                  "amount_minor": 20000,
+                  "currency": "CNY"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:07:11.418Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:07:11.426Z",
+          "turnId": "01m54rpp5zfkahntkyfq5fq9zt",
+          "previousTurnId": "01m54rpn48jy0tyrbkbch5mep2",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:07:11.470Z",
+          "toolCallId": "call_00_P1nNxGCnUTzteNIyrvYD3509",
+          "result": {
+            "ok": true,
+            "code": "OK",
+            "message": "转账正式预览已生成，等待用户确认",
+            "status": "awaiting_confirmation",
+            "action": "transfer.create",
+            "operationId": "op_dc92eb80-7cf6-456a-95fc-c4fd1376351b",
+            "preview": {
+              "planId": "plan_d34bf883-1208-46ae-b2e6-e792e3cc88e3",
+              "stepIds": [
+                "step_507e4ec4-e45b-4bba-a98b-b709e2c46eb2"
+              ],
+              "summary": "从模拟活期账户向房东王先生（****1003）模拟转账 ¥200.00，手续费 ¥0.00，模拟即时到账。",
+              "exactEffects": [
+                {
+                  "kind": "transfer_out",
+                  "fromAccountId": "ACC-CHECKING",
+                  "accountName": "模拟活期账户",
+                  "payeeId": "payee_003",
+                  "payeeName": "房东王先生",
+                  "accountNoMasked": "****1003",
+                  "amountFen": 20000,
+                  "feeFen": 0,
+                  "currency": "CNY",
+                  "balanceBeforeFen": 500000,
+                  "balanceAfterFen": 480000,
+                  "availableBalanceAfterFen": 480000,
+                  "accountVersion": 0,
+                  "memo": "",
+                  "arrival": "mock_immediate"
+                }
+              ],
+              "riskLevel": "L3",
+              "warnings": [
+                "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+              ],
+              "expiresAt": "2026-10-17T11:12:11.467Z",
+              "previewHash": "1f4e240ee7b0951ae61ded7bde812d97a69bc44f244dca512fa3ee61b5e7a960",
+              "contextSnapshotId": "saveflow-phase1-fixed-v1:0"
+            },
+            "risk": {
+              "allowed": true,
+              "riskLevel": "L3",
+              "policyVersion": "mock-transfer-v1",
+              "requiredConfirmation": "mock_explicit",
+              "warnings": [
+                "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+              ]
+            },
+            "continuationToken": {
+              "present": true,
+              "sha256Tag": "400f4ce5616a5d4d"
+            },
+            "kind": "awaiting_confirmation",
+            "previewOnly": true,
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:12.135Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 2089,
+            "output_tokens": 3,
+            "cache_read_tokens": 1536,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 1014
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:07:12.137Z",
+          "status": "done",
+          "requiredActions": []
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:08:02.370Z",
+          "turnId": "01m54rr7xzg7z2jstdsf0epg8z",
+          "previousTurnId": "01m54rpp5zfkahntkyfq5fq9zt",
+          "userInputs": [
+            {
+              "userMessage": "改成转账150元",
+              "toolArguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "400f4ce5616a5d4d"
+                },
+                "message": "改成转账150元"
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:08:03.496Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 2145,
+            "output_tokens": 82,
+            "cache_read_tokens": 1920,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 1070
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_EjXEStMvcySQ4NPKAkgQ2833",
+              "tool_info": {
+                "type": "mcp",
+                "name": "transfer_preview",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "transfer_preview",
+              "arguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "400f4ce5616a5d4d"
+                },
+                "message": "改成转账150元"
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:08:03.499Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:08:03.508Z",
+          "turnId": "01m54rr91h11745d7fgp2b4370",
+          "previousTurnId": "01m54rr7xzg7z2jstdsf0epg8z",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:08:03.532Z",
+          "toolCallId": "call_00_EjXEStMvcySQ4NPKAkgQ2833",
+          "result": {
+            "ok": true,
+            "code": "OK",
+            "message": "转账正式预览已生成，等待用户确认",
+            "status": "awaiting_confirmation",
+            "action": "transfer.create",
+            "operationId": "op_295d3fd5-e548-4063-8a86-b2f53da06e00",
+            "preview": {
+              "planId": "plan_9c36ca92-2e94-4686-a217-cb36adf69042",
+              "stepIds": [
+                "step_0b14f46f-ded5-4516-888e-72f54a0cdcf1"
+              ],
+              "summary": "从模拟活期账户向房东王先生（****1003）模拟转账 ¥150.00，手续费 ¥0.00，模拟即时到账。",
+              "exactEffects": [
+                {
+                  "kind": "transfer_out",
+                  "fromAccountId": "ACC-CHECKING",
+                  "accountName": "模拟活期账户",
+                  "payeeId": "payee_003",
+                  "payeeName": "房东王先生",
+                  "accountNoMasked": "****1003",
+                  "amountFen": 15000,
+                  "feeFen": 0,
+                  "currency": "CNY",
+                  "balanceBeforeFen": 500000,
+                  "balanceAfterFen": 485000,
+                  "availableBalanceAfterFen": 485000,
+                  "accountVersion": 0,
+                  "memo": "",
+                  "arrival": "mock_immediate"
+                }
+              ],
+              "riskLevel": "L3",
+              "warnings": [
+                "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+              ],
+              "expiresAt": "2026-10-17T11:13:03.529Z",
+              "previewHash": "57a74116dd0009c6a598e265637f9dc578fd950cb0185b62a1454573e4f211fe",
+              "contextSnapshotId": "saveflow-phase1-fixed-v1:0"
+            },
+            "risk": {
+              "allowed": true,
+              "riskLevel": "L3",
+              "policyVersion": "mock-transfer-v1",
+              "requiredConfirmation": "mock_explicit",
+              "warnings": [
+                "合成数据模拟转账，不接真实银行；此确认仅用于 Mock。"
+              ]
+            },
+            "continuationToken": {
+              "present": true,
+              "sha256Tag": "85f4a04d05097d3c"
+            },
+            "kind": "awaiting_confirmation",
+            "previewOnly": true,
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:08:04.163Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 2713,
+            "output_tokens": 3,
+            "cache_read_tokens": 2176,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 1638
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:08:04.167Z",
+          "status": "done",
+          "requiredActions": []
+        }
+      ]
+    },
+    {
+      "sessionTag": "0736b541ec9895e4",
+      "savedAgentName": null,
+      "shared": false,
+      "model": {
+        "name": "test/deepseek-v4-1-flash",
+        "params": {
+          "max_tokens": 4096,
+          "temperature": 0,
+          "parallel_tool_calls": false,
+          "thinking": {
+            "type": "disabled"
+          }
+        }
+      },
+      "mcpServers": [
+        {
+          "name": "saveflow-token-bridge",
+          "enable_tools": [
+            "card_get"
+          ],
+          "disable_tools": [],
+          "preload_tools": [],
+          "require_approval_for_tools": [
+            "@all"
+          ],
+          "preload": true
+        }
+      ],
+      "events": [
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:07:58.843Z",
+          "turnId": "01m54rr4ft96mmb7x07err73yy",
+          "previousTurnId": null,
+          "userInputs": [
+            {
+              "userMessage": "查看我的卡",
+              "toolArguments": {
+                "card_ref": "我的卡"
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:07:59.633Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 1349,
+            "output_tokens": 39,
+            "cache_read_tokens": 1152,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 67,
+              "tool_definitions": 152,
+              "messages": 362
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_KiiR9gTtzrtRuJfXW50k5436",
+              "tool_info": {
+                "type": "mcp",
+                "name": "card_get",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "card_get",
+              "arguments": {
+                "card_ref": "我的卡"
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:07:59.637Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:07:59.645Z",
+          "turnId": "01m54rr58tanxbjc1h3kpesenm",
+          "previousTurnId": "01m54rr4ft96mmb7x07err73yy",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:07:59.662Z",
+          "toolCallId": "call_00_KiiR9gTtzrtRuJfXW50k5436",
+          "result": {
+            "ok": true,
+            "code": "NEEDS_CLARIFICATION",
+            "message": "请选择要操作的卡片。",
+            "kind": "needs_clarification",
+            "status": "needs_clarification",
+            "action": "card.get",
+            "question": "请选择要操作的卡片。",
+            "slot": "card_ref",
+            "source": "resolver",
+            "choices": [
+              {
+                "optionId": "opt_850dfe4e-c899-44f1-bb0e-9707ec16a5e3",
+                "label": "日常虚拟卡（卡片 1）"
+              },
+              {
+                "optionId": "opt_02dfef0a-8e98-43d2-a387-362611960a5a",
+                "label": "娱乐虚拟卡（卡片 2）"
+              }
+            ],
+            "continuationToken": {
+              "present": true,
+              "sha256Tag": "4e3de1effb849325"
+            },
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:08:00.306Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 1586,
+            "output_tokens": 3,
+            "cache_read_tokens": 1280,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 67,
+              "tool_definitions": 152,
+              "messages": 599
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:08:00.307Z",
+          "status": "done",
+          "requiredActions": []
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:08:00.634Z",
+          "turnId": "01m54rr67rvbcwfa30st4zrdhz",
+          "previousTurnId": "01m54rr58tanxbjc1h3kpesenm",
+          "userInputs": [
+            {
+              "userMessage": "用户选择了本次候选",
+              "toolArguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "4e3de1effb849325"
+                },
+                "choice": {
+                  "optionId": "opt_850dfe4e-c899-44f1-bb0e-9707ec16a5e3"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:08:01.490Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 1667,
+            "output_tokens": 109,
+            "cache_read_tokens": 1408,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 67,
+              "tool_definitions": 152,
+              "messages": 680
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_OfnlR2J8pdW6bi5wShLh8655",
+              "tool_info": {
+                "type": "mcp",
+                "name": "card_get",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "card_get",
+              "arguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "4e3de1effb849325"
+                },
+                "choice": {
+                  "optionId": "opt_850dfe4e-c899-44f1-bb0e-9707ec16a5e3"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:08:01.492Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:08:01.499Z",
+          "turnId": "01m54rr72s32yn3faf64cfq64m",
+          "previousTurnId": "01m54rr67rvbcwfa30st4zrdhz",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:08:01.521Z",
+          "toolCallId": "call_00_OfnlR2J8pdW6bi5wShLh8655",
+          "result": {
+            "ok": true,
+            "code": "OK",
+            "message": "卡片信息已查询",
+            "status": "card_result",
+            "action": "card.get",
+            "data": {
+              "kind": "query",
+              "card": {
+                "id": "CARD-MAIN",
+                "name": "日常虚拟卡",
+                "accountId": "ACC-CHECKING",
+                "status": "active",
+                "monthlyBudgetFen": 500000,
+                "monthlySpentFen": 0,
+                "version": 0,
+                "previewGeneration": 1
+              },
+              "context": {
+                "datasetId": "saveflow-phase1-fixed-v1",
+                "asOf": "2026-09-01T00:00:00+08:00",
+                "currentMonth": "2026-08",
+                "previousMonth": "2026-07",
+                "snapshotId": "saveflow-phase1-fixed-v1:0",
+                "dataSource": "synthetic_demo_only",
+                "currency": "CNY"
+              }
+            },
+            "evidence": [
+              {
+                "source": "synthetic_demo_only",
+                "asOf": "2026-09-01T00:00:00+08:00",
+                "entityIds": [
+                  "CARD-MAIN"
+                ]
+              }
+            ],
+            "kind": "card_result",
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:08:02.240Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 2013,
+            "output_tokens": 3,
+            "cache_read_tokens": 1664,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 67,
+              "tool_definitions": 152,
+              "messages": 1026
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:08:02.242Z",
+          "status": "done",
+          "requiredActions": []
+        }
+      ]
+    }
+  ]
+}

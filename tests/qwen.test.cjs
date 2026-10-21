@@ -2,8 +2,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const env = { DASHSCOPE_API_KEY: 'test-provider-secret', SAVEFLOW_ACCESS_CODE: 'test-access-code-123456' };
-const decision = { intent: 'create_plan', reply: '建议如下', targetAmountFen: null, monthlySavingFen: 200000, saveRateBps: 500, category: '餐饮', months: null };
-function request(body = { message: '每月存2000，餐饮存5%', consent: true, history: [] }, access = env.SAVEFLOW_ACCESS_CODE) {
+const decision = { intent: 'create_plan', reply: '建议如下', targetAmountFen: null, monthlySavingFen: 200000, months: null };
+function request(body = { message: '每月存2000元', consent: true, history: [] }, access = env.SAVEFLOW_ACCESS_CODE) {
   return new Request('https://demo.example/api/agent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Saveflow-Access': access, Origin: 'https://demo.example' }, body: JSON.stringify(body) });
 }
 const upstream = (value = decision, finish = 'stop') => Response.json({ choices: [{ finish_reason: finish, message: { content: JSON.stringify(value) } }], usage: { prompt_tokens: 100, completion_tokens: 50 } });
@@ -33,20 +33,32 @@ test('Qwen: real protocol adapter returns validated draft and usage, never provi
   } });
   const data = await response.json();
   assert.equal(response.status, 200); assert.equal(calls, 1);
-  assert.equal(data.data.plan.category, '餐饮'); assert.equal(data.data.plan.monthlySavingFen, 200000);
+  assert.equal(data.data.plan.monthlySavingFen, 200000);
+  assert.equal('saveRateBps' in data.data.plan, false);
   assert.equal(data.data.usage.inputTokens, 100);
   assert.equal(JSON.stringify(data).includes(env.DASHSCOPE_API_KEY), false);
 });
 test('Qwen: model cannot bypass rules, ambiguous queries and read-only answers create no plan', async () => {
   const { interpret, context } = await import('../server/qwen.mjs');
-  assert.throws(() => interpret({ ...decision, saveRateBps: 10001 }));
-  assert.throws(() => interpret({ ...decision, category: 'execute-payment' }));
+  assert.throws(() => interpret({ ...decision, saveRateBps: 500 }));
+  assert.throws(() => interpret({ ...decision, intent: 'update_saving_rule' }));
   assert.equal(interpret({ ...decision, monthlySavingFen: 400000 }).plan, null);
   assert.equal(interpret({ ...decision, monthlySavingFen: null }).needsClarification, true);
   assert.equal(interpret({ ...decision, intent: 'subscriptions' }).plan, null);
-  assert.equal(interpret({ ...decision, intent: 'update_saving_rule', category: null }).needsClarification, true);
+  assert.equal(interpret(decision, '餐饮储蓄规则设为5%').plan, null);
+  assert.equal(interpret(decision, '每月存2000，餐饮存5%').plan, null);
+  assert.equal(interpret(decision, '帮我减少娱乐消费').plan, null);
+  assert.doesNotMatch(interpret(decision, '帮我减少娱乐消费').reply, /设置储蓄比例/);
   const calculated = interpret({ ...decision, monthlySavingFen: null, targetAmountFen: context.savedAmountFen + 600001, months: 3 });
   assert.equal(calculated.plan.monthlySavingFen, 200001);
+});
+test('Qwen: deprecated ratio request cannot become a plan even if model proposes one', async () => {
+  const { handleAgent } = await import('../server/qwen.mjs');
+  const response = await handleAgent(request({ message: '餐饮储蓄规则设为5%', consent: true, history: [] }), { env, fetchImpl: async () => upstream(decision) });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.data.intent, 'unsupported');
+  assert.equal(payload.data.plan, null);
 });
 test('Qwen: invalid/truncated results, provider errors and timeouts are explicit and not retried', async () => {
   const { handleAgent } = await import('../server/qwen.mjs');

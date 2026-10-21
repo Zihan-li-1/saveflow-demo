@@ -20,6 +20,7 @@ DASHSCOPE_API_KEY=你的北京地域百炼密钥
 QWEN_MODEL=qwen-plus
 QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 SAVEFLOW_ACCESS_CODE=自己设置的至少16位演示访问码
+CONTINUATION_TOKEN_SECRET=另一个至少16位服务端续接密钥
 ```
 
 `DASHSCOPE_API_KEY` 只交给后端。`SAVEFLOW_ACCESS_CODE` 是另外设置的私人演示口令，在网页输入；它不等于百炼密钥。二者都不能加 `NEXT_PUBLIC_` 前缀，不能提交到仓库。演示访问码只保存在页面内存，刷新后需重输。
@@ -28,9 +29,9 @@ SAVEFLOW_ACCESS_CODE=自己设置的至少16位演示访问码
 
 可测试：
 
-- “我想每月存2000元，日常消费自动存5%。” → 返回待确认计划。
+- “我想每月存2000元。” → 返回只包含月金额的待确认目标计划。
 - “我想存2万元。” → 信息不足时询问期限或月金额；可继续回答“分12个月”。
-- “餐饮储蓄规则设为5%。” → 提取餐饮和比例，月金额沿用演示默认2500元并明确显示。
+- “餐饮储蓄规则设为5%。” → 明确提示消费比例储蓄规则已不支持，不生成计划。
 - “帮我分析账单。” → 用服务端模拟摘要回答，不创建计划。
 - “找出闲置订阅。” → 仅能解释当前模拟摘要，不捏造订阅使用情况。
 
@@ -48,7 +49,7 @@ Banking Core 已新增独立的模拟接口与确认流程，说明见 [Banking 
 2. 在现有 Netlify 项目的构建设置里连接该仓库，不新建站点。
 3. 如果仓库根目录就是项目目录，Base directory 留空；否则填 `saveflow-demo`。
 4. Build command 为 `npm run build`，Publish directory 为 `out`。仓库中的 `netlify.toml` 已配置 `netlify/functions` 为函数目录。
-5. 在项目 Environment variables 中增加 `DASHSCOPE_API_KEY`、`QWEN_MODEL`、`QWEN_BASE_URL`、`SAVEFLOW_ACCESS_CODE`，确保对 **Functions 运行时和 Production 部署**生效。业务接口模式保持默认 `mock`。
+5. 在项目 Environment variables 中增加 `DASHSCOPE_API_KEY`、`QWEN_MODEL`、`QWEN_BASE_URL`、`SAVEFLOW_ACCESS_CODE`、`CONTINUATION_TOKEN_SECRET`，确保对 **Functions 运行时和 Production 部署**生效。业务接口模式保持默认 `mock`。
 6. 触发部署，在部署结果中确认有 `agent` Function，查看日志确认限流规则成功生效。打开原网址，选择 Qwen、输入演示访问码并提问。
 
 ### 方式二：Netlify CLI 发布到原站点
@@ -85,8 +86,8 @@ netlify deploy --prod --dir=out --functions=netlify/functions
 - 每个请求只调用一次模型；服务端25秒超时，客户端30秒超时；不自动重试。即使超时，供应商已经处理的请求仍可能收费。
 - 页面显示最近一次输入/输出 Token。没有 usage 时显示0只是缺少计数，不代表免费；最终金额以百炼账单为准。
 - 数值上限、每月储蓄计算和现金流检查由程序执行，模型输出不能直接触发支付。模型提供的用户意图和参数仍可能有误，必须由用户核对确认。
-- “目标总额”按公共仓库的目标进度计算剩余差额，当前种子为0元；月份为演示计算口径，包含当前月。未指定比例时为0，不自动推断比例。当前草稿不保存正式到期日期，也不保证达到目标。
-- 模拟计划仍不具备服务端持久化和跨设备状态恢复；修改规则不等于银行规则已修改。
+- “目标总额”按公共仓库的目标进度计算剩余差额，当前种子为0元；月份为演示计算口径，包含当前月。当前草稿不保存正式到期日期，也不保证达到目标。
+- 模拟计划仍不具备跨设备状态恢复，也不会修改银行消费规则。
 - 演示访问码用于限制私人演示使用，不替代生产身份认证。多人公开上线需接入登录、用户级额度和持久化限流/账务日志。付费限额应在供应商可用的额度控制和应用预算服务中落实，不能把单 IP 限流当成总预算。
 
 自动化测试使用假的供应商响应，不产生模型费用，也不能替代真实账号联调。完成环境变量后，首次用一条合成指令验证返回和 Token，再逐步扩大测试。
@@ -98,3 +99,5 @@ netlify deploy --prod --dir=out --functions=netlify/functions
 - [Qwen Plus 能力及价格](https://help.aliyun.com/zh/model-studio/qwen-plus)
 - [Netlify Functions 入门](https://docs.netlify.com/build/functions/get-started/)
 - [Netlify 限流规则](https://docs.netlify.com/manage/security/secure-access-to-sites/rate-limiting/)
+
+Banking Agent 为 IM 默认入口，旧 Qwen 储蓄助手需手动切换。新合同与部署验收范围见 [Banking Agent API](Banking-Agent-API.md) 和 [联调记录](Banking-Agent-Integration.md)。

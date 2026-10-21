@@ -1,7 +1,8 @@
-import { bankingCore } from "../banking-core/core.mjs";
+import { createFinancialContext } from "../banking-core/repository.mjs";
 import { getLegacyContext } from "../banking-core/legacy-adapter.mjs";
-const context = getLegacyContext();
-const goal = bankingCore.repository.getSavingGoal();
+const repository = createFinancialContext().repository;
+const context = getLegacyContext(repository);
+const goal = repository.getSavingGoal();
 // Yuan fields are presentation-only compatibility fields, never Core write inputs.
 export const saveflowMock = {
   currentMonth: context.currentMonth, previousMonth: context.previousMonth, asOf: context.asOf,

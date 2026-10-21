@@ -1,0 +1,24 @@
+{
+  "code": "NEEDS_CLARIFICATION",
+  "message": "「王先生」匹配到多位收款人，请确认。",
+  "requestId": "fixture-request-id",
+  "data": {
+    "kind": "clarification",
+    "status": "needs_clarification",
+    "action": "transfer.create",
+    "question": "「王先生」匹配到多位收款人，请确认。",
+    "slot": "payee_ref",
+    "source": "resolver",
+    "choices": [
+      {
+        "optionId": "opt_4a970b6d-7a60-422c-bf4e-b1b2bf381cd4",
+        "label": "房东王先生（****1003）"
+      },
+      {
+        "optionId": "opt_ee36ba80-3120-48ba-9cfb-31d4f9b398da",
+        "label": "王强（****1004）"
+      }
+    ],
+    "continuationToken": "<opaque-token-use-live-response-for-requests>"
+  }
+}

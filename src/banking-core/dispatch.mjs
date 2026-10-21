@@ -12,8 +12,9 @@ export async function dispatchBanking(action, value, core = bankingCore) {
     /** @type {Record<string, string[]>} */
     const fields = {
       'context.get': [], 'account.list': [], 'account.get': ['id'], 'payee.list': [], 'payee.get': ['id'],
-      'transaction.list': ['accountId', 'month'], 'product.list': [], 'card.list': [], 'subscription.list': [],
+      'transaction.list': ['accountId', 'month'], 'product.list': [], 'card.list': [], 'card.get': ['id'], 'subscription.list': [],
       'transfer.prepare': ['fromAccountId', 'payeeId', 'amountFen', 'currency', 'memo'],
+      'card.set_budget': ['cardId', 'monthlyBudgetFen'], 'card.freeze': ['cardId'], 'card.unfreeze': ['cardId'],
       'action.decide': ['operationId', 'previewHash', 'decision', 'confirmedStepIds'],
       'action.execute': ['operationId', 'previewHash'], 'action.status': ['operationId'],
     };
@@ -23,23 +24,29 @@ export async function dispatchBanking(action, value, core = bankingCore) {
     const repo = core.repository;
     let data;
     switch (action) {
-      case 'context.get': data = repo.getContextInfo(); break;
-      case 'account.list': data = repo.getAccounts(); break;
+      case 'context.get': data = await repo.getContextInfo(); break;
+      case 'account.list': data = await repo.getAccounts(); break;
       case 'account.get':
-        assertId(input.id); data = repo.getAccount(input.id);
+        assertId(input.id); data = await repo.getAccount(input.id);
         if (!data) throw new BankingError('ACCOUNT_NOT_FOUND', '找不到可访问的付款账户'); break;
-      case 'payee.list': data = repo.getPayees(); break;
+      case 'payee.list': data = await repo.getPayees(); break;
       case 'payee.get':
-        assertId(input.id); data = repo.getPayee(input.id);
+        assertId(input.id); data = await repo.getPayee(input.id);
         if (!data) throw new BankingError('PAYEE_NOT_FOUND', '找不到收款人'); break;
       case 'transaction.list':
-        if (input.accountId !== undefined) { assertId(input.accountId); if (!repo.getAccount(input.accountId)) throw new BankingError('ACCOUNT_NOT_FOUND', '找不到可访问的账户'); }
+        if (input.accountId !== undefined) { assertId(input.accountId); if (!await repo.getAccount(input.accountId)) throw new BankingError('ACCOUNT_NOT_FOUND', '找不到可访问的账户'); }
         if (input.month !== undefined && (typeof input.month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(input.month))) throw new BankingError('VALIDATION_ERROR', '月份须为 YYYY-MM');
-        data = repo.getTransactions(/** @type {{accountId?: string, month?: string}} */(input)); break;
-      case 'product.list': data = repo.getInvestmentProducts(); break;
-      case 'card.list': data = repo.getCards(); break;
-      case 'subscription.list': data = repo.getSubscriptions(); break;
+        data = await repo.getTransactions(/** @type {{accountId?: string, month?: string}} */(input)); break;
+      case 'product.list': data = await repo.getInvestmentProducts(); break;
+      case 'card.list': data = await repo.getCards(); break;
+      case 'card.get':
+        assertId(input.id); data = await repo.getCard(input.id);
+        if (!data) throw new BankingError('CARD_NOT_FOUND', '当前用户无法访问该卡片'); break;
+      case 'subscription.list': data = await repo.getSubscriptions(); break;
       case 'transfer.prepare': return core.prepare({ action: 'transfer_money', input: /** @type {import('./contracts').TransferInput} */(input) });
+      case 'card.set_budget':
+      case 'card.freeze':
+      case 'card.unfreeze': return core.prepare({ action, input: /** @type {import('./contracts').CardInput} */(input) });
       case 'action.decide': return core.decide(/** @type {string} */(input.operationId), /** @type {import('./contracts').DecisionInput} */({ previewHash: input.previewHash, decision: input.decision, confirmedStepIds: input.confirmedStepIds }));
       case 'action.execute': return core.execute(/** @type {string} */(input.operationId), /** @type {string} */(input.previewHash));
       case 'action.status': return core.getOperation(/** @type {string} */(input.operationId));

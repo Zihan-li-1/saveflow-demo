@@ -1,0 +1,71 @@
+{
+  "at": "2026-10-18T10:46:00.628Z",
+  "url": "http://127.0.0.1:4300",
+  "checks": [
+    {
+      "name": "health",
+      "status": 200
+    },
+    {
+      "name": "static home",
+      "status": 200
+    },
+    {
+      "name": "environment file not served",
+      "status": 404
+    },
+    {
+      "name": "encoded path traversal refused",
+      "status": 400
+    },
+    {
+      "name": "POST method required",
+      "status": 405
+    },
+    {
+      "name": "missing access code",
+      "status": 401
+    },
+    {
+      "name": "incorrect access code",
+      "status": 401
+    },
+    {
+      "name": "cross origin refused",
+      "status": 403
+    },
+    {
+      "name": "JSON content type required",
+      "status": 415
+    },
+    {
+      "name": "16KiB body limit",
+      "status": 413
+    },
+    {
+      "name": "invalid JSON refused",
+      "status": 400
+    },
+    {
+      "name": "execution field rejected",
+      "status": 400
+    },
+    {
+      "name": "forged continuation refused",
+      "status": 400
+    },
+    {
+      "name": "forged continuation refused",
+      "status": 400
+    },
+    {
+      "name": "10/minute limit preserved",
+      "status": 429
+    },
+    {
+      "name": "trial execute permanently forbidden",
+      "status": 403
+    }
+  ],
+  "success": true
+}

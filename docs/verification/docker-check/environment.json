@@ -1,0 +1,23 @@
+{
+  "at": "2026-10-17T13:15:45.652Z",
+  "dockerEngine": "29.8.2",
+  "compose": "5.5.1",
+  "container": {
+    "user": "node",
+    "readOnlyRoot": true,
+    "capDrop": [
+      "ALL"
+    ]
+  },
+  "image": {
+    "id": "sha256:1d023caf929ed3500ca5d9f4b1034865bc74577983709e024b19a6483cd28be5",
+    "sizeBytes": 1024945270
+  },
+  "matchingSourceHashes": {
+    "server/banking-agent.mjs": "942bbd09e9dcef2425a55e2a91a783bc67019f89d3dd7b6bb29b71fed90165e9",
+    "server/mcp/trueforge-token-bridge.mjs": "f10ef5723178b934464f07ba8b44a30b38a8d67758e7065864e52f73b9b13f2d",
+    "src/lib/use-saveflow.ts": "f2e8c23a70fdabb4ba94b1e75f5cf4063f42eee9e8255bdc719cddca63e03d0e"
+  },
+  "node": "v24.22.0",
+  "postgres": "17.11 (Debian 17.11-1.pgdg12+2)"
+}

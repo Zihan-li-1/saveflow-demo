@@ -1,0 +1,30 @@
+{
+  "suggestedOnly": true,
+  "commits": [
+    {
+      "title": "feat(trueforge): add restricted query and preview trial harness",
+      "files": [
+        "README.md",
+        "docs/netlify-preview-report.md",
+        "docs/verification/netlify-preview/deployment-report.json",
+        "docs/verification/netlify-preview/preview-access-report.json",
+        "docs/verification/netlify-preview/preview-blocked.png",
+        "docs/verification/netlify-preview/preview-ui-report.json",
+        "docs/verification/netlify-preview/preview-ui-run.log",
+        "scripts/verify-netlify-preview.mjs"
+      ]
+    },
+    {
+      "title": "fix(postgres): serialize JSONB once and support legacy records",
+      "files": []
+    },
+    {
+      "title": "test(docker): verify isolated PostgreSQL persistence and document continuation blockers",
+      "files": []
+    }
+  ],
+  "exclude": [
+    "next-env.d.ts",
+    "tsconfig.tsbuildinfo"
+  ]
+}

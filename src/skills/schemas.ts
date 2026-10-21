@@ -14,19 +14,42 @@ export type DateRangePeriod = {
 
 export type QueryPeriod = CalendarMonthPeriod | DateRangePeriod;
 
-export type BillAnalyzeAction = {
-  action: "bill.analyze";
-  period: QueryPeriod;
-  account_ref?: string;
-};
+export type BillAction =
+  | {
+      action: "bill.list";
+      accountId?: string;
+      month?: string;
+    }
+  | {
+      action: "bill.summary";
+      accountId?: string;
+      month?: string;
+    }
+  | {
+      action: "bill.analyze";
+      period: QueryPeriod;
+      account_ref?: string;
+    };
 
-export type SubscriptionListAction = {
-  action: "subscription.list";
-  period?: QueryPeriod;
-};
+export type SubscriptionAction =
+  | {
+      action: "subscription.list";
+      period?: QueryPeriod;
+    }
+  | {
+      action: "subscription.find_unused";
+    }
+  | {
+      /** Reserved target contract only; not registered or callable this round.
+       * subscription.cancel was an obsolete draft name, not a merchant membership cancellation capability. */
+      action: "subscription.cancel_debit";
+      subscriptionId: string;
+      mandateId?: string;
+    };
 
-/** Only the two read actions implemented by C are registered here. */
-export type BillSkillAction = BillAnalyzeAction | SubscriptionListAction;
+export type BillAnalyzeAction = Extract<BillAction, { action: "bill.analyze" }>;
+export type SubscriptionListAction = Extract<SubscriptionAction, { action: "subscription.list" }>;
+export type BillSkillAction = BillAction | SubscriptionAction;
 
 export function isCalendarMonth(value: string): boolean {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);

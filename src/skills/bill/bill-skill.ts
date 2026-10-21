@@ -179,12 +179,12 @@ function resolvePeriods(period: BillAnalyzeAction["period"]): {
   };
 }
 
-function transactionsInRange(
+async function transactionsInRange(
   repository: FinancialContextRepository,
   accountId: string | undefined,
   range: { start: string; end: string }
-): Transaction[] {
-  return repository.getTransactions({ accountId }).filter((transaction) => {
+): Promise<Transaction[]> {
+  return (await repository.getTransactions({ accountId })).filter((transaction) => {
     const localDate = transaction.occurredAt.slice(0, 10);
     return localDate >= range.start && localDate <= range.end;
   });
@@ -248,20 +248,22 @@ export function summarizeBills(
 }
 
 /** Executes the read-only bill.analyze action against Financial Context. */
-export function analyzeBills(
+export async function analyzeBills(
   repository: FinancialContextRepository,
   input: BillAnalyzeAction
-): BillAnalysis {
+): Promise<BillAnalysis> {
   validatePeriod(input.period);
-  const context = repository.getContextInfo();
+  const context = await repository.getContextInfo();
   const accountId = input.account_ref?.trim() || undefined;
-  if (accountId && !repository.getAccount(accountId)) {
+  if (accountId && !await repository.getAccount(accountId)) {
     throw new TypeError("account_ref 未匹配到可访问账户");
   }
 
   const ranges = resolvePeriods(input.period);
-  const current = transactionsInRange(repository, accountId, ranges.current);
-  const previous = transactionsInRange(repository, accountId, ranges.comparison);
+  const [current, previous] = await Promise.all([
+    transactionsInRange(repository, accountId, ranges.current),
+    transactionsInRange(repository, accountId, ranges.comparison),
+  ]);
   const currentTotal = totalExpense(current);
   const previousTotal = totalExpense(previous);
   const currentCategories = categoryMap(current);
@@ -360,13 +362,16 @@ export function calculateMonthlySubscriptionCost(
 }
 
 /** Executes subscription.list. No cancellation effect is implied or exposed. */
-export function listSubscriptions(
+export async function listSubscriptions(
   repository: FinancialContextRepository,
   input: SubscriptionListAction = { action: "subscription.list" }
-): SubscriptionList {
+): Promise<SubscriptionList> {
   if (input.period) validatePeriod(input.period);
-  const context = repository.getContextInfo();
-  const subscriptions = repository.getSubscriptions().map((subscription): SubscriptionItem => {
+  const [context, repositorySubscriptions] = await Promise.all([
+    repository.getContextInfo(),
+    repository.getSubscriptions(),
+  ]);
+  const subscriptions = repositorySubscriptions.map((subscription): SubscriptionItem => {
     assertSafeNonNegativeFen(subscription.monthlyFeeFen, "subscription.monthlyFeeFen");
     return {
       subscription_id: subscription.id,

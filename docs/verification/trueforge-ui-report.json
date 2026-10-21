@@ -1,0 +1,104 @@
+{
+  "realServices": true,
+  "checks": [
+    {
+      "month": "2026-08",
+      "visibleCard": "2026-08 账单汇总\n交易 12 笔\n收入 ¥12000.00\n支出 ¥8460.00\n数据来源：synthetic_demo_only · 截至 2026-09-01T00:00:00+08:00"
+    },
+    {
+      "month": "2026-08",
+      "visibleCard": "2026-08 账单汇总\n交易 12 笔\n收入 ¥12000.00\n支出 ¥8460.00\n数据来源：synthetic_demo_only · 截至 2026-09-01T00:00:00+08:00"
+    },
+    {
+      "month": "2026-01",
+      "visibleCard": "2026-01 账单汇总\n交易 0 笔\n收入 ¥0.00\n支出 ¥0.00\n数据来源：synthetic_demo_only · 截至 2026-09-01T00:00:00+08:00"
+    },
+    {
+      "invalidMonth": "error displayed without a business card"
+    }
+  ],
+  "requests": [
+    {
+      "message": "查询 2026 年 8 月账单",
+      "elapsedMs": 1950,
+      "httpStatus": 200,
+      "code": "OK",
+      "requestId": "294211e4-4a3b-429f-ba2c-d8031571e59c",
+      "status": "bill_result",
+      "bill": {
+        "month": "2026-08",
+        "totalIncomeFen": 1200000,
+        "totalExpenseFen": 846000,
+        "transactionCount": 12,
+        "categoryTotals": {
+          "房租": 300000,
+          "餐饮": 145000,
+          "交通": 40000,
+          "通信": 10000,
+          "日用品": 50000,
+          "娱乐": 112000,
+          "购物": 128000,
+          "订阅": 9000,
+          "其他": 52000
+        }
+      }
+    },
+    {
+      "message": "查账单",
+      "elapsedMs": 1266,
+      "httpStatus": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "requestId": "e99c5415-e16d-4997-a9f7-f28b0298c11a",
+      "status": "needs_clarification"
+    },
+    {
+      "message": "2026 年 8 月",
+      "elapsedMs": 1705,
+      "httpStatus": 200,
+      "code": "OK",
+      "requestId": "1d481233-3a56-49f0-b7f5-6d989faa578c",
+      "status": "bill_result",
+      "bill": {
+        "month": "2026-08",
+        "totalIncomeFen": 1200000,
+        "totalExpenseFen": 846000,
+        "transactionCount": 12,
+        "categoryTotals": {
+          "房租": 300000,
+          "餐饮": 145000,
+          "交通": 40000,
+          "通信": 10000,
+          "日用品": 50000,
+          "娱乐": 112000,
+          "购物": 128000,
+          "订阅": 9000,
+          "其他": 52000
+        }
+      }
+    },
+    {
+      "message": "查询 2026 年 1 月账单",
+      "elapsedMs": 1624,
+      "httpStatus": 200,
+      "code": "OK",
+      "requestId": "bcc3b71a-fc58-41c0-a1aa-2566ac4fbb22",
+      "status": "bill_result",
+      "bill": {
+        "month": "2026-01",
+        "totalIncomeFen": 0,
+        "totalExpenseFen": 0,
+        "transactionCount": 0,
+        "categoryTotals": {}
+      }
+    },
+    {
+      "message": "查询 2026 年 13 月账单",
+      "elapsedMs": 46,
+      "httpStatus": 400,
+      "code": "INVALID_MONTH",
+      "requestId": "9650cdd2-b8ac-4de2-b5bb-8bcf03737424",
+      "status": "error"
+    }
+  ],
+  "success": true
+}

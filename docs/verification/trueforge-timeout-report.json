@@ -1,0 +1,19 @@
+{
+  "realSdkAndHttp": true,
+  "fault": "stalled SSE proxy",
+  "elapsedMs": 25017,
+  "stalled": 1,
+  "cancelled": 1,
+  "reply": {
+    "httpStatus": 504,
+    "code": "TRUEFORGE_TIMEOUT",
+    "message": "账单查询超时，请稍后重新查询。",
+    "data": {
+      "status": "error",
+      "error": {
+        "code": "TRUEFORGE_TIMEOUT",
+        "message": "账单查询超时，请稍后重新查询。"
+      }
+    }
+  }
+}

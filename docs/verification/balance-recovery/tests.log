@@ -1,0 +1,249 @@
+
+> saveflow-demo@0.1.0 test
+> node --test tests/flow.test.cjs tests/qwen.test.cjs tests/banking-core.test.mjs tests/banking-http.test.cjs tests/parsed-intent.test.cjs tests/banking-intent-parser.test.cjs tests/agent-dispatcher.test.cjs tests/transfer-orchestrator.test.cjs tests/banking-agent-http.test.cjs tests/banking-clarification.test.cjs tests/banking-agent-integration.test.cjs tests/card-agent.test.mjs tests/banking-card-client.test.cjs tests/card-skill.test.mjs tests/card-core.test.mjs tests/postgres-persistence.test.mjs tests/saveflow-trial.test.mjs tests/trueforge-bill.test.mjs tests/banking-agent-auth.test.cjs tests/banking-bill-card.test.cjs tests/trueforge-skills.test.mjs tests/trueforge-preview-client.test.cjs
+
+✔ routes transfer.create only to transferHandler (2.4571ms)
+✔ routes bill.summary only to billHandler (0.4308ms)
+✔ does not call handlers for parser clarification or unsupported intent (0.4484ms)
+✔ rejects invalid intents before either handler is called (0.9389ms)
+✔ handler errors become skill_error and never fall through to the other handler (0.5197ms)
+✔ real bill handler reads the shared repository and reflects changed transactions (5.4059ms)
+✔ real transfer handler resolves raw account and payee references without executing Banking Core (1.4414ms)
+✔ ambiguous D resolution remains a resolver clarification (0.4028ms)
+{"event":"banking_auth_failure","category":"ACCESS_MISMATCH","requestId":"90353179-eb31-4be2-9990-4abfd0f6d184"}
+✔ missing and incorrect test access codes stop before Harness and TrueForge with safe diagnostics (48.6216ms)
+✔ missing/invalid server configuration exposes no internal reason; wrong access cannot inspect continuation config (2.0486ms)
+✔ correct test access code preserves both Harness and TrueForge bill routes (7.7055ms)
+✔ Netlify wrapper reads runtime environment and keeps access verification (22.9563ms)
+✔ Next development env loader loads local file, gives inherited environment priority, and reports only states (517.3929ms)
+✔ browser sends the access Header and masks legacy and new authentication error details (381.6709ms)
+✔ banking-agent returns real bill statistics and evidence (24.6238ms)
+✔ banking-agent returns Core formal preview without decide or execute (52.5803ms)
+✔ banking-agent returns resolver clarification without preparing Core (17.4051ms)
+✔ banking-agent rejects illegal model output and request execution fields (4.8866ms)
+✔ banking-agent maps model timeout without leaking provider credentials (1.4346ms)
+✔ banking-agent maps Skill errors explicitly (1.4342ms)
+✔ old /api/agent handler remains available (5.0684ms)
+✔ banking-agent enforces access code, same-origin, body size, and rate limit (4.7898ms)
+{"event":"banking_intent_validation_failed","schemaVersion":"1.0.0","reason":"schema_validation_failed","validationRule":"ParsedIntent contains unknown fields","requestId":"7a6f0cff-4967-4c1a-91da-924b45b8229f"}
+{"event":"banking_auth_failure","category":"ACCESS_MISMATCH","requestId":"2be4fbd6-752d-48e8-804f-5b05e5c31bf8"}
+{"event":"banking_auth_failure","category":"ACCESS_MISMATCH","requestId":"f7ecd4ab-493f-4c49-9c1f-62a6f431b476"}
+✔ real HTTP / local: independent processes continue account, payee, bill and edit flows (1541.0045ms)
+ℹ {"adapter":"local","pid":34008,"input":"给张三转 500 元","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"110ca222-8c61-45a5-ae4d-e6cffe3c9068"}
+ℹ {"adapter":"local","pid":31984,"input":"choice.optionId","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"f00aeeb1-0cb1-40e1-ba64-f2c89fb69a64"}
+ℹ {"adapter":"local","pid":34008,"input":"改成 600 元","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"6480994e-afcc-457d-8f07-22da5f3dd091"}
+ℹ {"adapter":"local","pid":31984,"input":"改给王先生","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"0199dad5-7572-453e-ae38-623592ef21bf"}
+ℹ {"adapter":"local","pid":34008,"input":"choice.optionId","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"e60f0129-2169-40d3-bccd-0e8d770d44f6"}
+ℹ {"adapter":"local","pid":31984,"input":"收款人改成李四","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"b7536f0c-e8b0-4a4d-b591-8af1892bab57"}
+ℹ {"adapter":"local","pid":34008,"input":"改选收款人","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"ed30a3ab-ef7b-41a9-b549-397b2689360f"}
+ℹ {"adapter":"local","pid":34008,"input":"从活期账户给王先生转 500 元","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"d7ce47cd-cd4a-477a-8125-d94824542e4a"}
+ℹ {"adapter":"local","pid":31984,"input":"choice.optionId","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"15fcdef8-0104-49ff-96c0-8b49b46ff331"}
+ℹ {"adapter":"local","pid":31984,"input":"choice.optionId","http":400,"code":"INVALID_CHOICE","status":"error","requestId":"0566ca20-da99-49a4-90ff-0849cdd0ca57"}
+ℹ {"adapter":"local","pid":31984,"input":"choice.optionId","http":400,"code":"INVALID_REQUEST","status":"error","requestId":"a652e0d5-7766-4eb9-b57c-967a25a45a10"}
+ℹ {"adapter":"local","pid":34008,"input":"查账单","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"0d32ac3e-c110-4d8a-ad82-e1911a63e184"}
+ℹ {"adapter":"local","pid":31984,"input":"2026年8月","http":200,"code":"OK","status":"bill_result","requestId":"bad69170-9715-434c-a2c5-8e5be283da1f"}
+ℹ {"adapter":"local","pid":31984,"input":"查账单","http":401,"code":"UNAUTHORIZED","requestId":"f7ecd4ab-493f-4c49-9c1f-62a6f431b476"}
+ℹ {"adapter":"local","pid":31984,"input":"查账单","http":403,"code":"FORBIDDEN","requestId":"b1d1ba08-4722-4889-a3d5-36a0025d6c4e"}
+ℹ {"adapter":"local","pid":31984,"input":"invalid","http":400,"code":"INVALID_REQUEST","status":"error","requestId":"42ae07a9-237b-416e-a7d4-65fdef0a4b71"}
+{"event":"banking_auth_failure","category":"ACCESS_MISMATCH","requestId":"b271e19c-bc44-4f54-a918-76cdf175f790"}
+✔ real HTTP / netlify: independent processes continue account, payee, bill and edit flows (1001.5232ms)
+ℹ {"adapter":"netlify","pid":27924,"input":"给张三转 500 元","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"bf52b9ff-97e8-40ab-929a-6ce55cf0b56a"}
+ℹ {"adapter":"netlify","pid":8868,"input":"choice.optionId","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"5aee1d8d-cbf4-4768-b7a8-1ada01049a7d"}
+ℹ {"adapter":"netlify","pid":27924,"input":"改成 600 元","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"60539197-bdcc-4812-83ea-4dbb844e3a54"}
+ℹ {"adapter":"netlify","pid":8868,"input":"改给王先生","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"af1eeb22-3dc1-4057-a012-b9047c6c0562"}
+ℹ {"adapter":"netlify","pid":27924,"input":"choice.optionId","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"2a871bd5-5166-4cb0-a66e-d2727a6b655a"}
+ℹ {"adapter":"netlify","pid":8868,"input":"收款人改成李四","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"295a4dc4-2f27-4c37-af78-d69d7ee8d05d"}
+ℹ {"adapter":"netlify","pid":27924,"input":"改选收款人","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"96fdcc65-afb2-4c59-b370-1f17081911d4"}
+ℹ {"adapter":"netlify","pid":27924,"input":"从活期账户给王先生转 500 元","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"6d8b0c78-c6f6-43c8-a41a-90a2439fc227"}
+ℹ {"adapter":"netlify","pid":8868,"input":"choice.optionId","http":200,"code":"OK","status":"awaiting_confirmation","requestId":"67284cf0-e0db-44e2-92dd-5076cf103ace"}
+ℹ {"adapter":"netlify","pid":8868,"input":"choice.optionId","http":400,"code":"INVALID_CHOICE","status":"error","requestId":"98143692-c809-44e5-bdd0-13b349cbc2f9"}
+ℹ {"adapter":"netlify","pid":8868,"input":"choice.optionId","http":400,"code":"INVALID_REQUEST","status":"error","requestId":"c99d4d0d-fe6d-48fc-928d-305f48c615cc"}
+ℹ {"adapter":"netlify","pid":27924,"input":"查账单","http":200,"code":"NEEDS_CLARIFICATION","status":"needs_clarification","requestId":"ada576fc-97b3-4cd6-97f3-eeb63afeee7c"}
+ℹ {"adapter":"netlify","pid":8868,"input":"2026年8月","http":200,"code":"OK","status":"bill_result","requestId":"ee4f5b50-73f5-4ed1-ac3e-eb1eca606902"}
+ℹ {"adapter":"netlify","pid":8868,"input":"查账单","http":401,"code":"UNAUTHORIZED","requestId":"b271e19c-bc44-4f54-a918-76cdf175f790"}
+ℹ {"adapter":"netlify","pid":8868,"input":"查账单","http":403,"code":"FORBIDDEN","requestId":"0f6b81b4-cd45-4f4d-9c83-2eeb2648f3e3"}
+ℹ {"adapter":"netlify","pid":8868,"input":"invalid","http":400,"code":"INVALID_REQUEST","status":"error","requestId":"f0dce277-e331-4dc8-a91e-c7c56cc5a6cb"}
+✔ HTTP integration: account choice crosses two requests and returns Core preview only (26.9991ms)
+✔ August card uses structured amounts, exact signed balance, all transaction count and Chinese provenance (76.3556ms)
+✔ zero month has honest zeros and no category section; missing/invalid categories are hidden (58.9248ms)
+✔ integer-fen formatting preserves maximum safe-integer cents, negative balance and unknown values (12.6555ms)
+✔ dates use Shanghai time consistently and reject missing or ambiguous dates (1.5127ms)
+✔ categories preserve backend amounts in descending order without invented ratios (19.5873ms)
+✔ browser client accepts real HTTP card query and write-preview envelopes (694.6335ms)
+✔ 缺账户先展示真实账户选项，选择后返回 Core 正式预览 (57.9376ms)
+✔ 未配置续接密钥时澄清入口明确报配置错误，不信任客户端草稿 (3.392ms)
+✔ 非法金额在 prepare 前被拦截，三种格式均明确保持 prepareCalls 为零 (16.8922ms)
+✔ 缺金额可用自然语言补齐，金额转换为整数分 (8.178ms)
+✔ 缺月份可补齐后返回真实账单统计和证据 (6.2437ms)
+✔ 重名收款人必须明确选择，候选标签包含脱敏账号 (5.3822ms)
+✔ 账户余额不足时保留 Core 错误，不伪装成预览 (4.0886ms)
+✔ 改口换任务、伪造选项和无法理解回答都不会进入 Core (5.9455ms)
+{"event":"banking_auth_failure","category":"CONTINUATION_CONFIG_MISSING","requestId":"292839f4-0651-43b8-a56c-ffe0ff2bb859"}
+✔ B repository: all shared entities, fen normalization, seed provenance and defensive copies (5.3947ms)
+✔ B transfer lifecycle: prepare + confirm never debit; execute creates ledger entry and uniform receipt (20.997ms)
+✔ B risk: insufficient balance and unknown entities produce standard errors, zero debit (4.3297ms)
+✔ B input: reject fractional fen, unsupported currency, hidden confirmation and unknown actions (1.1435ms)
+✔ B idempotency: 20 concurrent retries return the same receipt with one debit (5.5159ms)
+✔ B confirmation: tampered preview/hash/steps and bare boolean cannot authorize money (3.3384ms)
+✔ B cancellation is final and idempotent, never posts a transaction (1.9725ms)
+✔ B expiry: checked at both confirmation and execute; pending state becomes final failed receipt (3.8904ms)
+✔ B concurrent independent transfers recheck balance/version instead of overspending or stale execution (4.562ms)
+✔ B unknown outcomes: only CHECK is allowed, missing records never mean failed or succeeded (0.5608ms)
+✔ B old plan adapter shares operation store, cannot re-use transfer key or fake money effects (3.468ms)
+✔ B user scoping: shared store does not reveal another owner operation (2.2268ms)
+✔ B legacy context is computed from raw transactions, consistent with savings progress (2.6055ms)
+✔ legacy analysis resolves asynchronous repository reads and preserves mock totals (1.7868ms)
+✔ B v1.1 wire boundary preserves integers; resolved intent uses entity evidence, never names or monthlySavingFen (2.1744ms)
+✔ B HTTP: real handler and typed client run reads, preview, confirmation, execution and lookup (114.7836ms)
+✔ B HTTP: card budget, freeze and unfreeze require the dedicated decision and execute calls (35.6116ms)
+✔ B HTTP: lost execute response is uncertain, no retry; original ID lookup recovers single debit (12.0198ms)
+✔ B HTTP: auth, origin, schema, action allowlist and idempotency header enforced (5.4064ms)
+✔ B HTTP: payload cannot change approved amount during execution (6.119ms)
+✔ B HTTP: client rejects forged receipts, nonterminal success, altered previews and mismatched IDs (30.8959ms)
+✔ B HTTP: client timeout does not retry writes; legacy HTTP shares the Core receipt store (32.6344ms)
+✔ B browser Mock client uses the same validated dispatch path (3.6882ms)
+{"event":"banking_intent_validation_failed","schemaVersion":"1.0.0","reason":"schema_validation_failed","validationRule":"slots contains unknown fields"}
+{"event":"banking_intent_validation_failed","schemaVersion":"1.0.0","reason":"invalid_json"}
+{"event":"banking_intent_validation_failed","schemaVersion":"1.0.0","reason":"incomplete_response"}
+{"event":"banking_intent_validation_failed","schemaVersion":"1.0.0","reason":"schema_validation_failed","validationRule":"slots.amount.amount_minor is outside the allowed integer minor-unit range"}
+{"event":"banking_intent_validation_failed","schemaVersion":"1.0.0","reason":"schema_validation_failed","validationRule":"slots.amount.currency must be CNY"}
+{"event":"banking_intent_validation_failed","schemaVersion":"1.0.0","reason":"schema_validation_failed","validationRule":"ParsedIntent contains unknown fields"}
+{"event":"banking_intent_validation_failed","schemaVersion":"1.0.0","reason":"schema_validation_failed","validationRule":"slots contains unknown fields"}
+{"event":"banking_intent_validation_failed","schemaVersion":"1.0.0","reason":"schema_validation_failed","validationRule":"missingSlots must exactly match: card_ref"}
+✔ parses a complete transfer without resolving entities or calling a Skill (33.4212ms)
+✔ keeps missing amount as clarification and never invents it (0.9068ms)
+✔ keeps missing source account as clarification and never inserts a default ID (0.6371ms)
+✔ parses bill summary with only the month slot (0.6882ms)
+✔ ambiguous and prompt-injection requests remain non-executable (0.9075ms)
+✔ rejects injected execution fields as MODEL_FORMAT_ERROR without exposing raw output (2.0704ms)
+✔ maps malformed model output and invalid values to MODEL_FORMAT_ERROR (10.0448ms)
+✔ maps Qwen rate limit, auth errors, timeout and upstream failures without leaking secrets (4.0197ms)
+✔ diagnostics record only schema rules and correlation ID, never model or user secrets (5.0254ms)
+✔ diagnostic logger failure never replaces the parser error (0.7906ms)
+✔ validates input and model configuration before making a request (0.6216ms)
+{"event":"banking_intent_validation_failed","schemaVersion":"1.0.0","reason":"schema_validation_failed","validationRule":"slots.card_ref must be a raw user reference, not a card entity ID","requestId":"a6729cee-b470-4164-9602-43c7fdc1bbbf"}
+✔ all four card actions have strict matching parser and runtime contracts (8.6336ms)
+✔ missing card and budget slots clarify; extra fields and forged entity IDs are rejected (5.2088ms)
+✔ Qwen boundary rejects a forged card ID before Skill or Core dispatch (14.384ms)
+✔ HTTP entry runs Qwen JSON through parser, dispatcher and Card Handler (8.2943ms)
+✔ freeze my card offers signed choices and a formal preview without execution (34.2075ms)
+✔ card lookup is read-only; budget amount can be supplied over multiple turns (8.0885ms)
+✔ budget below spent is previewed with an over-budget warning (4.6397ms)
+✔ changing cards clears the signed prior selection; task switch discards old card state (15.7364ms)
+✔ natural language card budget reaches Core through Agent preview and dedicated HTTP confirmation (20.3926ms)
+✔ card Core: preview and UI decision do not mutate; execute changes state once and can be queried (20.3145ms)
+✔ card Core: monthly budget below spending warns, then changes only after execution (3.7897ms)
+✔ card Core: expiry and newer preview invalidate old confirmation server-side (3.2454ms)
+✔ card Core: state change between confirm and execute is rejected (3.562ms)
+✔ four registered actions match both machine-readable schemas (5.6296ms)
+✔ raw schema blocks padded service IDs and keeps the money object closed (1.293ms)
+✔ raw action contract rejects legacy intents, IDs and authorization fields (0.807ms)
+✔ resolved handoff follows shared ResolvedIntent fields and evidence shape (0.6819ms)
+✔ reference resolution never guesses unknown or duplicate names (0.723ms)
+✔ supports the FinancialContextRepository MaybePromise contract (0.5546ms)
+✔ uses the repository card IDs, names and Fen fields without a second Mock shape (2.6442ms)
+✔ card.get returns defensive project-shaped data without mutation (0.4798ms)
+✔ card.set_budget maps snake_case/minor to camelCase/Fen without conversion (0.7692ms)
+✔ freeze and unfreeze create requests but never mutate repository state (0.9147ms)
+✔ unknown card and malformed limits fail without effects (7.7563ms)
+✔ model answers and clarification permit follow-up but never direct execution (1.12ms)
+✔ confirmation cannot skip analysis or draft review; double submit is blocked (0.2501ms)
+✔ uncertain operation must be queried, never replayed or reset (0.1755ms)
+✔ invalid amounts and fractional cents are rejected (0.3125ms)
+✔ same operation replays its receipt; modified payload conflicts (8.9026ms)
+✔ operation status keeps an unknown operation pending until a backend receipt exists (0.2805ms)
+✔ consent, confirmation, action whitelist and risk rejection are enforced (1.648ms)
+✔ HTTP: validates response, sends idempotency key, rejects mismatched receipts, never retries writes (533.1518ms)
+✔ accepts transfer.create with raw references and integer minor units (2.4459ms)
+✔ requires clarification when transfer amount is absent and never invents a value (0.8802ms)
+✔ requires clarification when source account is absent (0.4882ms)
+✔ accepts missingSlots regardless of array order and rejects duplicates (0.3354ms)
+✔ accepts bill.summary for a valid month without requiring an account (0.3737ms)
+✔ rejects account entity IDs from the model (0.3226ms)
+✔ ambiguous input can only produce canonical clarify or unsupported intents (0.3198ms)
+✔ rejects model-injected tool, confirmation, risk, operation and entity fields (0.8833ms)
+✔ rejects unsafe amounts, unsupported currency, invalid actions and extra nested fields (0.8003ms)
+✔ enforces bill month format and status derived from required slots (0.6534ms)
+﹣ Postgres B: independent Core instances share preview, confirmation, receipt and ledger (1.1141ms) # SKIP
+﹣ Postgres cards: a second instance and restart see the committed budget and state (0.3702ms) # SKIP
+✔ Qwen: server auth, consent and history validation prevent model calls (62.6386ms)
+✔ Qwen: real protocol adapter returns validated draft and usage, never provider secret (16.5712ms)
+✔ Qwen: model cannot bypass rules, ambiguous queries and read-only answers create no plan (2.2073ms)
+✔ Qwen: deprecated ratio request cannot become a plan even if model proposes one (3.1663ms)
+✔ Qwen: invalid/truncated results, provider errors and timeouts are explicit and not retried (7.5294ms)
+✔ Qwen: request size limit enforced before provider call (1.3873ms)
+✔ HTTP MCP handshake exposes the trial tools and returns seed statistics and evidence (130.417ms)
+✔ missing, invalid months and user IDs never enter the repository (94.2386ms)
+✔ month filtering returns different months and an honest empty result (22.6945ms)
+✔ repository failures are MCP tool errors instead of fabricated summaries (36.3305ms)
+✔ other tool names are unavailable (31.3074ms)
+✔ card_get resolves real card names and clarifies missing, unknown and duplicate names without preparing (58.5584ms)
+✔ transfer_preview shares account choices, amount supplementation, payee disambiguation and edits (34.1064ms)
+✔ forged, expired and cross-tool continuation tokens and injected IDs cannot prepare (65.6231ms)
+✔ invalid transfer amounts never prepare; valid insufficient-balance requests preserve Core errors (64.2415ms)
+✔ HTTP and MCP can resume the same shared clarification rules in both directions (23.7358ms)
+✔ card budget and freeze tools create Core previews without changing financial or card state (54.5981ms)
+✔ unfreeze preview uses the existing frozen-card rules without unfreezing it (21.7647ms)
+✔ budget validation, wrong-action tokens and injected approval fields never prepare (159.2383ms)
+✔ subscription and product tools return repository data and evidence with no mutations (35.7654ms)
+✔ readonly query failures and missing continuation configuration return tool errors (27.5927ms)
+✔ unique transfer reaches Core and returns only its formal awaiting-confirmation preview (11.5992ms)
+✔ clarification, bill, and skill errors never call Core prepare (2.0681ms)
+✔ Core rejection is preserved and does not become a successful preview (1.544ms)
+✔ orchestrator dispatches before handing off and never invokes decide or execute (2.9039ms)
+{"event":"banking_auth_failure","category":"ACCESS_MISMATCH","requestId":"f62fe101-ce8c-4016-abed-acc4a1e53739"}
+✔ captured real bill data maps to the unchanged HTTP envelope and TS browser validator (359.3178ms)
+✔ missing month resumes the same private session, with empty choices and one turn for duplicate resumes (3.17ms)
+✔ month-only bill query starts the bill Skill and asks for a year without guessing or inheriting transfer state (1.3117ms)
+✔ signed tokens reject tampering, raw session IDs, other scopes, restart, and expiry (1.1765ms)
+✔ zero transactions retain actual zero values and empty evidence IDs (0.4549ms)
+✔ MCP error wrapper returns a safe explicit error without model text or card data (0.5811ms)
+✔ malformed, unlinked, wrong-month, forged-source and duplicate results cannot form business cards (2.0645ms)
+✔ the router accepts only explicit narrow bill queries and trial continuation tokens (0.2355ms)
+✔ invalid months and unauthorized body fields fail before creating a session (0.3933ms)
+✔ transport security runs before TrueForge routing (7.5162ms)
+✔ disabled switch, non-bill operations, and legacy continuation keep the old Harness (10.1559ms)
+✔ a clear card task during bill clarification revokes the verified token and uses only the old Harness (15.2567ms)
+✔ service failure, network failure, timeout, and client abort finish without a fallback (66.1823ms)
+✔ SDK deltas merge into tool calls and only terminal done without required actions succeeds (3.2563ms)
+✔ Agent exposes only bill_summary and refuses broader permissions before posting any turn (0.5975ms)
+✔ real SDK HTTP failures are not retried or leaked, and disabled pilot tokens are rejected (6.5398ms)
+✔ browser accepts validated insufficient-balance recovery only as an error/clarification, never a success card (43.4864ms)
+✔ task boundary separates new queries, transfer edits and ambiguous requests without changing tokens (2.3298ms)
+✔ per-operation state survives card/bill focus and refresh, rotates only the resumed operation, and expires (2.662ms)
+✔ transfer controls permit edits/cancel only on the current preview; confirmation always disabled (11.4558ms)
+✔ refresh restores bounded synthetic history and unexpired opaque continuation, never original Core authority (0.7298ms)
+✔ trial card previews have no execution/status buttons even if active=true; legacy controls remain (1.6374ms)
+✔ browser validator rejects trial IDs stripped of their preview-only metadata (1.0968ms)
+✔ A: three distinct business schemas map real MCP values without preparing Core (124.0502ms)
+✔ A: unknown cards clarify instead of inventing data; choice stays in one session and duplicates share one turn (35.4494ms)
+✔ A: signed, scoped, expired and cross-session choices reject before tools run (15.0607ms)
+✔ A: linked-event validation rejects wrong tool, action, source, IDs and malformed financial fields (18.9334ms)
+✔ A: real MCP query failures return explicit errors without success cards (17.9985ms)
+✔ A: allowlist, feature switches and ambiguous routing preserve non-pilot Harness (2.0659ms)
+✔ bridge keeps Core failure as failure while binding its recovery alias to transfer only (0.6784ms)
+✔ insufficient-balance recovery preserves selected payee, exposes real balances and permits a new payer without execution (44.9127ms)
+✔ amount correction after failed prepare retains the signed payee choice and never reconstructs it from a label (45.0795ms)
+✔ cross-skill: new card task has its own session; explicit transfer resume preserves entities and rejects injected cross-task tokens (35.3568ms)
+✔ transfer regression: exact amount-first phrase and edit preserve resolved account/payee in one session (34.5625ms)
+✔ transfer regression: narrow routing excludes mixed tasks and remains disabled by default (0.3852ms)
+✔ B: real Core transfer preview, edits, chat confirmation and cancellation never change ledger (35.3117ms)
+✔ B: missing account, editing before preview and ambiguous payee choices preserve one Session without guessed IDs (34.7784ms)
+✔ B: invalid amounts, insufficient balance, malformed previews and cross-tool credentials do not form cards (36.8701ms)
+✔ B: backend rejects preview IDs for decide/execute/status even with flags off and no state Map (2.2731ms)
+✔ bridge: credential aliases preserve fields, bind tools/expiry, and forward duplicate resumes once (1.3964ms)
+✔ SDK gate: exact arguments are approved once, repeated tool requests are denied before MCP (2.2647ms)
+✔ C: budget boundaries, edits, card changes and cancellation prepare without financial writes (47.4246ms)
+✔ C: freeze/missing card clarification and invalid unfreeze preserve actual card state (33.9739ms)
+✔ C: isolated frozen fixture supports real unfreeze preview and rejects freezing an already frozen card (31.6567ms)
+✔ C: wrong card effects, fractional budgets, evidence and unauthorized tools are rejected (26.3974ms)
+✔ multi-skill timeout/client abort/network failure cancels once, never retries or leaks raw errors (40.0925ms)
+✔ SDK gate: a malformed unexecuted candidate can be corrected, with only one actual tool response (0.7525ms)
+ℹ tests 189
+ℹ suites 0
+ℹ pass 187
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 3466.6358

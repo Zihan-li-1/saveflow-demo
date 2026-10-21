@@ -1,10 +1,11 @@
 import { timingSafeEqual } from 'node:crypto';
-import { bankingCore } from '../src/banking-core/core.mjs';
+import { getConfiguredBankingCore } from '../src/banking-core/postgres-store.mjs';
 import { BankingError } from '../src/banking-core/errors.mjs';
 import { dispatchBanking } from '../src/banking-core/dispatch.mjs';
 import { legacyRequest } from '../src/banking-core/legacy-adapter.mjs';
 import { WIRE_VERSION, fromWire, toWire } from '../src/banking-core/wire.mjs';
 import { canonical } from '../src/banking-core/errors.mjs';
+import { isTrialOperationId } from '../src/lib/trial-preview.mjs';
 
 async function bodyJson(request) {
   if (request.headers.get('content-type')?.split(';')[0].trim() !== 'application/json') throw new BankingError('VALIDATION_ERROR', '需要 application/json');
@@ -25,11 +26,12 @@ async function bodyJson(request) {
 
 /** Private, single synthetic-user demo. Auth establishes the Mock identity; body cannot set it.
  * In-memory state is NOT a bank ledger and is NOT shared between serverless instances. */
-export async function handleBanking(request, { env = process.env, core = bankingCore } = {}) {
+export async function handleBanking(request, { env = process.env, core: providedCore } = {}) {
   const legacy = new URL(request.url).pathname === '/api/saveflow';
   const requestId = legacy ? request.headers.get('X-Request-ID') || crypto.randomUUID() : crypto.randomUUID();
   const reply = (body, status = 200) => Response.json(legacy ? { requestId, ...body } : { schema_version: WIRE_VERSION, request_id: requestId, ...toWire(body) }, { status, headers: { 'Cache-Control': 'no-store', 'X-Saveflow-Data-Source': 'synthetic_demo_only' } });
   try {
+    const core = providedCore ?? await getConfiguredBankingCore(env);
     if (request.method !== 'POST') return reply({ code: 'METHOD_NOT_ALLOWED', message: '仅支持 POST' }, 405);
     const expected = env.SAVEFLOW_ACCESS_CODE;
     if (!expected || expected.length < 16) return reply({ code: 'ACCESS_NOT_CONFIGURED', message: '请配置服务端演示访问码' }, 503);
@@ -39,9 +41,12 @@ export async function handleBanking(request, { env = process.env, core = banking
     if (origin && origin !== new URL(request.url).origin) throw new BankingError('FORBIDDEN', '不允许跨来源请求');
     const body = await bodyJson(request);
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new BankingError('VALIDATION_ERROR', '请求体必须为对象');
+    if ([body.input?.operation_id, body.input?.operationId, body.operationId, body.operation_id].some(isTrialOperationId)) {
+      throw new BankingError('FORBIDDEN', 'TrueForge 试点操作仅供预览，不能交给网站 Core 确认、执行或查询。');
+    }
     if (legacy) {
       const { action, ...input } = body;
-      const data = legacyRequest(action, input, request.headers.get('Idempotency-Key') ?? '', core);
+      const data = await legacyRequest(action, input, request.headers.get('Idempotency-Key') ?? '', core);
       return reply({ code: 'OK', message: '请求成功', data });
     }
     if (Object.keys(body).some(k => !['schema_version', 'action', 'input'].includes(k)) || body.schema_version !== WIRE_VERSION || typeof body.action !== 'string') throw new BankingError('VALIDATION_ERROR', '协议须为 schema_version 1.1.0、action、input');
@@ -54,8 +59,10 @@ export async function handleBanking(request, { env = process.env, core = banking
     if (!result.ok) return reply({ code: result.error.code, message: result.error.message, error: result.error, operationId: result.operationId }, statusCode(result.error.code));
     return reply({ code: 'OK', message: 'Mock 请求成功', data: result.data });
   } catch (error) {
-    const safe = error instanceof BankingError ? error : new BankingError('INTERNAL_ERROR', '未取得可靠结果，请查询原操作', true);
-    return reply({ code: safe.code, message: safe.message, error: safe.toJSON() }, statusCode(safe.code));
+    const safe = error instanceof BankingError ? error : error?.code === 'DATABASE_NOT_CONFIGURED'
+      ? new BankingError('DATABASE_NOT_CONFIGURED', '服务端持久化数据库未配置')
+      : new BankingError('INTERNAL_ERROR', '未取得可靠结果，请查询原操作', true);
+    return reply({ code: safe.code, message: safe.message, error: safe.toJSON() }, safe.code === 'DATABASE_NOT_CONFIGURED' ? 503 : statusCode(safe.code));
   }
 }
 function statusCode(code) {

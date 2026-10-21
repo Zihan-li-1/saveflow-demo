@@ -1,0 +1,130 @@
+{
+  "success": true,
+  "realSessionCount": 5,
+  "realToolCallCount": 11,
+  "confirmOrExecuteCalls": 0,
+  "sessions": [
+    {
+      "sessionTag": "2eb302cad9fb5021",
+      "authorizedTool": "transfer_preview",
+      "callCount": 3,
+      "responseCount": 3,
+      "amountsFen": [
+        50000,
+        30000,
+        25000
+      ],
+      "parameters": [
+        {
+          "payee_ref": "房东王先生",
+          "source_account_ref": "模拟活期账户",
+          "amount": {
+            "amount_minor": 50000,
+            "currency": "CNY"
+          }
+        },
+        {
+          "continuationToken": {
+            "present": true,
+            "sha256Tag": "fa93eed4ff0a6dac"
+          },
+          "message": "改成300元"
+        },
+        {
+          "continuationToken": {
+            "present": true,
+            "sha256Tag": "2a41a5b365fac712"
+          },
+          "message": "改成转账250元"
+        }
+      ],
+      "continuousTurns": true
+    },
+    {
+      "sessionTag": "8b246f9b11547054",
+      "authorizedTool": "card_get",
+      "callCount": 2,
+      "responseCount": 2,
+      "amountsFen": [],
+      "parameters": [
+        {
+          "card_ref": "我的卡"
+        },
+        {
+          "continuationToken": {
+            "present": true,
+            "sha256Tag": "2e93831ab635ccca"
+          },
+          "choice": {
+            "optionId": "opt_c7ecdd1d-ea6c-4044-940b-5bf65ecd3504"
+          }
+        }
+      ],
+      "continuousTurns": true
+    },
+    {
+      "sessionTag": "19bffe67ad7747c1",
+      "authorizedTool": "bill_summary",
+      "callCount": 2,
+      "responseCount": 2,
+      "amountsFen": [],
+      "parameters": [
+        {},
+        {
+          "month": "2026-08"
+        }
+      ],
+      "continuousTurns": true
+    },
+    {
+      "sessionTag": "8f9bac55b3c72da9",
+      "authorizedTool": "transfer_preview",
+      "callCount": 2,
+      "responseCount": 2,
+      "amountsFen": [
+        20000,
+        15000
+      ],
+      "parameters": [
+        {
+          "payee_ref": "房东王先生",
+          "source_account_ref": "模拟活期账户",
+          "amount": {
+            "amount_minor": 20000,
+            "currency": "CNY"
+          }
+        },
+        {
+          "continuationToken": {
+            "present": true,
+            "sha256Tag": "400f4ce5616a5d4d"
+          },
+          "message": "改成转账150元"
+        }
+      ],
+      "continuousTurns": true
+    },
+    {
+      "sessionTag": "0736b541ec9895e4",
+      "authorizedTool": "card_get",
+      "callCount": 2,
+      "responseCount": 2,
+      "amountsFen": [],
+      "parameters": [
+        {
+          "card_ref": "我的卡"
+        },
+        {
+          "continuationToken": {
+            "present": true,
+            "sha256Tag": "4e3de1effb849325"
+          },
+          "choice": {
+            "optionId": "opt_850dfe4e-c899-44f1-bb0e-9707ec16a5e3"
+          }
+        }
+      ],
+      "continuousTurns": true
+    }
+  ]
+}

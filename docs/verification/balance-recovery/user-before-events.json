@@ -1,0 +1,797 @@
+{
+  "source": "real local TrueForge SQLite (read-only)",
+  "sessions": [
+    {
+      "sessionTag": "a683a5ca1cb99469",
+      "savedAgentName": null,
+      "shared": false,
+      "model": {
+        "name": "test/deepseek-v4-1-flash",
+        "params": {
+          "max_tokens": 4096,
+          "temperature": 0,
+          "parallel_tool_calls": false,
+          "thinking": {
+            "type": "disabled"
+          }
+        }
+      },
+      "mcpServers": [
+        {
+          "name": "saveflow-token-bridge",
+          "enable_tools": [
+            "transfer_preview"
+          ],
+          "disable_tools": [],
+          "preload_tools": [],
+          "require_approval_for_tools": [
+            "@all"
+          ],
+          "preload": true
+        }
+      ],
+      "events": [
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:42:00.795Z",
+          "turnId": "01m54tpejsh9mazrfhrzbmaebf",
+          "previousTurnId": null,
+          "userInputs": [
+            {
+              "userMessage": "给王先生转 500 元",
+              "toolArguments": {
+                "payee_ref": "王先生",
+                "amount": {
+                  "amount_minor": 50000,
+                  "currency": "CNY"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:42:02.107Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 1491,
+            "output_tokens": 72,
+            "cache_read_tokens": 1280,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 416
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_46Rjufdt4uWLzQnGoaeZ1727",
+              "tool_info": {
+                "type": "mcp",
+                "name": "transfer_preview",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "transfer_preview",
+              "arguments": {
+                "payee_ref": "王先生",
+                "amount": {
+                  "amount_minor": 50000,
+                  "currency": "CNY"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:42:02.111Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:42:02.122Z",
+          "turnId": "01m54tpfw64y1wpccjpdnabqnp",
+          "previousTurnId": "01m54tpejsh9mazrfhrzbmaebf",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:42:02.159Z",
+          "toolCallId": "call_00_46Rjufdt4uWLzQnGoaeZ1727",
+          "result": {
+            "ok": true,
+            "code": "NEEDS_CLARIFICATION",
+            "message": "要从哪个账户转出？",
+            "kind": "needs_clarification",
+            "status": "needs_clarification",
+            "action": "transfer.create",
+            "question": "要从哪个账户转出？",
+            "slot": "source_account_ref",
+            "source": "parser",
+            "choices": [
+              {
+                "optionId": "opt_c4afe48f-febb-4de1-966b-c79a7e5e571e",
+                "label": "模拟活期账户"
+              },
+              {
+                "optionId": "opt_16c3c3fc-80dd-49f1-9882-7323a1d286a0",
+                "label": "模拟储蓄账户"
+              }
+            ],
+            "continuationToken": {
+              "present": true,
+              "sha256Tag": "84c613fdd447bffc"
+            },
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:42:02.863Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 1755,
+            "output_tokens": 3,
+            "cache_read_tokens": 1536,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 680
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:42:02.866Z",
+          "status": "done",
+          "requiredActions": []
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:42:05.049Z",
+          "turnId": "01m54tpjqpcdc6z19ay1k7s8rn",
+          "previousTurnId": "01m54tpfw64y1wpccjpdnabqnp",
+          "userInputs": [
+            {
+              "userMessage": "用户选择了本次候选",
+              "toolArguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "84c613fdd447bffc"
+                },
+                "choice": {
+                  "optionId": "opt_16c3c3fc-80dd-49f1-9882-7323a1d286a0"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:42:06.081Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 1839,
+            "output_tokens": 113,
+            "cache_read_tokens": 1664,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 764
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_Jf7v4YHfU85sGNWlqjW41825",
+              "tool_info": {
+                "type": "mcp",
+                "name": "transfer_preview",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "transfer_preview",
+              "arguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "84c613fdd447bffc"
+                },
+                "choice": {
+                  "optionId": "opt_16c3c3fc-80dd-49f1-9882-7323a1d286a0"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:42:06.084Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:42:06.094Z",
+          "turnId": "01m54tpkrbjkewwkvfgk4wmfrm",
+          "previousTurnId": "01m54tpjqpcdc6z19ay1k7s8rn",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:42:06.123Z",
+          "toolCallId": "call_00_Jf7v4YHfU85sGNWlqjW41825",
+          "result": {
+            "ok": true,
+            "code": "NEEDS_CLARIFICATION",
+            "message": "「王先生」匹配到多位收款人，请确认。",
+            "kind": "needs_clarification",
+            "status": "needs_clarification",
+            "action": "transfer.create",
+            "question": "「王先生」匹配到多位收款人，请确认。",
+            "slot": "payee_ref",
+            "source": "resolver",
+            "choices": [
+              {
+                "optionId": "opt_636119c8-29ca-493d-8128-50c22a592824",
+                "label": "房东王先生（****1003）"
+              },
+              {
+                "optionId": "opt_228206f7-f71d-43ac-88fe-b4a257ef50cf",
+                "label": "王强（****1004）"
+              }
+            ],
+            "continuationToken": {
+              "present": true,
+              "sha256Tag": "f8a195138722f37f"
+            },
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:42:07.019Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 2155,
+            "output_tokens": 3,
+            "cache_read_tokens": 1920,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 1080
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:42:07.032Z",
+          "status": "done",
+          "requiredActions": []
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:42:08.924Z",
+          "turnId": "01m54tppgpwc143gedecqmnsf9",
+          "previousTurnId": "01m54tpkrbjkewwkvfgk4wmfrm",
+          "userInputs": [
+            {
+              "userMessage": "用户选择了本次候选",
+              "toolArguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "f8a195138722f37f"
+                },
+                "choice": {
+                  "optionId": "opt_636119c8-29ca-493d-8128-50c22a592824"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:42:09.943Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 2229,
+            "output_tokens": 103,
+            "cache_read_tokens": 2048,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 1154
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_AS22JlXaxYUFn2hghjxV1180",
+              "tool_info": {
+                "type": "mcp",
+                "name": "transfer_preview",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "transfer_preview",
+              "arguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "f8a195138722f37f"
+                },
+                "choice": {
+                  "optionId": "opt_636119c8-29ca-493d-8128-50c22a592824"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:42:09.946Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:42:09.954Z",
+          "turnId": "01m54tpqgz7tb6zzrbjxtjze83",
+          "previousTurnId": "01m54tppgpwc143gedecqmnsf9",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:42:09.978Z",
+          "toolCallId": "call_00_AS22JlXaxYUFn2hghjxV1180",
+          "result": {
+            "error": [
+              {
+                "type": "text",
+                "text": "{\"ok\":false,\"code\":\"INSUFFICIENT_BALANCE\",\"message\":\"付款账户可用余额不足\",\"status\":\"core_error\",\"action\":\"transfer.create\",\"operationId\":\"op_ee78fa42-ba0f-48e9-9556-bdcfb8af2a57\",\"error\":{\"code\":\"INSUFFICIENT_BALANCE\",\"message\":\"付款账户可用余额不足\",\"uncertain\":false},\"kind\":\"core_error\",\"currency\":\"CNY\",\"amountUnit\":\"fen\"}"
+              }
+            ]
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:42:10.787Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 2484,
+            "output_tokens": 3,
+            "cache_read_tokens": 2304,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 1409
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:42:10.789Z",
+          "status": "done",
+          "requiredActions": []
+        }
+      ]
+    },
+    {
+      "sessionTag": "2a4a72d77caa08fb",
+      "savedAgentName": null,
+      "shared": false,
+      "model": {
+        "name": "test/deepseek-v4-1-flash",
+        "params": {
+          "max_tokens": 4096,
+          "temperature": 0,
+          "parallel_tool_calls": false,
+          "thinking": {
+            "type": "disabled"
+          }
+        }
+      },
+      "mcpServers": [
+        {
+          "name": "saveflow-token-bridge",
+          "enable_tools": [
+            "transfer_preview"
+          ],
+          "disable_tools": [],
+          "preload_tools": [],
+          "require_approval_for_tools": [
+            "@all"
+          ],
+          "preload": true
+        }
+      ],
+      "events": [
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:43:20.333Z",
+          "turnId": "01m54trw8b7fkm5jx2ehphp7rn",
+          "previousTurnId": null,
+          "userInputs": [
+            {
+              "userMessage": "给王先生转 500 元",
+              "toolArguments": {
+                "payee_ref": "王先生",
+                "amount": {
+                  "amount_minor": 50000,
+                  "currency": "CNY"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:43:21.188Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 1491,
+            "output_tokens": 72,
+            "cache_read_tokens": 1280,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 416
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_NloiXxB6xioyCDbfuQ3Z0411",
+              "tool_info": {
+                "type": "mcp",
+                "name": "transfer_preview",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "transfer_preview",
+              "arguments": {
+                "payee_ref": "王先生",
+                "amount": {
+                  "amount_minor": 50000,
+                  "currency": "CNY"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:43:21.190Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:43:21.197Z",
+          "turnId": "01m54trx3bkz4v1xm0zwew9xqb",
+          "previousTurnId": "01m54trw8b7fkm5jx2ehphp7rn",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:43:21.218Z",
+          "toolCallId": "call_00_NloiXxB6xioyCDbfuQ3Z0411",
+          "result": {
+            "ok": true,
+            "code": "NEEDS_CLARIFICATION",
+            "message": "要从哪个账户转出？",
+            "kind": "needs_clarification",
+            "status": "needs_clarification",
+            "action": "transfer.create",
+            "question": "要从哪个账户转出？",
+            "slot": "source_account_ref",
+            "source": "parser",
+            "choices": [
+              {
+                "optionId": "opt_b4584adb-9066-487e-b615-3ade0ec693ed",
+                "label": "模拟活期账户"
+              },
+              {
+                "optionId": "opt_f648af07-f508-4108-b1a7-b1d314206356",
+                "label": "模拟储蓄账户"
+              }
+            ],
+            "continuationToken": {
+              "present": true,
+              "sha256Tag": "13da7c9773809909"
+            },
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:43:22.026Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 1740,
+            "output_tokens": 3,
+            "cache_read_tokens": 1536,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 665
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:43:22.028Z",
+          "status": "done",
+          "requiredActions": []
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:43:24.109Z",
+          "turnId": "01m54trzya0f3gdx4d0mx2ry5c",
+          "previousTurnId": "01m54trx3bkz4v1xm0zwew9xqb",
+          "userInputs": [
+            {
+              "userMessage": "用户选择了本次候选",
+              "toolArguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "13da7c9773809909"
+                },
+                "choice": {
+                  "optionId": "opt_f648af07-f508-4108-b1a7-b1d314206356"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:43:24.987Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 1813,
+            "output_tokens": 102,
+            "cache_read_tokens": 1664,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 738
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_TYfZXNmxL54GIIsLN67N1996",
+              "tool_info": {
+                "type": "mcp",
+                "name": "transfer_preview",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "transfer_preview",
+              "arguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "13da7c9773809909"
+                },
+                "choice": {
+                  "optionId": "opt_f648af07-f508-4108-b1a7-b1d314206356"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:43:24.988Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:43:24.996Z",
+          "turnId": "01m54ts0t17b7ktf6pm0b4d3a9",
+          "previousTurnId": "01m54trzya0f3gdx4d0mx2ry5c",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:43:25.016Z",
+          "toolCallId": "call_00_TYfZXNmxL54GIIsLN67N1996",
+          "result": {
+            "ok": true,
+            "code": "NEEDS_CLARIFICATION",
+            "message": "「王先生」匹配到多位收款人，请确认。",
+            "kind": "needs_clarification",
+            "status": "needs_clarification",
+            "action": "transfer.create",
+            "question": "「王先生」匹配到多位收款人，请确认。",
+            "slot": "payee_ref",
+            "source": "resolver",
+            "choices": [
+              {
+                "optionId": "opt_5069f987-fb05-4894-a23e-7ed7ced3abd1",
+                "label": "房东王先生（****1003）"
+              },
+              {
+                "optionId": "opt_a876ed6c-ee01-434b-8745-776c53109820",
+                "label": "王强（****1004）"
+              }
+            ],
+            "continuationToken": {
+              "present": true,
+              "sha256Tag": "8976601a645903c2"
+            },
+            "currency": "CNY",
+            "amountUnit": "fen"
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:43:25.821Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 2119,
+            "output_tokens": 3,
+            "cache_read_tokens": 1792,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 1044
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:43:25.823Z",
+          "status": "done",
+          "requiredActions": []
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:43:28.921Z",
+          "turnId": "01m54ts4mntyancxe4g3b6pb3p",
+          "previousTurnId": "01m54ts0t17b7ktf6pm0b4d3a9",
+          "userInputs": [
+            {
+              "userMessage": "用户选择了本次候选",
+              "toolArguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "8976601a645903c2"
+                },
+                "choice": {
+                  "optionId": "opt_5069f987-fb05-4894-a23e-7ed7ced3abd1"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:43:29.716Z",
+          "content": null,
+          "usage": {
+            "input_tokens": 2195,
+            "output_tokens": 105,
+            "cache_read_tokens": 2048,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 1120
+            }
+          },
+          "toolCalls": [
+            {
+              "id": "call_00_2bmwwPJ3J7aC2NcuXXPe4610",
+              "tool_info": {
+                "type": "mcp",
+                "name": "transfer_preview",
+                "server_id": "saveflow-token-bridge",
+                "server_name": "saveflow-token-bridge"
+              },
+              "name": "transfer_preview",
+              "arguments": {
+                "continuationToken": {
+                  "present": true,
+                  "sha256Tag": "8976601a645903c2"
+                },
+                "choice": {
+                  "optionId": "opt_5069f987-fb05-4894-a23e-7ed7ced3abd1"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:43:29.720Z",
+          "status": "done",
+          "requiredActions": [
+            "tool.approval_required"
+          ]
+        },
+        {
+          "type": "turn.created",
+          "at": "2026-10-17T11:43:29.729Z",
+          "turnId": "01m54ts5dyacd56hqakq2wg055",
+          "previousTurnId": "01m54ts4mntyancxe4g3b6pb3p",
+          "userInputs": []
+        },
+        {
+          "type": "tool.response",
+          "at": "2026-10-17T11:43:29.752Z",
+          "toolCallId": "call_00_2bmwwPJ3J7aC2NcuXXPe4610",
+          "result": {
+            "error": [
+              {
+                "type": "text",
+                "text": "{\"ok\":false,\"code\":\"INSUFFICIENT_BALANCE\",\"message\":\"付款账户可用余额不足\",\"status\":\"core_error\",\"action\":\"transfer.create\",\"operationId\":\"op_64841fde-ad0a-4b2a-ab7b-da6267500f57\",\"error\":{\"code\":\"INSUFFICIENT_BALANCE\",\"message\":\"付款账户可用余额不足\",\"uncertain\":false},\"kind\":\"core_error\",\"currency\":\"CNY\",\"amountUnit\":\"fen\"}"
+              }
+            ]
+          }
+        },
+        {
+          "type": "model.message",
+          "at": "2026-10-17T11:43:30.872Z",
+          "content": "已返回结果",
+          "usage": {
+            "input_tokens": 2450,
+            "output_tokens": 3,
+            "cache_read_tokens": 2176,
+            "input_tokens_breakdown": {
+              "harness": 768,
+              "skills": 0,
+              "instructions": 69,
+              "tool_definitions": 238,
+              "messages": 1375
+            }
+          },
+          "toolCalls": []
+        },
+        {
+          "type": "turn.done",
+          "at": "2026-10-17T11:43:30.874Z",
+          "status": "done",
+          "requiredActions": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+// Pure routing only: shared by UI task selection and server allowlisting.
+// Contains no service configuration, credentials or SDK dependencies.
+const trueforgeError = (code, userMessage, status) => Object.assign(new Error(userMessage), { code, userMessage, status });
+
+export const YEAR_MONTH = '(?:\\d{4}\\s*年\\s*\\d{1,2}\\s*月|\\d{4}-\\d{1,2})';
+const BILL_QUERY = new RegExp(`^(?:请\\s*|帮我\\s*)?(?:查询|查看|查|看看|看)?\\s*(${YEAR_MONTH}|\\d{1,2}\\s*月)?\\s*(?:的\\s*)?(?:月账单|账单)(?:汇总)?[。！？!?]?$`);
+export const matchBillQuery = message => typeof message === 'string' ? BILL_QUERY.exec(message.trim()) : null;
+
+export const skillPolicies = Object.freeze({
+  card_get: { action: 'card.get', kind: 'card_result', flag: 'SAVEFLOW_TRUEFORGE_READ_ENABLED' },
+  subscription_list: { action: 'subscription.list', kind: 'subscription_result', flag: 'SAVEFLOW_TRUEFORGE_READ_ENABLED' },
+  product_list: { action: 'product.list', kind: 'product_result', flag: 'SAVEFLOW_TRUEFORGE_READ_ENABLED' },
+  transfer_preview: { action: 'transfer.create', kind: 'awaiting_confirmation', flag: 'SAVEFLOW_TRUEFORGE_TRANSFER_ENABLED', preview: true },
+  card_budget_preview: { action: 'card.set_budget', kind: 'awaiting_confirmation', flag: 'SAVEFLOW_TRUEFORGE_CARD_PREVIEW_ENABLED', preview: true },
+  card_freeze_preview: { action: 'card.freeze', kind: 'awaiting_confirmation', flag: 'SAVEFLOW_TRUEFORGE_CARD_PREVIEW_ENABLED', preview: true },
+  card_unfreeze_preview: { action: 'card.unfreeze', kind: 'awaiting_confirmation', flag: 'SAVEFLOW_TRUEFORGE_CARD_PREVIEW_ENABLED', preview: true },
+});
+
+function moneyInput(raw, allowZero = false) {
+  const m = raw.trim().match(/^(-?\d+)(?:\.(\d{1,2}))?\s*(?:元|块钱?|人民币)?$/);
+  if (!m || m[1].startsWith('-')) throw trueforgeError('INVALID_AMOUNT', '请提供有效金额，精确到分。', 400);
+  const n = BigInt(m[1]) * 100n + BigInt((m[2] || '').padEnd(2, '0'));
+  if (n > BigInt(Number.MAX_SAFE_INTEGER) || n < (allowZero ? 0n : 1n) || (allowZero && n > 10000000n)) throw trueforgeError('INVALID_AMOUNT', '金额超出允许范围。', 400);
+  return { amount_minor: Number(n), currency: 'CNY' };
+}
+
+// Fixed, narrow entry phrases. Mixed tasks and unrecognized prose stay with the old Harness.
+export function routeTrueforgeSkill(message, env) {
+  if (typeof message !== 'string') return undefined;
+  const value = message.trim().replace(/[。！？!?]$/, '');
+  let tool, args;
+  const cardState = value.match(/^(?:请|帮我)?\s*(解冻|解除冻结|冻结)\s*(.*?)$/);
+  const budget = value.match(/^(?:设置|调整|修改)\s*(.*?)(?:的)?(?:月消费|月)?预算(?:为|到|成)?\s*(.*?)$/) ||
+    value.match(/^(?:把|将)?\s*(.*?)(?:的)?(?:月消费|月)?预算(?:设置为|调整为|调整到|改成|改为|设为)\s*(.*?)$/);
+  if (env.SAVEFLOW_TRUEFORGE_CARD_PREVIEW_ENABLED === 'true' && (cardState || budget)) {
+    const ref = (cardState ? cardState[2] : budget[1]).trim();
+    if ((ref && !/(?:卡|卡片)$/.test(ref)) || /并|然后|转账|执行|确认|取消|订阅|产品/.test(ref)) return undefined;
+    if (budget && /并|然后|转账|执行|确认|取消|订阅|产品/.test(budget[2])) return undefined;
+    tool = cardState ? (cardState[1] === '冻结' ? 'card_freeze_preview' : 'card_unfreeze_preview') : 'card_budget_preview';
+    args = /^(?:卡|卡片|银行卡)?$/.test(ref) ? {} : { card_ref: ref };
+    if (budget && budget[2].trim()) args.amount = moneyInput(budget[2], true);
+    return { tool, args };
+  }
+  const payeeFirst = value.match(/^(?:请|帮我)?\s*(?:从(.+?)\s*)?给([^，。,；;!?！？]{1,128}?)\s*转(?:账)?\s*([^，。,；;!?！？]*)$/);
+  const amountFirst = value.match(/^(?:请|帮我)?\s*从([^，。,；;!?！？]{1,128}?)\s*转账\s*([^，。,；;!?！？]+?)\s*给([^，。,；;!?！？]{1,128})$/);
+  const transfer = payeeFirst || (amountFirst && [amountFirst[0], amountFirst[1], amountFirst[3], amountFirst[2]]);
+  if (env.SAVEFLOW_TRUEFORGE_TRANSFER_ENABLED === 'true' && (transfer || value === '转账')) {
+    tool = 'transfer_preview'; args = {};
+    if (transfer) {
+      if ([transfer[1], transfer[2]].some(ref => /并|然后|转账|执行|确认|取消|冻结|预算|账单|订阅|产品/.test(ref || '')) || /并|然后|执行|确认|取消/.test(transfer[3])) return undefined;
+      args.payee_ref = transfer[2].trim();
+      if (transfer[1]) args.source_account_ref = transfer[1].trim();
+      if (transfer[3].trim()) args.amount = moneyInput(transfer[3]);
+    }
+  }
+  else if (/^(?:(?:请|帮我)\s*)?(?:查询|查看|查|看)?\s*(?:我的)?订阅(?:列表|项目)?$/.test(value)) { tool = 'subscription_list'; args = {}; }
+  else if (/^(?:(?:请|帮我)\s*)?(?:查询|查看|查|看)?\s*(?:理财)?产品(?:列表)?$/.test(value)) { tool = 'product_list'; args = {}; }
+  else {
+    const match = value.match(/^(?:请|帮我)?\s*(?:查询|查看|查|看)\s*(.+?)(?:的信息|信息)?$/);
+    if (match && /(?:卡|卡片)$/.test(match[1]) && !/账单|转账|冻结|解冻|预算|订阅|产品/.test(match[1])) {
+      tool = 'card_get'; const ref = match[1].trim(); args = /^(?:卡|卡片|银行卡)$/.test(ref) ? {} : { card_ref: ref };
+    }
+  }
+  return tool && env[skillPolicies[tool].flag] === 'true' ? { tool, args } : undefined;
+}
+
+const allSkills = { SAVEFLOW_TRUEFORGE_READ_ENABLED: 'true', SAVEFLOW_TRUEFORGE_TRANSFER_ENABLED: 'true', SAVEFLOW_TRUEFORGE_CARD_PREVIEW_ENABLED: 'true' };
+// This selects a UI task boundary, never grants tool permissions. The server
+// independently checks its private flags, token scope/action and tool arguments.
+export function bankingTaskBoundary(message, currentAction, pendingSlot) {
+  if (matchBillQuery(message)) return 'new';
+  try { if (routeTrueforgeSkill(message, allSkills)) return 'new'; }
+  catch { return 'new'; } // Explicit task with an invalid amount: server validates it.
+  const families = [
+    ['bill', /账单|流水/], ['card', /卡|冻结|解冻|预算/], ['transfer', /转账|付款|汇款|转给/],
+    ['subscription', /订阅/], ['product', /产品/],
+  ].filter(([, pattern]) => pattern.test(message));
+  const currentFamily = currentAction?.split('.')[0];
+  if (families.length > 1 || families.some(([family]) => family !== currentFamily)) return 'clarify';
+  if (currentAction && !pendingSlot && !/^(?:改成|改为|金额|预算|收款人|改给|换给|换成|重新选择|改选|更换|取消|不用了|确认|执行|同意|-?\d)/.test(message.trim())) return 'clarify';
+  return 'continue';
+}
