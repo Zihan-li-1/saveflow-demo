@@ -109,7 +109,7 @@ function switchesTask(message, continuation) {
 /** Shared clarification and preview workflow. The only Core capability used is prepare(). */
 export async function runBankingConversation(body, {
   core, repository = core.repository, env = process.env, now = Date.now,
-  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, requestId = crypto.randomUUID(),
+  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, requestId = crypto.randomUUID(), origin = 'user_requested',
 }) {
   const reply = (httpStatus, code, message, data) => ({ httpStatus, code, message, data });
   if (typeof continuationSecret(env) !== 'string' || continuationSecret(env).length < 16) {
@@ -176,7 +176,7 @@ export async function runBankingConversation(body, {
   };
   const dispatched = await dispatchParsedIntent(parsed, dependencies);
   const prepareTransfer = typeof core.prepare === 'function'
-    ? { prepare: core.prepare.bind(core) }
+    ? { prepare: request => core.prepare({ ...request, origin }) }
     : { prepare: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'Banking Core prepare 未配置', uncertain: true } }) };
   const result = await prepareTransferPreview(dispatched, prepareTransfer);
 

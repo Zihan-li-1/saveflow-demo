@@ -54,14 +54,18 @@ test('per-operation state survives card/bill focus and refresh, rotates only the
   const expired = restoreBankingChat(saveBankingChat(messages, null, 0, 1300, { flows: restored.flows, focusedFlowId: null }), 301000);
   assert.equal(Object.keys(expired.flows).length, 0);
 });
-test('transfer controls permit edits/cancel only on the current preview; confirmation always disabled', () => {
+test('transfer controls: trial preview offers confirm via bridge; non-trial keeps legacy controls', () => {
   const render = (active, busy = false, trial = true) => renderToStaticMarkup(React.createElement(BankingTransferPreview, { data: { previewOnly: trial, source: trial ? 'trueforge-mcp' : undefined, preview: { exactEffects: [{ amountFen: 40000, accountName: '模拟活期账户', payeeName: '房东王先生' }] } }, active, busy, onEdit: () => assert.fail('render cannot issue operations') }));
   const current = render(true);
-  for (const text of ['修改金额', '修改收款人', '取消', '确认转账（未开放）', '¥400.00', '房东王先生']) assert.ok(current.includes(text));
-  assert.equal((current.match(/disabled=""/g) || []).length, 1);
+  for (const text of ['修改金额', '修改收款人', '取消', '确认转账', '¥400.00', '房东王先生']) assert.ok(current.includes(text), current);
+  assert.ok(!current.includes('确认转账（未开放）'), current);
+  assert.equal((current.match(/disabled=""/g) || []).length, 0);
   assert.equal((render(false).match(/disabled=""/g) || []).length, 4);
   assert.equal((render(true, true).match(/disabled=""/g) || []).length, 4);
-  assert.ok(!render(true, false, false).includes('<button'));
+  const direct = render(true, false, false);
+  for (const text of ['确认转账', '取消本次转账', '查询转账状态']) assert.ok(direct.includes(text), direct);
+  for (const text of ['修改金额', '修改收款人', '确认转账（未开放）']) assert.ok(!direct.includes(text), direct);
+  assert.equal((direct.match(/disabled=""/g) || []).length, 0);
 });
 test('refresh restores bounded synthetic history and unexpired opaque continuation, never original Core authority', () => {
   const token = `tfm1.${'a'.repeat(43)}.${'b'.repeat(43)}`;

@@ -5,11 +5,11 @@ import { saveflowMock } from "./saveflow-mock";
 import { request } from "./api/client";
 import { apiConfig } from "./api/config";
 import { askQwen, type AgentTurn } from "./agent-client";
-import { askBankingAgent, BankingAgentError, type BankingAgentData } from "./banking-agent-client";
+import { askBankingAgent, BankingAgentError, executeTrialTransfer, type BankingAgentData } from "./banking-agent-client";
 import { createBankingClient } from "./api/banking-client";
 import type { ActionReceipt } from "../banking-core/contracts";
 import { ApiError, validatePlan, type Analysis, type Receipt } from "./api/contracts";
-import { isTrialPreview } from "./trial-preview.mjs";
+import { isTrialOperationId, isTrialPreview } from "./trial-preview.mjs";
 import { bankingChatKey, restoreBankingChat, saveBankingChat } from "./banking-chat-storage";
 import { bankingTaskBoundary } from "./trueforge-routing.mjs";
 import { transferFlow, trialContinuation, updateBankingFlows, type BankingFlows } from "./banking-flow-state";
@@ -41,6 +41,9 @@ export function useSaveflow() {
   const [activeCardOperationId, setActiveCardOperationId] = useState<string | null>(null);
   const [cardBusy, setCardBusy] = useState(false);
   const cardBusyRef = useRef(false);
+  const [activeTransferOperationId, setActiveTransferOperationId] = useState<string | null>(null);
+  const [transferBusy, setTransferBusy] = useState(false);
+  const transferBusyRef = useRef(false);
   const lastBankingRequest = useRef<{ text: string; choice?: { optionId: string; label: string }; resumeFlowId?: string } | null>(null);
   const active = useRef<AbortController | null>(null);
   const generation = useRef(0);
@@ -113,6 +116,7 @@ export function useSaveflow() {
     if (!choice) setInput("");
     setMessages(current => current.map(message => message.kind === "banking_clarification" ? { ...message, banking: { ...message.banking!, choices: [] } } : message.kind === "banking_card_preview" && isTrialPreview(message.banking) ? { ...message, banking: { ...message.banking!, previewCurrent: false } } : message));
     setActiveCardOperationId(null);
+    setActiveTransferOperationId(null);
     addMessage({ role: "user", text: choice?.label || text });
     if (boundary === "clarify" || (!choice && !requestToken && boundary === "continue" && Object.values(bankingFlows).some(flow => flow.expiresAt > Date.now()))) {
       addMessage({ role: "agent", text: "请明确要查询卡片、查询哪年哪月的账单，还是修改转账。返回原转账时，请点击对应预览的“修改金额”或“修改收款人”。" });
@@ -158,7 +162,11 @@ export function useSaveflow() {
           setBankingContinuation(null);
           setActiveCardOperationId(answer.operationId || null);
           addMessage({ role: "agent", kind: "banking_card_preview", text: "卡片操作正式预览已生成；点击预览中的确认按钮后才会执行。", banking: answer });
-        } else addMessage({ role: "agent", kind: "banking_preview", text: "转账正式预览已生成，资金未变；确认与执行尚未开放。可继续修改金额或收款人。", banking: answer });
+        } else if (answer.action?.startsWith("transfer.") && !isTrialPreview(answer)) {
+          setBankingContinuation(null);
+          setActiveTransferOperationId(answer.operationId || null);
+          addMessage({ role: "agent", kind: "banking_preview", text: "转账正式预览已生成，资金未变；点击预览中的确认按钮后才会执行扣款。", banking: answer });
+        } else addMessage({ role: "agent", kind: "banking_preview", text: "转账预览已生成，仅供预览（资金未变）。可继续修改金额或收款人。", banking: answer });
         send("ANSWER");
       } else {
         setFailure("analysis");
@@ -236,6 +244,73 @@ export function useSaveflow() {
       } else addMessage({ role: "agent", kind: "error", text: "未取得明确取消结果，请查询操作状态。" });
     } catch (error) { addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "取消请求失败" }); }
     finally { cardBusyRef.current = false; setCardBusy(false); }
+  };
+  const showTransferOutcome = async (data: BankingAgentData, receipt: ActionReceipt) => {
+    if (receipt.status !== "succeeded") {
+      addMessage({ role: "agent", kind: "error", text: receipt.message });
+      setActiveTransferOperationId(current => current === data.operationId ? null : current);
+      return;
+    }
+    const first = receipt.effects[0];
+    const effect = first?.kind === "transfer_out" ? first : undefined;
+    if (!effect) throw new ApiError("INVALID_RESPONSE", "转账回执缺少扣款效果");
+    const account = await cardClient().request("account.get", { id: effect.fromAccountId });
+    if (account.availableBalanceFen !== effect.availableBalanceAfterFen) throw new ApiError("INVALID_RESPONSE", "回执与重新查询的账户余额不一致，请查询原操作");
+    addMessage({ role: "agent", text: `${receipt.message}；已重新查询账户余额：¥${(account.availableBalanceFen / 100).toFixed(2)}。` });
+    setActiveTransferOperationId(current => current === data.operationId ? null : current);
+  };
+  const checkTransferOperation = async (data: BankingAgentData) => {
+    if (isTrialPreview(data)) return;
+    if (!data.operationId || transferBusyRef.current) return;
+    transferBusyRef.current = true; setTransferBusy(true);
+    try {
+      const status = await cardClient().request("action.status", { operationId: data.operationId });
+      if (status.receipt) await showTransferOutcome(data, status.receipt);
+      else addMessage({ role: "agent", text: `操作 ${data.operationId} 状态：${status.state}，尚未取得成功回执。` });
+    } catch (error) { addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "状态查询失败" }); }
+    finally { transferBusyRef.current = false; setTransferBusy(false); }
+  };
+  const confirmTrialTransferOperation = async (data: BankingAgentData) => {
+    if (!isTrialPreview(data)) return;
+    const previewHash = data.preview?.previewHash;
+    if (!data.operationId || !isTrialOperationId(data.operationId) || typeof previewHash !== "string" || transferBusyRef.current) return;
+    transferBusyRef.current = true; setTransferBusy(true);
+    try {
+      const receipt = await executeTrialTransfer(data.operationId, previewHash, accessCode, active.current?.signal ?? new AbortController().signal);
+      await showTransferOutcome(data, receipt);
+    } catch (error) {
+      addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "转账未取得可靠结果", errorHint: error instanceof ApiError && error.uncertain ? `结果待核实，操作编号：${data.operationId}。请勿重复提交，可重新发起转账后查询。` : "试点转账未显示为已扣款；可重新预览。" });
+    } finally { transferBusyRef.current = false; setTransferBusy(false); }
+  };
+  const confirmTransferOperation = async (data: BankingAgentData) => {
+    if (isTrialPreview(data)) { await confirmTrialTransferOperation(data); return; }
+    if (!data.operationId || data.operationId !== activeTransferOperationId || transferBusyRef.current) return;
+    const previewHash = data.preview?.previewHash;
+    const confirmedStepIds = data.preview?.stepIds;
+    if (typeof previewHash !== "string" || !Array.isArray(confirmedStepIds) || confirmedStepIds.some(id => typeof id !== "string")) return;
+    transferBusyRef.current = true; setTransferBusy(true);
+    try {
+      const client = cardClient();
+      const decision = await client.request("action.decide", { operationId: data.operationId, previewHash, decision: "confirm", confirmedStepIds: confirmedStepIds as string[] });
+      if (decision.state !== "confirmed") throw new ApiError("CONFIRMATION_INVALID", "转账操作未被确认");
+      const receipt = await client.request("action.execute", { operationId: data.operationId, previewHash });
+      await showTransferOutcome(data, receipt);
+    } catch (error) {
+      addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "转账未取得可靠结果", errorHint: error instanceof ApiError && error.uncertain ? `结果待核实，操作编号：${data.operationId}。请点击查询转账状态。` : "转账未显示为已扣款；可重新预览。" });
+    } finally { transferBusyRef.current = false; setTransferBusy(false); }
+  };
+  const rejectTransferOperation = async (data: BankingAgentData) => {
+    if (isTrialPreview(data)) return;
+    if (!data.operationId || data.operationId !== activeTransferOperationId || transferBusyRef.current || typeof data.preview?.previewHash !== "string") return;
+    transferBusyRef.current = true; setTransferBusy(true);
+    try {
+      const status = await cardClient().request("action.decide", { operationId: data.operationId, previewHash: data.preview.previewHash, decision: "reject", confirmedStepIds: [] });
+      if (status.status === "cancelled") {
+        setActiveTransferOperationId(null);
+        addMessage({ role: "agent", text: "已取消本次转账，资金未扣。" });
+      } else addMessage({ role: "agent", kind: "error", text: "未取得明确取消结果，请查询转账状态。" });
+    } catch (error) { addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "取消请求失败" }); }
+    finally { transferBusyRef.current = false; setTransferBusy(false); }
   };
   const startDemo = async (text = input.trim() || "我想在年底存下 2 万元") => {
     if (!consent) { setValidation("请先勾选账单分析授权。"); return; }
@@ -315,6 +390,7 @@ export function useSaveflow() {
     setMonthlySaving(saveflowMock.goal.monthlySaving); setValidation(""); setOperationId(""); setConsent(false);
     setTargetAmountFen(saveflowMock.goal.targetAmount * 100); setUsage(null); conversation.current = []; setBankingContinuation(null); lastBankingRequest.current = null;
     setActiveCardOperationId(null);
+    setActiveTransferOperationId(null);
     setBankingFlows({}); setFocusedFlowId(null);
     try { sessionStorage.removeItem(bankingChatKey); } catch { /* Optional browser storage. */ }
   };
@@ -329,5 +405,5 @@ export function useSaveflow() {
     if (modelMode !== "banking" || !isTrialPreview(data) || !flow || !canTransition(stageRef.current, "START")) return;
     void startBanking(message, undefined, flow.id);
   };
-  return { stage, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId) : startDemo(goal.current), canStart: ["welcome", "success", "cancelled", "clarifying", "answered"].includes(stage), canReset: canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage };
+  return { stage, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId) : startDemo(goal.current), canStart: ["welcome", "success", "cancelled", "clarifying", "answered"].includes(stage), canReset: canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage };
 }

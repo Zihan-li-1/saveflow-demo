@@ -6,7 +6,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { createFinancialContext } from '../../src/banking-core/repository.mjs';
 import { createBankingCore } from '../../src/banking-core/core.mjs';
-import { createPostgresBankingCore } from '../../src/banking-core/postgres-store.mjs';
+import { getConfiguredBankingCore } from '../../src/banking-core/postgres-store.mjs';
 import { dispatchBanking } from '../../src/banking-core/dispatch.mjs';
 import { handleBillSummary } from '../../src/agent/runtime.mjs';
 import { buildParsedIntent } from '../../src/agent/clarification/merge-intent.mjs';
@@ -93,7 +93,7 @@ export function createTrialMcpServer(repository, { core = mockCore, env = trialE
         const initialIntent = continuing ? undefined : buildParsedIntent(action, slots);
         const result = await runBankingConversation(body, {
           // Only expose prepare to the shared workflow; no decision or execution capability.
-          core: { prepare: core.prepare.bind(core) }, repository, env, now, initialIntent, expectedAction: action,
+          core: { prepare: core.prepare.bind(core) }, repository, env, now, initialIntent, expectedAction: action, origin: 'agent_suggested',
         });
         const clarification = result.code === 'NEEDS_CLARIFICATION';
         return toolResult({
@@ -188,13 +188,9 @@ export function startTrialMcpServer({
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  // Explicit opt-in for the isolated synthetic trial. Never inherit a generic
-  // DATABASE_URL or expose confirm/execute through MCP.
-  const connectionString = process.env.SAVEFLOW_TRIAL_DATABASE_URL;
-  if (connectionString && (!process.env.CONTINUATION_TOKEN_SECRET || process.env.CONTINUATION_TOKEN_SECRET.length < 16)) {
-    throw new Error('Persistent trial requires a stable CONTINUATION_TOKEN_SECRET');
-  }
-  const core = connectionString ? await createPostgresBankingCore({ connectionString }) : mockCore;
+  // 组长决定：试点与网站 Core 共用同一本账（Core 那个库），本地演示单库。
+  // MCP 仍只暴露 prepare，不暴露 confirm/execute；合并后的安全由"仅供预览标记 + /api/banking 拦截"保证。
+  const core = await getConfiguredBankingCore(process.env);
   const server = startTrialMcpServer({ core });
   server.once('close', () => { void core.close(); });
   server.on('listening', () => {
