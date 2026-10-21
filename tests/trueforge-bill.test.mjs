@@ -6,6 +6,7 @@ import { createTrueforgeBillAdapter, shouldRouteTrueforgeBill, validateBillToolR
 import { billAgentSpec, createTrueforgeClient } from '../server/trueforge-client.mjs';
 import { handleBankingAgent } from '../server/banking-agent.mjs';
 import { createBankingCore } from '../src/banking-core/core.mjs';
+import { billClarificationQuestion } from '../src/lib/trueforge-routing.mjs';
 
 // Captured from the real 0.3.1 service on 2026-10-14. Replay tests are NOT E2E tests.
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/trueforge-bill-turn.json', import.meta.url)));
@@ -81,6 +82,7 @@ test('month-only bill query starts the bill Skill and asks for a year without gu
   assert.equal(shouldRouteTrueforgeBill(body('查询8月账单'), env), true);
   const first = await adapter.handle(body('查询8月账单'), { scope });
   assert.equal(first.code, 'NEEDS_CLARIFICATION'); assert.equal(first.data.action, 'bill.summary');
+  assert.equal(first.data.question, '你想查询哪一年的 8 月账单？例如 2026 年 8 月。');
   assert.deepEqual(JSON.parse(client.seen[1].message), { userMessage: '查询8月账单', toolArguments: {} });
   const next = await adapter.handle({ ...body('2026年8月'), continuationToken: first.data.continuationToken }, { scope });
   assert.equal(next.data.status, 'bill_result'); assert.equal(next.data.data.month, '2026-08');
@@ -88,6 +90,45 @@ test('month-only bill query starts the bill Skill and asks for a year without gu
   const before = client.seen.length;
   assert.equal((await adapter.handle(body('查询13月账单'), { scope })).code, 'INVALID_MONTH');
   assert.equal(client.seen.length, before);
+});
+
+test('bill clarification asks only for the missing part of an incomplete period', async () => {
+  const noPeriod = createTrueforgeBillAdapter({ env, client: fakeClient([missingTurn()]) });
+  assert.equal((await noPeriod.handle(body('查账单'), { scope })).data.question, '请提供明确的账单年月，例如 2026 年 8 月。');
+
+  const yearOnly = createTrueforgeBillAdapter({ env, client: fakeClient([missingTurn(), clone()]) });
+  assert.equal(shouldRouteTrueforgeBill(body('查看2026年账单'), env), true);
+  const first = await yearOnly.handle(body('查看2026年账单'), { scope });
+  assert.equal(first.data.question, '你想查询 2026 年的哪个月账单？例如 2026 年 8 月。');
+  const resolved = await yearOnly.handle({ ...body('2026年8月'), continuationToken: first.data.continuationToken }, { scope });
+  assert.equal(resolved.data.status, 'bill_result');
+  assert.equal(resolved.data.data.month, '2026-08');
+});
+
+test('all month-only and vague period bill requests receive a specific follow-up', async () => {
+  for (let month = 1; month <= 12; month += 1) {
+    assert.equal(
+      billClarificationQuestion(`查看${month}月账单`),
+      `你想查询哪一年的 ${month} 月账单？例如 2026 年 ${month} 月。`,
+    );
+  }
+  assert.equal(billClarificationQuestion('查看十二月账单'), '你想查询哪一年的 12 月账单？例如 2026 年 12 月。');
+  for (const message of ['查看最近的账单', '查询近期账单', '看前段时间账单', '查看今年账单', '查看去年账单', '查看最近3个月账单']) {
+    assert.ok(shouldRouteTrueforgeBill(body(message), env), message);
+    assert.equal(billClarificationQuestion(message), '请提供明确的账单年月，例如 2026 年 8 月。');
+  }
+});
+
+test('unlisted fuzzy time wording clarifies instead of falling through or guessing', async () => {
+  for (const message of ['查看上个月账单', '看假期期间的账单', '我想看看那段时间的账单', '查询年初账单']) {
+    assert.ok(shouldRouteTrueforgeBill(body(message), env), message);
+    const adapter = createTrueforgeBillAdapter({ env, client: fakeClient([missingTurn()]) });
+    const result = await adapter.handle(body(message), { scope });
+    assert.equal(result.code, 'NEEDS_CLARIFICATION');
+    assert.equal(result.data.question, '请提供明确的账单年月，例如 2026 年 8 月。');
+    assert.equal(result.data.status, 'needs_clarification');
+    assert.equal(result.data.data, undefined);
+  }
 });
 
 test('signed tokens reject tampering, raw session IDs, other scopes, restart, and expiry', async () => {
@@ -137,8 +178,8 @@ test('malformed, unlinked, wrong-month, forged-source and duplicate results cann
 });
 
 test('the router accepts only explicit narrow bill queries and trial continuation tokens', () => {
-  for (const message of ['查询 2026 年 8 月账单', '查账单', '查看2026-08的账单', '查2026年13月账单']) assert.equal(shouldRouteTrueforgeBill(body(message), env), true);
-  for (const message of ['给张三转500元', '冻结我的卡', '查看我的卡', '取消订阅', '账单查完给张三转账', '聊聊账单', '这个月呢', '查上月账单', '查2026年8月账单并执行转账']) assert.equal(shouldRouteTrueforgeBill(body(message), env), false);
+  for (const message of ['查询 2026 年 8 月账单', '查账单', '查看2026-08的账单', '查2026年13月账单', '查上月账单']) assert.equal(shouldRouteTrueforgeBill(body(message), env), true);
+  for (const message of ['给张三转500元', '冻结我的卡', '查看我的卡', '取消订阅', '账单查完给张三转账', '聊聊账单', '这个月呢', '查2026年8月账单并执行转账']) assert.equal(shouldRouteTrueforgeBill(body(message), env), false);
   assert.equal(shouldRouteTrueforgeBill({ message: '查账单', continuationToken: 'legacy-token' }, env), false);
   assert.equal(shouldRouteTrueforgeBill(body('查账单'), { ...env, SAVEFLOW_TRUEFORGE_BILL_ENABLED: 'false' }), false);
 });

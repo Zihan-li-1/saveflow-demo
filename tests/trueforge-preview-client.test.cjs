@@ -10,11 +10,17 @@ for (const extension of ['.ts', '.tsx']) require.extensions[extension] = (module
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { BankingCardPreview } = require('../src/app/BankingCardCards.tsx');
-const { askBankingAgent, BankingAgentError } = require('../src/lib/banking-agent-client.ts');
+const { askBankingAgent, BankingAgentError, hasBankingChoices } = require('../src/lib/banking-agent-client.ts');
 const { BankingTransferPreview } = require('../src/app/BankingTransferPreview.tsx');
 const { saveBankingChat, restoreBankingChat } = require('../src/lib/banking-chat-storage.ts');
 const { updateBankingFlows, transferFlow } = require('../src/lib/banking-flow-state.ts');
 const { bankingTaskBoundary } = require('../src/lib/trueforge-routing.mjs');
+test('bill period clarification stays text-only until selectable choices or a bill result exists', () => {
+  assert.equal(hasBankingChoices({ status: 'needs_clarification', action: 'bill.summary', question: '想看哪个月的账单？', choices: [] }), false);
+  assert.equal(hasBankingChoices({ status: 'needs_clarification', action: 'bill.summary', question: '想看哪个时间段的账单？' }), false);
+  assert.equal(hasBankingChoices({ status: 'needs_clarification', action: 'transfer.create', choices: [{ optionId: 'account-1', label: '模拟活期账户' }] }), true);
+  assert.equal(hasBankingChoices({ status: 'bill_result', action: 'bill.summary', choices: [] }), false);
+});
 test('browser accepts validated insufficient-balance recovery only as an error/clarification, never a success card', async () => {
   const original = global.fetch;
   const data = { status: 'error', error: { code: 'INSUFFICIENT_BALANCE' }, recovery: { kind: 'clarification', status: 'needs_clarification', action: 'transfer.create', slot: 'source_account_ref', source: 'trueforge-mcp',

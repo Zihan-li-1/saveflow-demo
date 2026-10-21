@@ -37,6 +37,11 @@ export type BankingAgentRequest = {
   choice?: { optionId: string };
 };
 
+/** Clarifications without selectable options stay as plain chat prompts. */
+export function hasBankingChoices(data?: BankingAgentData): boolean {
+  return Array.isArray(data?.choices) && data.choices.length > 0;
+}
+
 export async function askBankingAgent(
   body: BankingAgentRequest,
   accessCode: string,

@@ -3,6 +3,7 @@ import { issueContinuationToken, verifyContinuationToken } from '../src/agent/cl
 import { resolveChoice } from '../src/agent/clarification/choice-resolver.mjs';
 import { buildParsedIntent, mergeSlots } from '../src/agent/clarification/merge-intent.mjs';
 import { isBillTask, isCardTask, isTransferTask, parseClarificationAnswer } from './banking-clarification-parser.mjs';
+import { billClarificationQuestion } from '../src/lib/trueforge-routing.mjs';
 
 function errorData(code, message) {
   return { status: 'error', error: { code, message } };
@@ -28,13 +29,13 @@ export function statusFor(code) {
 
 const clarificationQuestions = {
   amount: '要转多少钱？例如 500 元。',
-  month: '想看哪个月的账单？例如 2026 年 8 月。',
   source_account_ref: '要从哪个账户转出？',
   payee_ref: '要转给谁？',
   card_ref: '请选择要查看或操作的卡片。',
 };
 
-function questionFor(action, slot) {
+function questionFor(action, slot, message) {
+  if (slot === 'month' && action === 'bill.summary') return billClarificationQuestion(message);
   return slot === 'amount' && action === 'card.set_budget'
     ? '新的月消费预算是多少元？例如 1000 元。'
     : clarificationQuestions[slot] || '请补充必要信息。';
@@ -155,7 +156,7 @@ export async function runBankingConversation(body, {
         return clarificationResponse(reply, {
           action: continuation.action,
           slot: continuation.pendingSlot,
-          question: questionFor(continuation.action, continuation.pendingSlot),
+          question: questionFor(continuation.action, continuation.pendingSlot, body.message),
           choices: continuation.choices,
           slots: continuation.slots,
           selections: continuation.selections || {},
@@ -209,7 +210,7 @@ export async function runBankingConversation(body, {
     return clarificationResponse(reply, {
       action,
       slot,
-      question: result.question || questionFor(action, slot),
+      question: result.question || questionFor(action, slot, body.message),
       choices,
       slots,
       selections,
