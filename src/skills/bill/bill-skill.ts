@@ -49,11 +49,14 @@ export type UnusualTransaction = {
 export type BillAnalysis = {
   action: "bill.analyze";
   period: BillAnalyzeAction["period"];
-  comparison_period: { month: string; timezone: string };
+  comparison_period: BillAnalyzeAction["period"];
   account_id: string | null;
   currency: "CNY";
   current_month_expense_minor: number;
   previous_month_expense_minor: number;
+  /** Preferred names for both calendar-month and custom-range queries. */
+  period_expense_minor: number;
+  comparison_period_expense_minor: number;
   change_amount_minor: number;
   change_rate_bps: number | null;
   category_breakdown: CategoryAmount[];
@@ -101,18 +104,90 @@ function assertSafeNonNegativeFen(value: number, field: string): void {
 }
 
 function validatePeriod(period: BillAnalyzeAction["period"]): void {
-  if (!period || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period.month)) {
-    throw new TypeError("period.month 必须是 YYYY-MM");
-  }
+  if (!period || typeof period !== "object") throw new TypeError("period 必须是月份或日期区间");
   if (typeof period.timezone !== "string" || !period.timezone.trim()) {
     throw new TypeError("period.timezone 不能为空");
   }
+  try { new Intl.DateTimeFormat("zh-CN", { timeZone: period.timezone }); }
+  catch { throw new TypeError("period.timezone 必须是有效的 IANA 时区"); }
+  if ("month" in period) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period.month)) throw new TypeError("period.month 必须是 YYYY-MM");
+    if ("start_date" in period || "end_date" in period) throw new TypeError("period 不能同时包含 month 和日期区间");
+    return;
+  }
+  if (!("start_date" in period) || !("end_date" in period) ||
+      !isCalendarDate(period.start_date) || !isCalendarDate(period.end_date)) {
+    throw new TypeError("period.start_date 和 period.end_date 必须是有效的 YYYY-MM-DD");
+  }
+  const days = daysBetween(period.start_date, period.end_date);
+  if (days < 0) throw new TypeError("period.start_date 不能晚于 period.end_date");
+  if (days >= 366) throw new TypeError("自定义账单区间最多为 366 天");
+}
+
+function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}
+
+function dateValue(value: string): number {
+  return Date.parse(`${value}T00:00:00Z`);
+}
+
+function daysBetween(start: string, end: string): number {
+  return (dateValue(end) - dateValue(start)) / 86_400_000;
+}
+
+function addDays(value: string, days: number): string {
+  return new Date(dateValue(value) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 function previousCalendarMonth(month: string): string {
   const [year, oneBasedMonth] = month.split("-").map(Number);
   const date = new Date(Date.UTC(year, oneBasedMonth - 2, 1));
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthBounds(month: string): { start: string; end: string } {
+  const [year, oneBasedMonth] = month.split("-").map(Number);
+  const start = `${year}-${String(oneBasedMonth).padStart(2, "0")}-01`;
+  const end = new Date(Date.UTC(year, oneBasedMonth, 0)).toISOString().slice(0, 10);
+  return { start, end };
+}
+
+function resolvePeriods(period: BillAnalyzeAction["period"]): {
+  current: { start: string; end: string };
+  comparison: { start: string; end: string };
+  comparisonPeriod: BillAnalyzeAction["period"];
+} {
+  if ("month" in period) {
+    const previousMonth = previousCalendarMonth(period.month);
+    return {
+      current: monthBounds(period.month),
+      comparison: monthBounds(previousMonth),
+      comparisonPeriod: { month: previousMonth, timezone: period.timezone },
+    };
+  }
+  const lengthDays = daysBetween(period.start_date, period.end_date) + 1;
+  const comparisonEnd = addDays(period.start_date, -1);
+  const comparisonStart = addDays(comparisonEnd, -(lengthDays - 1));
+  return {
+    current: { start: period.start_date, end: period.end_date },
+    comparison: { start: comparisonStart, end: comparisonEnd },
+    comparisonPeriod: { start_date: comparisonStart, end_date: comparisonEnd, timezone: period.timezone },
+  };
+}
+
+function transactionsInRange(
+  repository: FinancialContextRepository,
+  accountId: string | undefined,
+  range: { start: string; end: string }
+): Transaction[] {
+  return repository.getTransactions({ accountId }).filter((transaction) => {
+    const localDate = transaction.occurredAt.slice(0, 10);
+    return localDate >= range.start && localDate <= range.end;
+  });
 }
 
 function expenseTransactions(transactions: Transaction[]): Transaction[] {
@@ -184,9 +259,9 @@ export function analyzeBills(
     throw new TypeError("account_ref 未匹配到可访问账户");
   }
 
-  const previousMonth = previousCalendarMonth(input.period.month);
-  const current = repository.getTransactions({ accountId, month: input.period.month });
-  const previous = repository.getTransactions({ accountId, month: previousMonth });
+  const ranges = resolvePeriods(input.period);
+  const current = transactionsInRange(repository, accountId, ranges.current);
+  const previous = transactionsInRange(repository, accountId, ranges.comparison);
   const currentTotal = totalExpense(current);
   const previousTotal = totalExpense(previous);
   const currentCategories = categoryMap(current);
@@ -229,11 +304,13 @@ export function analyzeBills(
   return {
     action: "bill.analyze",
     period: { ...input.period },
-    comparison_period: { month: previousMonth, timezone: input.period.timezone },
+    comparison_period: ranges.comparisonPeriod,
     account_id: accountId ?? null,
     currency: "CNY",
     current_month_expense_minor: currentTotal,
     previous_month_expense_minor: previousTotal,
+    period_expense_minor: currentTotal,
+    comparison_period_expense_minor: previousTotal,
     change_amount_minor: currentTotal - previousTotal,
     change_rate_bps:
       previousTotal === 0 ? null : Math.round(((currentTotal - previousTotal) * 10_000) / previousTotal),
