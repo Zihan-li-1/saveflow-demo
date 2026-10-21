@@ -21,6 +21,8 @@ export type BankingAgentData = {
   previewOnly?: boolean;
   executionAllowed?: boolean;
   previewCurrent?: boolean;
+  /** 预览已执行：界面只读，不再提供确认/取消入口。 */
+  executed?: boolean;
   error?: { code?: string; message?: string };
   recovery?: BankingAgentData;
 };

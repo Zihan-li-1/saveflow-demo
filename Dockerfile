@@ -17,6 +17,11 @@ RUN npm run build
 FROM dependencies AS production-dependencies
 RUN npm prune --omit=dev --no-audit --no-fund
 
+FROM dependencies AS migrate
+COPY migrations ./migrations
+COPY scripts/migrate-banking.mjs ./scripts/migrate-banking.mjs
+CMD ["node", "scripts/migrate-banking.mjs"]
+
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000

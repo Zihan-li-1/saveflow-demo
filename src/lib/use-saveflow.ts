@@ -14,7 +14,7 @@ import { bankingChatKey, restoreBankingChat, saveBankingChat } from "./banking-c
 import { bankingTaskBoundary } from "./trueforge-routing.mjs";
 import { transferFlow, trialContinuation, updateBankingFlows, type BankingFlows } from "./banking-flow-state";
 
-export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read"; analysis?: Analysis; banking?: BankingAgentData; errorHint?: string };
+export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
 const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。可以查询模拟账单，或生成转账正式预览，例如：给张三转 500 元。" }];
 const pendingKey = "saveflow.pending-operation.v1";
 
@@ -254,9 +254,25 @@ export function useSaveflow() {
     const first = receipt.effects[0];
     const effect = first?.kind === "transfer_out" ? first : undefined;
     if (!effect) throw new ApiError("INVALID_RESPONSE", "转账回执缺少扣款效果");
+    // 同一后端复核两件事：账户余额与交易记录，证明这笔钱确实已记账。
     const account = await cardClient().request("account.get", { id: effect.fromAccountId });
     if (account.availableBalanceFen !== effect.availableBalanceAfterFen) throw new ApiError("INVALID_RESPONSE", "回执与重新查询的账户余额不一致，请查询原操作");
-    addMessage({ role: "agent", text: `${receipt.message}；已重新查询账户余额：¥${(account.availableBalanceFen / 100).toFixed(2)}。` });
+    const transactions = await cardClient().request("transaction.list", { accountId: effect.fromAccountId });
+    const booked = transactions.find(transaction => receipt.transactionIds.includes(transaction.id));
+    if (!booked || booked.amountFen !== effect.amountFen || booked.type !== "transfer_out" || booked.payeeId !== effect.payeeId || booked.status !== "posted") {
+      throw new ApiError("INVALID_RESPONSE", "回执与后端交易记录不一致，请查询原操作");
+    }
+    // 执行后预览只读：标记已执行，并撤销试点续接，避免同一预览再次确认或在聊天中“取消”。
+    if (data.operationId) {
+      setMessages(current => current.map(message => message.kind === "banking_preview" && message.banking?.operationId === data.operationId
+        ? { ...message, banking: { ...message.banking!, executed: true } } : message));
+      if (isTrialOperationId(data.operationId)) {
+        setBankingFlows(current => Object.fromEntries(Object.entries(current).filter(([, flow]) => flow.previewOperationId !== data.operationId)));
+        setFocusedFlowId(current => current && bankingFlows[current]?.previewOperationId === data.operationId ? null : current);
+      }
+    }
+    addMessage({ role: "agent", kind: "banking_receipt", text: `转账已完成，已从同一后端核对余额与交易记录：余额 ¥${(account.availableBalanceFen / 100).toFixed(2)}，交易 ${booked.id} 已记账。`, receipt,
+      verification: { availableBalanceFen: account.availableBalanceFen, transactionId: booked.id, occurredAt: booked.occurredAt, amountFen: booked.amountFen, status: booked.status } });
     setActiveTransferOperationId(current => current === data.operationId ? null : current);
   };
   const checkTransferOperation = async (data: BankingAgentData) => {

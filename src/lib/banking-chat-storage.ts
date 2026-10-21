@@ -4,7 +4,7 @@ import { trialContinuation, type BankingFlows } from "./banking-flow-state";
 export const bankingChatKey = "saveflow.banking-chat.v1";
 const retentionMs = 30 * 60 * 1000;
 const continuationMs = 5 * 60 * 1000;
-const kinds = new Set(["normal", "error", "banking_clarification", "banking_bill", "banking_preview", "banking_card", "banking_card_preview", "banking_read"]);
+const kinds = new Set(["normal", "error", "banking_clarification", "banking_bill", "banking_preview", "banking_card", "banking_card_preview", "banking_read", "banking_receipt"]);
 type Snapshot = { version: 1; savedAt: number; messages: Message[]; continuation: string | null; continuationExpiresAt: number; flows: BankingFlows; focusedFlowId: string | null };
 
 // Tab-local synthetic history only. Never store access codes, consent, raw

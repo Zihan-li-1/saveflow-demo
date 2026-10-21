@@ -50,6 +50,8 @@ test('执行桥：幂等——重复执行返回同一回执，只扣一次款',
   assert.equal(second.ok, true);
   assert.equal(first.data.receiptId, second.data.receiptId);
   assert.equal(balance(core), 450000); // 只扣一次
+  const transactions = await core.repository.getTransactions({ accountId: 'ACC-CHECKING' });
+  assert.equal(transactions.filter(transaction => transaction.operationId === prepared.operationId).length, 1); // 只记一笔账
 });
 
 function httpRequest(trialOperationId, previewHash, accessCode = 'x'.repeat(16)) {

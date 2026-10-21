@@ -16,7 +16,11 @@ services:
       timeout: 3s
       retries: 10
   pilot-migrate:
-    image: saveflow-docker-tests:local
+    # 独立迁移镜像：只带 migrations/ 与迁移脚本，依赖 web 构建缓存的依赖层。
+    image: saveflow-docker-migrate:local
+    build:
+      context: .
+      target: migrate
     command: [node, scripts/migrate-banking.mjs]
     environment:
       DATABASE_URL: postgresql://saveflow_web:local-synthetic-web-only@pilot-db:5432/saveflow_web
