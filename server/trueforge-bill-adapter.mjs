@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { createTrueforgeClient, trueforgeError } from './trueforge-client.mjs';
 import { isBillTask, isCardTask, isTransferTask } from './banking-clarification-parser.mjs';
 import { linkedToolResult } from './trueforge-tool-result.mjs';
-import { matchBillQuery, YEAR_MONTH } from '../src/lib/trueforge-routing.mjs';
+import { billClarificationQuestion, matchBillQuery, YEAR_MONTH } from '../src/lib/trueforge-routing.mjs';
 
 const MONTH = /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/;
 const ANSWER = new RegExp(`^(${YEAR_MONTH})(?:的?账单)?[。！？!?]?$`);
@@ -17,9 +17,14 @@ function monthFrom(raw) {
     if (Number(raw.replace(/\s*月$/, '')) < 1 || Number(raw.replace(/\s*月$/, '')) > 12) throw trueforgeError('INVALID_MONTH', '请提供有效月份和年份。', 400);
     return undefined; // A month without a year must clarify, never guess the year.
   }
+  if (/^\d{4}\s*年$/.test(raw) || /^(?:十[一二]?|[一二三四五六七八九])\s*月$/.test(raw) ||
+      /^(?:最近|近期|前段时间|今年|去年|上半年|下半年|最近\s*\d+\s*个?月|前\s*\d+\s*个?月)$/.test(raw)) {
+    return undefined; // Incomplete or fuzzy periods must clarify, never guess.
+  }
   const parts = raw.match(/^(\d{4})(?:\s*年\s*|-)(\d{1,2})\s*月?$/);
   const month = parts && `${parts[1]}-${parts[2].padStart(2, '0')}`;
-  if (!month || !MONTH.test(month)) throw trueforgeError('INVALID_MONTH', '请提供有效年月，例如 2026 年 8 月。', 400);
+  if (parts && !MONTH.test(month)) throw trueforgeError('INVALID_MONTH', '请提供有效年月，例如 2026 年 8 月。', 400);
+  if (!month) return undefined; // Unrecognized time wording is incomplete, so ask instead of guessing.
   return month;
 }
 
@@ -89,13 +94,13 @@ export function createTrueforgeBillAdapter({ env = process.env, client, now = Da
     }
     return entry;
   }
-  function clarification(sessionId, scope) {
+  function clarification(sessionId, scope, message) {
     clean();
     if (states.size >= maxSessions) throw trueforgeError('TRUEFORGE_CAPACITY', '账单会话过多，请稍后再试。', 503);
     const nonce = randomBytes(32).toString('base64url');
     const token = `${TOKEN_PREFIX}${nonce}.${mac(nonce)}`;
     states.set(token, { sessionId, scope, expiresAt: now() + ttlMs });
-    const question = '想看哪个月的账单？例如 2026 年 8 月。';
+    const question = billClarificationQuestion(message);
     return { httpStatus: 200, code: 'NEEDS_CLARIFICATION', message: question,
       data: { kind: 'clarification', status: 'needs_clarification', action: 'bill.summary', question, slot: 'month', choices: [], continuationToken: token } };
   }
@@ -109,7 +114,7 @@ export function createTrueforgeBillAdapter({ env = process.env, client, now = Da
       sessionId ??= await service.createSession(signal);
       const turn = await service.runTurn(sessionId, JSON.stringify({ userMessage: message, toolArguments: expectedMonth === undefined ? {} : { month: expectedMonth } }), signal);
       const result = validateBillToolResult(turn, { serverName: env.TRUEFORGE_MCP_SERVER, expectedMonth });
-      if (result.kind === 'needs_clarification') return clarification(sessionId, scope);
+      if (result.kind === 'needs_clarification') return clarification(sessionId, scope, message);
       return { httpStatus: 200, code: 'OK', message: '账单查询完成。', data: { status: 'bill_result', action: 'bill.summary', data: result.data, evidence: result.evidence } };
     } catch (error) {
       if (service && sessionId) await service.cancel(sessionId);
