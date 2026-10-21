@@ -25,6 +25,13 @@ export type DispatchResult =
       data: unknown;
     }
   | {
+      ok: true;
+      kind: "wealth_recommendation" | "wealth_comparison" | "risk_assessment_required" | "scenario_rule_preview" | "scenario_rule" | "scenario_event_review" | "goal_plan";
+      action: string;
+      data: unknown;
+      evidence?: DispatchEvidence[];
+    }
+  | {
       ok: false;
       kind: "needs_clarification";
       action: string;

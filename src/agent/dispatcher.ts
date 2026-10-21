@@ -5,11 +5,17 @@ import type { DispatchResult } from "./dispatch-result";
 export type BillSummaryIntent = Extract<ParsedIntent, { action: "bill.summary" }>;
 export type TransferCreateIntent = Extract<ParsedIntent, { action: "transfer.create" }>;
 export type CardIntent = Extract<ParsedIntent, { action: `card.${string}` }>;
+export type WealthIntent = Extract<ParsedIntent, { action: `wealth.${string}` }>;
+export type ScenarioIntent = Extract<ParsedIntent, { action: `scenario.${string}` }>;
+export type GoalIntent = Extract<ParsedIntent, { action: "orchestrator.goal" }>;
 
 export type DispatcherDependencies = {
   billHandler: (intent: BillSummaryIntent) => Promise<DispatchResult>;
   transferHandler: (intent: TransferCreateIntent) => Promise<DispatchResult>;
   cardHandler?: (intent: CardIntent) => Promise<DispatchResult>;
+  wealthHandler?: (intent: WealthIntent) => Promise<DispatchResult>;
+  scenarioHandler?: (intent: ScenarioIntent) => Promise<DispatchResult>;
+  goalHandler?: (intent: GoalIntent) => Promise<DispatchResult>;
 };
 
 function clarificationResult(intent: ParsedIntent): DispatchResult {
@@ -50,6 +56,17 @@ export async function dispatchParsedIntent(
       case "card.freeze":
       case "card.unfreeze":
         return dependencies.cardHandler ? await dependencies.cardHandler(intent) : { ok: false, kind: "unsupported" };
+      case "wealth.recommend":
+      case "wealth.compare":
+      case "wealth.assess_risk":
+        return dependencies.wealthHandler ? await dependencies.wealthHandler(intent) : { ok: false, kind: "unsupported" };
+      case "scenario.create_rule":
+      case "scenario.update_rule":
+      case "scenario.disable_rule":
+      case "scenario.review_event":
+        return dependencies.scenarioHandler ? await dependencies.scenarioHandler(intent) : { ok: false, kind: "unsupported" };
+      case "orchestrator.goal":
+        return dependencies.goalHandler ? await dependencies.goalHandler(intent) : { ok: false, kind: "unsupported" };
     }
   } catch (error) {
     return skillError(intent.action, error);

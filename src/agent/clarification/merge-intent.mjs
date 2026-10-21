@@ -7,6 +7,14 @@ const required = {
   'card.set_budget': ['card_ref', 'amount'],
   'card.freeze': ['card_ref'],
   'card.unfreeze': ['card_ref'],
+  'wealth.recommend': ['goal', 'max_risk_level', 'horizon_days', 'liquidity_requirement'],
+  'wealth.compare': ['product_refs'],
+  'wealth.assess_risk': ['assessment_scope'],
+  'scenario.create_rule': ['trigger', 'conditions', 'proposed_steps', 'authorization_scope'],
+  'scenario.update_rule': ['rule_ref', 'changes'],
+  'scenario.disable_rule': ['rule_ref'],
+  'scenario.review_event': ['event_ref'],
+  'orchestrator.goal': ['goal_text'],
 };
 
 export function buildParsedIntent(action, slots) {

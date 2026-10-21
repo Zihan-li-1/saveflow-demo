@@ -14,6 +14,9 @@ export async function dispatchParsedIntent(value, dependencies) {
     if (intent.action === 'transfer.create') return await dependencies.transferHandler(intent);
     if (intent.action === 'bill.summary') return await dependencies.billHandler(intent);
     if (intent.action.startsWith('card.')) return dependencies.cardHandler ? await dependencies.cardHandler(intent) : { ok: false, kind: 'unsupported' };
+    if (intent.action.startsWith('wealth.')) return dependencies.wealthHandler ? await dependencies.wealthHandler({ action: intent.action, ...intent.slots }) : { ok: false, kind: 'unsupported' };
+    if (intent.action.startsWith('scenario.')) return dependencies.scenarioHandler ? await dependencies.scenarioHandler({ action: intent.action, ...intent.slots }) : { ok: false, kind: 'unsupported' };
+    if (intent.action === 'orchestrator.goal') return dependencies.goalHandler ? await dependencies.goalHandler(intent) : { ok: false, kind: 'unsupported' };
     return { ok: false, kind: 'unsupported' };
   } catch (error) {
     return { ok: false, kind: 'skill_error', action: intent.action, error: { code: 'SKILL_ERROR', message: error instanceof Error && error.message.trim() ? error.message : 'Skill 处理失败，请稍后重试。' } };
@@ -96,6 +99,22 @@ export async function handleTransfer(intent, repository) {
   const resolved = await resolveTransferIntent(repository, intent.slots);
   if (resolved.state === 'needs_clarification') return { ok: false, kind: 'needs_clarification', action: 'transfer.create', source: 'resolver', question: resolved.clarification.question, slot: resolved.clarification.slot, reason: resolved.clarification.reason, ...(resolved.clarification.candidates ? { candidates: resolved.clarification.candidates } : {}) };
   return { ok: true, kind: 'transfer_resolution', action: 'transfer.create', data: resolved };
+}
+
+export async function handleGoal(intent, repository) {
+  const [context, accounts, subscriptions, cards, products] = await Promise.all([
+    repository.getContextInfo(), repository.getAccounts(), repository.getSubscriptions(), repository.getCards(), repository.getInvestmentProducts(),
+  ]);
+  const activeSubscriptions = subscriptions.filter(item => item.status === 'active');
+  const potentiallyUnused = activeSubscriptions.filter(item => item.isPotentiallyUnused);
+  const availableBalanceFen = accounts.filter(item => item.status === 'active').reduce((sum, item) => sum + item.availableBalanceFen, 0);
+  const steps = [
+    { action: 'bill.analyze', origin: 'agent_suggested', reason: '先核对目标期间的收入、支出和异常交易。', requires_confirmation: false },
+    ...(potentiallyUnused.length ? [{ action: 'subscription.list', origin: 'agent_suggested', reason: `发现 ${potentiallyUnused.length} 项可能闲置订阅，建议先核实；不会自动取消。`, requires_confirmation: false }] : []),
+    ...(cards.length ? [{ action: 'card.get', origin: 'agent_suggested', reason: '查看现有卡片预算和消费情况；不会自动调整预算。', requires_confirmation: false }] : []),
+    ...(products.length && availableBalanceFen > 0 ? [{ action: 'wealth.recommend', origin: 'agent_suggested', reason: '如有明确风险、期限和流动性约束，可进行只读产品筛选。', requires_confirmation: false }] : []),
+  ];
+  return { ok: true, kind: 'goal_plan', action: 'orchestrator.goal', data: { goal_text: intent.slots.goal_text, horizon: intent.slots.horizon ?? null, constraints: intent.slots.constraints ?? null, steps, snapshot: { available_balance_minor: availableBalanceFen, active_subscription_count: activeSubscriptions.length, potentially_unused_subscription_count: potentiallyUnused.length, card_count: cards.length }, execution_allowed: false }, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: [...accounts.map(item => item.id), ...activeSubscriptions.map(item => item.id), ...cards.map(item => item.id), ...products.map(item => item.id)] }] };
 }
 
 function orchestratorError(error) {

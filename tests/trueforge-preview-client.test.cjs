@@ -39,6 +39,14 @@ test('task boundary separates new queries, transfer edits and ambiguous requests
   for (const message of ['改成300元', '改成转账300元', '收款人改成李四', '取消']) assert.equal(bankingTaskBoundary(message, 'transfer.create'), 'continue');
   for (const message of ['看看我的卡和账单', '帮我看看', '是卡还是账单呢']) assert.equal(bankingTaskBoundary(message, 'transfer.create'), 'clarify');
 });
+
+test('E and bill follow-up answers keep non-TrueForge continuation context', () => {
+  assert.equal(bankingTaskBoundary('R2'), 'continue');
+  assert.equal(bankingTaskBoundary('2026年8月'), 'continue');
+  assert.equal(bankingTaskBoundary('确认保存'), 'continue');
+  assert.equal(bankingTaskBoundary('比较理财产品'), 'new');
+  assert.equal(bankingTaskBoundary('创建场景规则'), 'new');
+});
 test('per-operation state survives card/bill focus and refresh, rotates only the resumed operation, and expires', () => {
   const token = p => `${p}.${'a'.repeat(43)}.${'b'.repeat(43)}`;
   const transfer = { status: 'awaiting_confirmation', action: 'transfer.create', continuationToken: token('tfm1'), operationId: 'tfpreview:first' };

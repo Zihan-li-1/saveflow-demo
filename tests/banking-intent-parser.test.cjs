@@ -78,6 +78,18 @@ test('parses bill summary with only the month slot', async () => {
   assert.deepEqual(value, intent('bill.summary', { month: '2026-08' }, [], 'ready_for_resolution'));
 });
 
+test('E parser accepts product comparison names and a read-only cross-domain goal', async () => {
+  const comparison = intent('wealth.compare', { product_refs: ['模拟灵活现金 A', '模拟稳健现金 B'] }, [], 'ready_for_resolution');
+  assert.deepEqual(await parse(comparison, '比较模拟灵活现金 A 和模拟稳健现金 B'), comparison);
+  const goal = intent('orchestrator.goal', { goal_text: '看看这个月财务情况', horizon: '这个月' }, [], 'ready_for_resolution');
+  assert.deepEqual(await parse(goal, '帮我看看这个月财务情况'), goal);
+});
+
+test('E parser keeps missing recommendation constraints as clarification', async () => {
+  const value = intent('wealth.recommend', { goal: '准备应急金' }, ['max_risk_level', 'horizon_days', 'liquidity_requirement'], 'needs_clarification');
+  assert.deepEqual(await parse(value, '帮我筛选应急金产品'), value);
+});
+
 test('ambiguous and prompt-injection requests remain non-executable', async () => {
   const clarify = await parse(intent('clarify', {}, ['action'], 'needs_clarification'), '帮我处理一下');
   assert.equal(clarify.action, 'clarify');

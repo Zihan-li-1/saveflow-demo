@@ -51,6 +51,63 @@ export type BillAnalyzeAction = Extract<BillAction, { action: "bill.analyze" }>;
 export type SubscriptionListAction = Extract<SubscriptionAction, { action: "subscription.list" }>;
 export type BillSkillAction = BillAction | SubscriptionAction;
 
+export type RiskLevel = "R1" | "R2" | "R3";
+export type LiquidityRequirement = "T+0" | "T+1" | "AT_MATURITY";
+
+export type WealthAction =
+  | {
+      action: "wealth.recommend";
+      goal: string;
+      max_risk_level: RiskLevel;
+      horizon_days: number;
+      liquidity_requirement: LiquidityRequirement;
+      amount?: { amount_minor: number; currency: "CNY" };
+    }
+  | {
+      action: "wealth.compare";
+      product_refs: string[];
+    }
+  | {
+      action: "wealth.assess_risk";
+      assessment_scope: "investment_suitability";
+    }
+  | {
+      action: "wealth.subscribe";
+      product_ref: string;
+      amount: { amount_minor: number; currency: "CNY" };
+      source_account_ref: string;
+    }
+  | {
+      action: "wealth.redeem";
+      holding_ref: string;
+      quantity_or_amount: { amount_minor: number; currency: "CNY" };
+    };
+
+export type ScenarioStep = {
+  action: string;
+  parameters: Record<string, unknown>;
+};
+
+export type ScenarioAction =
+  | {
+      action: "scenario.create_rule";
+      trigger: { type: "manual" | "date" | "financial_event"; value: string };
+      conditions: Record<string, string | number | boolean>;
+      proposed_steps: ScenarioStep[];
+      authorization_scope: "suggest_only";
+    }
+  | {
+      action: "scenario.update_rule";
+      rule_ref: string;
+      changes: {
+        trigger?: { type: "manual" | "date" | "financial_event"; value: string };
+        conditions?: Record<string, string | number | boolean>;
+        proposed_steps?: ScenarioStep[];
+      };
+    }
+  | { action: "scenario.disable_rule"; rule_ref: string }
+  | { action: "scenario.review_event"; event_ref: string };
+
 export function isCalendarMonth(value: string): boolean {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
 }

@@ -152,3 +152,11 @@ test('enforces bill month format and status derived from required slots', () => 
     base('bill.summary', {}, ['month'], 'ready_for_resolution'),
   ), ParsedIntentValidationError);
 });
+
+test('E actions enforce required wealth, scenario and goal slots', () => {
+  assert.equal(validateParsedIntent(base('wealth.compare', { product_refs: ['产品A', '产品B'] }, [], 'ready_for_resolution')).action, 'wealth.compare');
+  assert.equal(validateParsedIntent(base('scenario.disable_rule', { rule_ref: 'rule_001' }, [], 'ready_for_resolution')).action, 'scenario.disable_rule');
+  assert.equal(validateParsedIntent(base('orchestrator.goal', { goal_text: '看看财务情况' }, [], 'ready_for_resolution')).action, 'orchestrator.goal');
+  assert.throws(() => validateParsedIntent(base('wealth.compare', { product_refs: ['产品A'] }, [], 'ready_for_resolution')), ParsedIntentValidationError);
+  assert.throws(() => validateParsedIntent(base('scenario.create_rule', {}, [], 'ready_for_resolution')), ParsedIntentValidationError);
+});

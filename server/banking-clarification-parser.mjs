@@ -62,6 +62,41 @@ export function parseClarificationAnswer(message, { action, slot, choices = [], 
     const value = month(message, now);
     return value ? { kind: 'slot', updates: { month: value } } : { kind: 'unrecognized' };
   }
+  const text = message.trim().replace(/[。！]$/, '');
+  if (slot === 'goal' && text) return { kind: 'slot', updates: { goal: text } };
+  if (slot === 'goal_text' && text) return { kind: 'slot', updates: { goal_text: text } };
+  if (slot === 'max_risk_level') {
+    const match = text.toUpperCase().match(/R[1-3]/);
+    return match ? { kind: 'slot', updates: { max_risk_level: match[0] } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'horizon_days') {
+    const match = text.match(/(\d+)\s*(天|日|个月|月|年)/);
+    if (!match) return { kind: 'unrecognized' };
+    const count = Number(match[1]); const days = /年/.test(match[2]) ? count * 365 : /月/.test(match[2]) ? count * 30 : count;
+    return Number.isSafeInteger(days) && days >= 0 && days <= 3650 ? { kind: 'slot', updates: { horizon_days: days } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'liquidity_requirement') {
+    const liquidity = /T\s*\+?\s*0|随时|当天/.test(text) ? 'T+0' : /T\s*\+?\s*1|次日/.test(text) ? 'T+1' : /到期/.test(text) ? 'AT_MATURITY' : null;
+    return liquidity ? { kind: 'slot', updates: { liquidity_requirement: liquidity } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'product_refs') {
+    const refs = text.replace(/^比较/, '').split(/、|，|,|和|与|以及/).map(value => value.trim()).filter(Boolean);
+    return refs.length >= 2 ? { kind: 'slot', updates: { product_refs: refs } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'assessment_scope' && /^(?:是|需要|开始|确认|进行风险测评)/.test(text)) return { kind: 'slot', updates: { assessment_scope: 'investment_suitability' } };
+  if (slot === 'authorization_scope' && /仅.*建议|suggest_only|确认/.test(text)) return { kind: 'slot', updates: { authorization_scope: 'suggest_only' } };
+  if (slot === 'trigger' && text) return { kind: 'slot', updates: { trigger: { type: /\d{4}|每月|日期|生日/.test(text) ? 'date' : /余额|账单|消费|收入/.test(text) ? 'financial_event' : 'manual', value: text } } };
+  if (slot === 'conditions' && text) return { kind: 'slot', updates: { conditions: { description: text } } };
+  if (slot === 'proposed_steps' && text) {
+    const proposed_steps = [];
+    if (/账单|支出|消费/.test(text)) proposed_steps.push({ action: 'bill.analyze', parameters: {} });
+    if (/订阅/.test(text)) proposed_steps.push({ action: 'subscription.list', parameters: {} });
+    if (/理财|产品/.test(text)) proposed_steps.push({ action: 'wealth.recommend', parameters: {} });
+    if (/卡片|银行卡/.test(text)) proposed_steps.push({ action: 'card.get', parameters: {} });
+    return proposed_steps.length ? { kind: 'slot', updates: { proposed_steps } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'rule_ref' && text) return { kind: 'slot', updates: { rule_ref: text } };
+  if (slot === 'event_ref' && text) return { kind: 'slot', updates: { event_ref: text } };
   return { kind: 'unrecognized' };
 }
 
