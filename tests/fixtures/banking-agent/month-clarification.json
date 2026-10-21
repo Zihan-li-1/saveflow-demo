@@ -1,12 +1,12 @@
 {
   "code": "NEEDS_CLARIFICATION",
-  "message": "想看哪个月的账单？例如 2026 年 8 月。",
+  "message": "请提供具体的账单时间，例如 2026 年 8 月。",
   "requestId": "fixture-request-id",
   "data": {
     "kind": "clarification",
     "status": "needs_clarification",
     "action": "bill.summary",
-    "question": "想看哪个月的账单？例如 2026 年 8 月。",
+    "question": "请提供具体的账单时间，例如 2026 年 8 月。",
     "slot": "month",
     "source": "parser",
     "choices": [],

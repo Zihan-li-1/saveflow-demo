@@ -81,6 +81,7 @@ test('month-only bill query starts the bill Skill and asks for a year without gu
   assert.equal(shouldRouteTrueforgeBill(body('查询8月账单'), env), true);
   const first = await adapter.handle(body('查询8月账单'), { scope });
   assert.equal(first.code, 'NEEDS_CLARIFICATION'); assert.equal(first.data.action, 'bill.summary');
+  assert.equal(first.data.question, '你想查询哪一年的 8 月账单？例如 2026 年 8 月。');
   assert.deepEqual(JSON.parse(client.seen[1].message), { userMessage: '查询8月账单', toolArguments: {} });
   const next = await adapter.handle({ ...body('2026年8月'), continuationToken: first.data.continuationToken }, { scope });
   assert.equal(next.data.status, 'bill_result'); assert.equal(next.data.data.month, '2026-08');
@@ -88,6 +89,19 @@ test('month-only bill query starts the bill Skill and asks for a year without gu
   const before = client.seen.length;
   assert.equal((await adapter.handle(body('查询13月账单'), { scope })).code, 'INVALID_MONTH');
   assert.equal(client.seen.length, before);
+});
+
+test('bill clarification asks only for the missing part of an incomplete period', async () => {
+  const noPeriod = createTrueforgeBillAdapter({ env, client: fakeClient([missingTurn()]) });
+  assert.equal((await noPeriod.handle(body('查账单'), { scope })).data.question, '请提供具体的账单时间，例如 2026 年 8 月。');
+
+  const yearOnly = createTrueforgeBillAdapter({ env, client: fakeClient([missingTurn(), clone()]) });
+  assert.equal(shouldRouteTrueforgeBill(body('查看2026年账单'), env), true);
+  const first = await yearOnly.handle(body('查看2026年账单'), { scope });
+  assert.equal(first.data.question, '你想查询 2026 年的哪个月账单？例如 2026 年 8 月。');
+  const resolved = await yearOnly.handle({ ...body('2026年8月'), continuationToken: first.data.continuationToken }, { scope });
+  assert.equal(resolved.data.status, 'bill_result');
+  assert.equal(resolved.data.data.month, '2026-08');
 });
 
 test('signed tokens reject tampering, raw session IDs, other scopes, restart, and expiry', async () => {
