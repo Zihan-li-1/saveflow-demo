@@ -49,7 +49,7 @@ try {
   await page.screenshot({ path: '.next/trueforge-bill-ui.png', fullPage: true });
   await setup();
   const first = await send('查账单'); assert.equal(first.code, 'NEEDS_CLARIFICATION'); assert.deepEqual(first.data.choices, []);
-  await page.getByText('请提供具体的账单时间，例如 2026 年 8 月。', { exact: true }).first().waitFor();
+  await page.getByText('请提供明确的账单年月，例如 2026 年 8 月。', { exact: true }).first().waitFor();
   const next = await send('2026 年 8 月'); assert.equal(next.code, 'OK');
   await card('2026-08', '12000.00', '8460.00', 12);
   await setup(); assert.equal((await send('查询 2026 年 1 月账单')).code, 'OK');

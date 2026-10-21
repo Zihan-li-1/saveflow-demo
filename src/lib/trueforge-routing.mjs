@@ -4,20 +4,32 @@ const trueforgeError = (code, userMessage, status) => Object.assign(new Error(us
 
 export const YEAR_MONTH = '(?:\\d{4}\\s*年\\s*\\d{1,2}\\s*月|\\d{4}-\\d{1,2})';
 const YEAR_ONLY = '\\d{4}\\s*年';
-const BILL_QUERY = new RegExp(`^(?:请\\s*|帮我\\s*)?(?:查询|查看|查|看看|看)?\\s*(${YEAR_MONTH}|${YEAR_ONLY}|\\d{1,2}\\s*月)?\\s*(?:的\\s*)?(?:月账单|账单)(?:汇总)?[。！？!?]?$`);
+const CHINESE_MONTH = '(?:十[一二]?|[一二三四五六七八九])\\s*月';
+const FUZZY_PERIOD = '(?:最近|近期|前段时间|今年|去年|上半年|下半年|最近\\s*\\d+\\s*个?月|前\\s*\\d+\\s*个?月)';
+const BILL_QUERY = new RegExp(`^(?:请\\s*|帮我\\s*)?(?:查询|查看|查|看看|看)?\\s*(${YEAR_MONTH}|${YEAR_ONLY}|\\d{1,2}\\s*月|${CHINESE_MONTH}|${FUZZY_PERIOD})?\\s*(?:的\\s*)?(?:月账单|账单)(?:汇总)?[。！？!?]?$`);
 export const matchBillQuery = message => typeof message === 'string' ? BILL_QUERY.exec(message.trim()) : null;
+
+function chineseMonthNumber(value) {
+  const digits = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  if (value === '十') return 10;
+  if (value === '十一') return 11;
+  if (value === '十二') return 12;
+  return digits[value];
+}
 
 export function billClarificationQuestion(message) {
   const value = typeof message === 'string' ? message.trim() : '';
   const year = value.match(/(?:^|\D)((?:19|20)\d{2})\s*年/);
-  const month = value.match(/(?:^|\D)(\d{1,2})\s*月/);
-  if (month && !year && Number(month[1]) >= 1 && Number(month[1]) <= 12) {
-    return `你想查询哪一年的 ${Number(month[1])} 月账单？例如 2026 年 ${Number(month[1])} 月。`;
+  const numericMonth = value.match(/(?:^|\D)(\d{1,2})\s*月/);
+  const namedMonth = value.match(/(十[一二]?|[一二三四五六七八九])\s*月/);
+  const month = numericMonth ? Number(numericMonth[1]) : namedMonth ? chineseMonthNumber(namedMonth[1]) : undefined;
+  if (month && !year && month >= 1 && month <= 12) {
+    return `你想查询哪一年的 ${month} 月账单？例如 2026 年 ${month} 月。`;
   }
   if (year && !month) {
     return `你想查询 ${year[1]} 年的哪个月账单？例如 ${year[1]} 年 8 月。`;
   }
-  return '请提供具体的账单时间，例如 2026 年 8 月。';
+  return '请提供明确的账单年月，例如 2026 年 8 月。';
 }
 
 export const skillPolicies = Object.freeze({

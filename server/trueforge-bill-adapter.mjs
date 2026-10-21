@@ -17,7 +17,10 @@ function monthFrom(raw) {
     if (Number(raw.replace(/\s*月$/, '')) < 1 || Number(raw.replace(/\s*月$/, '')) > 12) throw trueforgeError('INVALID_MONTH', '请提供有效月份和年份。', 400);
     return undefined; // A month without a year must clarify, never guess the year.
   }
-  if (/^\d{4}\s*年$/.test(raw)) return undefined; // A year without a month must clarify.
+  if (/^\d{4}\s*年$/.test(raw) || /^(?:十[一二]?|[一二三四五六七八九])\s*月$/.test(raw) ||
+      /^(?:最近|近期|前段时间|今年|去年|上半年|下半年|最近\s*\d+\s*个?月|前\s*\d+\s*个?月)$/.test(raw)) {
+    return undefined; // Incomplete or fuzzy periods must clarify, never guess.
+  }
   const parts = raw.match(/^(\d{4})(?:\s*年\s*|-)(\d{1,2})\s*月?$/);
   const month = parts && `${parts[1]}-${parts[2].padStart(2, '0')}`;
   if (!month || !MONTH.test(month)) throw trueforgeError('INVALID_MONTH', '请提供有效年月，例如 2026 年 8 月。', 400);
