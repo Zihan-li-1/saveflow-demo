@@ -98,3 +98,24 @@ test('HTTP integration: account choice crosses two requests and returns Core pre
   assert.equal(core.repository.getAccount('ACC-CHECKING').availableBalanceFen, beforeBalance);
   assert.equal(core.repository.getTransactions().length, beforeTransactions);
 });
+
+test('Banking Agent exposes C bill analysis and subscription query through Intent Contracts', async () => {
+  const core = createBankingCore();
+  const parseIntent = async message => message.includes('订阅')
+    ? { schemaVersion: '1.0.0', action: 'subscription.list', slots: {}, missingSlots: [], status: 'ready_for_resolution' }
+    : { schemaVersion: '1.0.0', action: 'bill.analyze', slots: { month: '2026-08' }, missingSlots: [], status: 'ready_for_resolution' };
+
+  const analysis = await (await handleBankingAgent(request({ message: '为什么8月花多了' }), { env, core, parseIntent })).json();
+  assert.equal(analysis.code, 'OK');
+  assert.equal(analysis.data.action, 'bill.analyze');
+  assert.equal(analysis.data.data.comparisonMonth, '2026-07');
+  assert.ok(Array.isArray(analysis.data.data.topIncreasedCategories));
+  assert.ok(Array.isArray(analysis.data.data.unusualTransactions));
+
+  const subscriptions = await (await handleBankingAgent(request({ message: '我有哪些订阅' }), { env, core, parseIntent })).json();
+  assert.equal(subscriptions.code, 'OK');
+  assert.equal(subscriptions.data.action, 'subscription.list');
+  assert.ok(subscriptions.data.data.subscriptions.length > 0);
+  assert.equal(subscriptions.data.data.capabilities.cancelMerchantMembership, false);
+  assert.equal(subscriptions.data.data.capabilities.cancelBankDebit, false);
+});

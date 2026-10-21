@@ -69,6 +69,18 @@ test('accepts bill.summary for a valid month without requiring an account', () =
   assert.equal(validateParsedIntent(intent), intent);
 });
 
+test('accepts bill.analyze with the same month contract and subscription.list without slots', () => {
+  assert.doesNotThrow(() => validateParsedIntent(
+    base('bill.analyze', { month: '2026-08' }, [], 'ready_for_resolution'),
+  ));
+  assert.doesNotThrow(() => validateParsedIntent(
+    base('subscription.list', {}, [], 'ready_for_resolution'),
+  ));
+  assert.throws(() => validateParsedIntent(
+    base('subscription.list', { month: '2026-08' }, [], 'ready_for_resolution'),
+  ), ParsedIntentValidationError);
+});
+
 test('rejects account entity IDs from the model', () => {
   assert.throws(() => validateParsedIntent(
     base('bill.summary', { month: '2026-08', accountId: 'ACC-CHECKING' }, [], 'ready_for_resolution'),

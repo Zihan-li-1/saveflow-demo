@@ -4,6 +4,8 @@ export const PARSED_INTENT_SCHEMA_VERSION = "1.0.0" as const;
 export const PARSED_INTENT_ACTIONS = [
   "transfer.create",
   "bill.summary",
+  "bill.analyze",
+  "subscription.list",
   "card.get",
   "card.set_budget",
   "card.freeze",
@@ -61,10 +63,17 @@ export type ParsedIntent =
     }
   | {
       schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
-      action: "bill.summary";
+      action: "bill.summary" | "bill.analyze";
       slots: BillSummarySlots;
       missingSlots: BillSlotName[];
       status: "ready_for_resolution" | "needs_clarification";
+    }
+  | {
+      schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
+      action: "subscription.list";
+      slots: Record<string, never>;
+      missingSlots: [];
+      status: "ready_for_resolution";
     }
   | {
       schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;

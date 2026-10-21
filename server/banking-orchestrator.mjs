@@ -1,8 +1,8 @@
-import { dispatchParsedIntent, handleBillSummary, handleCard, handleTransfer, prepareTransferPreview, transferRepository } from '../src/agent/runtime.mjs';
+import { dispatchParsedIntent, handleBillAnalysis, handleBillSummary, handleCard, handleSubscriptionList, handleTransfer, prepareTransferPreview, transferRepository } from '../src/agent/runtime.mjs';
 import { issueContinuationToken, verifyContinuationToken } from '../src/agent/clarification/continuation-token.mjs';
 import { resolveChoice } from '../src/agent/clarification/choice-resolver.mjs';
 import { buildParsedIntent, mergeSlots } from '../src/agent/clarification/merge-intent.mjs';
-import { isBillTask, isCardTask, isTransferTask, parseClarificationAnswer } from './banking-clarification-parser.mjs';
+import { isBillTask, isCardTask, isSubscriptionTask, isTransferTask, parseClarificationAnswer } from './banking-clarification-parser.mjs';
 
 function errorData(code, message) {
   return { status: 'error', error: { code, message } };
@@ -95,8 +95,9 @@ function nextMissingSlot(intent) {
 }
 
 function switchesTask(message, continuation) {
-  if (isBillTask(message) && continuation.action !== 'bill.summary') return true;
+  if (isBillTask(message) && !['bill.summary', 'bill.analyze'].includes(continuation.action)) return true;
   if (isTransferTask(message) && continuation.action !== 'transfer.create') return true;
+  if (isSubscriptionTask(message) && continuation.action !== 'subscription.list') return true;
   if (!isCardTask(message)) return false;
   if (!continuation.action.startsWith('card.')) return true;
   if (/解冻|解除冻结/.test(message)) return continuation.action !== 'card.unfreeze';
@@ -170,7 +171,8 @@ export async function runBankingConversation(body, {
   }
   if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'VALIDATION_ERROR', status: 400 });
   const dependencies = {
-    billHandler: intent => handleBillSummary(intent, repository),
+    billHandler: intent => intent.action === 'bill.analyze' ? handleBillAnalysis(intent, repository) : handleBillSummary(intent, repository),
+    subscriptionHandler: intent => handleSubscriptionList(intent, repository),
     transferHandler: intent => handleTransfer(intent, transferRepository(repository, selections)),
     cardHandler: intent => handleCard(intent, repository, selections),
   };
@@ -180,7 +182,8 @@ export async function runBankingConversation(body, {
     : { prepare: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'Banking Core prepare 未配置', uncertain: true } }) };
   const result = await prepareTransferPreview(dispatched, prepareTransfer);
 
-  if (result.ok && result.kind === 'bill_result') return reply(200, 'OK', '账单统计已生成', { status: 'bill_result', action: result.action, data: { ...result.data, month: parsed.slots.month }, evidence: result.evidence });
+  if (result.ok && result.kind === 'bill_result') return reply(200, 'OK', result.action === 'bill.analyze' ? '账单分析已生成' : '账单统计已生成', { status: 'bill_result', action: result.action, data: { ...result.data, month: parsed.slots.month }, evidence: result.evidence });
+  if (result.ok && result.kind === 'subscription_result') return reply(200, 'OK', '订阅查询已完成', { status: 'subscription_result', action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && result.kind === 'card_result') return reply(200, 'OK', '卡片信息已查询', { status: 'card_result', action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && result.kind === 'card_action_request') {
     const prepared = await core.prepare(result.data.request);

@@ -11,7 +11,7 @@ require.extensions['.ts'] = (module, filename) => {
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { dispatchParsedIntent } = require('../src/agent/dispatcher.ts');
-const { handleBillSummary } = require('../src/agent/handlers/bill-handler.ts');
+const { handleBillSummary, handleSubscriptionList } = require('../src/agent/handlers/bill-handler.ts');
 const { handleTransfer } = require('../src/agent/handlers/transfer-handler.ts');
 const { createTransferRepositoryAdapter } = require('../src/skill/transfer/repository-adapter.ts');
 const { ParsedIntentValidationError } = require('../src/agent/validate-parsed-intent.ts');
@@ -25,13 +25,16 @@ const readyTransfer = intent('transfer.create', {
   source_account_ref: '活期账户',
 }, [], 'ready_for_resolution');
 const readyBill = intent('bill.summary', { month: '2026-08' }, [], 'ready_for_resolution');
+const readyAnalysis = intent('bill.analyze', { month: '2026-08' }, [], 'ready_for_resolution');
+const readySubscriptions = intent('subscription.list', {}, [], 'ready_for_resolution');
 
 function spies() {
-  const calls = { bill: 0, transfer: 0 };
+  const calls = { bill: 0, subscription: 0, transfer: 0 };
   return {
     calls,
     dependencies: {
       billHandler: async (value) => { calls.bill++; return { ok: true, kind: 'bill_result', action: value.action, data: 'bill', evidence: [] }; },
+      subscriptionHandler: async (value) => { calls.subscription++; return { ok: true, kind: 'subscription_result', action: value.action, data: 'subscription', evidence: [] }; },
       transferHandler: async (value) => { calls.transfer++; return { ok: true, kind: 'transfer_resolution', action: value.action, data: 'transfer' }; },
     },
   };
@@ -41,14 +44,21 @@ test('routes transfer.create only to transferHandler', async () => {
   const { dependencies, calls } = spies();
   const result = await dispatchParsedIntent(readyTransfer, dependencies);
   assert.equal(result.kind, 'transfer_resolution');
-  assert.deepEqual(calls, { bill: 0, transfer: 1 });
+  assert.deepEqual(calls, { bill: 0, subscription: 0, transfer: 1 });
 });
 
 test('routes bill.summary only to billHandler', async () => {
   const { dependencies, calls } = spies();
   const result = await dispatchParsedIntent(readyBill, dependencies);
   assert.equal(result.kind, 'bill_result');
-  assert.deepEqual(calls, { bill: 1, transfer: 0 });
+  assert.deepEqual(calls, { bill: 1, subscription: 0, transfer: 0 });
+});
+
+test('routes bill.analyze and subscription.list to their read-only handlers', async () => {
+  const { dependencies, calls } = spies();
+  assert.equal((await dispatchParsedIntent(readyAnalysis, dependencies)).action, 'bill.analyze');
+  assert.equal((await dispatchParsedIntent(readySubscriptions, dependencies)).kind, 'subscription_result');
+  assert.deepEqual(calls, { bill: 1, subscription: 1, transfer: 0 });
 });
 
 test('does not call handlers for parser clarification or unsupported intent', async () => {
@@ -59,7 +69,7 @@ test('does not call handlers for parser clarification or unsupported intent', as
   });
   const unsupported = await dispatchParsedIntent(intent('unsupported', {}, [], 'unsupported'), dependencies);
   assert.deepEqual(unsupported, { ok: false, kind: 'unsupported' });
-  assert.deepEqual(calls, { bill: 0, transfer: 0 });
+  assert.deepEqual(calls, { bill: 0, subscription: 0, transfer: 0 });
 });
 
 test('rejects invalid intents before either handler is called', async () => {
@@ -74,7 +84,7 @@ test('rejects invalid intents before either handler is called', async () => {
   ]) {
     await assert.rejects(dispatchParsedIntent(value, dependencies), ParsedIntentValidationError);
   }
-  assert.deepEqual(calls, { bill: 0, transfer: 0 });
+  assert.deepEqual(calls, { bill: 0, subscription: 0, transfer: 0 });
 });
 
 test('handler errors become skill_error and never fall through to the other handler', async () => {
@@ -107,6 +117,24 @@ test('real bill handler reads the shared repository and reflects changed transac
   assert.equal(second.data.totalExpenseFen, first.data.totalExpenseFen + 100);
   assert.equal(second.data.categoryTotals['餐饮'], first.data.categoryTotals['餐饮'] + 100);
   assert.ok(second.evidence[0].entityIds.includes('TXN-EXTRA-202608'));
+});
+
+test('real bill analysis compares months and subscription query preserves capability boundaries', async () => {
+  const { createFinancialContext } = await import('../src/banking-core/repository.mjs');
+  const repository = createFinancialContext().repository;
+  const analysis = await handleBillSummary(readyAnalysis, repository);
+  assert.equal(analysis.action, 'bill.analyze');
+  assert.equal(analysis.data.month, '2026-08');
+  assert.equal(analysis.data.comparisonMonth, '2026-07');
+  assert.ok(Array.isArray(analysis.data.topIncreasedCategories));
+  assert.ok(Array.isArray(analysis.data.unusualTransactions));
+  assert.ok(Number.isSafeInteger(analysis.data.totalExpenseFen));
+
+  const subscriptions = await handleSubscriptionList(readySubscriptions, repository);
+  assert.equal(subscriptions.kind, 'subscription_result');
+  assert.ok(subscriptions.data.subscriptions.length > 0);
+  assert.equal(subscriptions.data.capabilities.cancelMerchantMembership, false);
+  assert.equal(subscriptions.data.capabilities.cancelBankDebit, false);
 });
 
 test('real transfer handler resolves raw account and payee references without executing Banking Core', async () => {

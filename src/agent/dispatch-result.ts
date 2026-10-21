@@ -8,7 +8,14 @@ export type DispatchResult =
   | {
       ok: true;
       kind: "bill_result";
-      action: "bill.summary";
+      action: "bill.summary" | "bill.analyze";
+      data: unknown;
+      evidence: DispatchEvidence[];
+    }
+  | {
+      ok: true;
+      kind: "subscription_result";
+      action: "subscription.list";
       data: unknown;
       evidence: DispatchEvidence[];
     }

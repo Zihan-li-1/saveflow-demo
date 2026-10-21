@@ -73,6 +73,10 @@ export function isTransferTask(message) {
   return /转账|转\s*\d|付款|汇款|转给|转钱/.test(message);
 }
 
+export function isSubscriptionTask(message) {
+  return /订阅|会员|自动扣费|续费/.test(message);
+}
+
 export function isCardTask(message) {
   return /冻结|解冻|解除冻结|锁卡|卡片?预算|月预算|查(?:询|看)?.{0,4}(?:银行卡|卡片)|卡片?信息/.test(message);
 }

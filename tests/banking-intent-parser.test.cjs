@@ -78,6 +78,13 @@ test('parses bill summary with only the month slot', async () => {
   assert.deepEqual(value, intent('bill.summary', { month: '2026-08' }, [], 'ready_for_resolution'));
 });
 
+test('parses bill analysis and subscription queries as distinct read-only actions', async () => {
+  const analysis = await parse(intent('bill.analyze', { month: '2026-08' }, [], 'ready_for_resolution'), '为什么8月花多了');
+  assert.equal(analysis.action, 'bill.analyze');
+  const subscriptions = await parse(intent('subscription.list', {}, [], 'ready_for_resolution'), '我现在有哪些订阅');
+  assert.deepEqual(subscriptions, intent('subscription.list', {}, [], 'ready_for_resolution'));
+});
+
 test('ambiguous and prompt-injection requests remain non-executable', async () => {
   const clarify = await parse(intent('clarify', {}, ['action'], 'needs_clarification'), '帮我处理一下');
   assert.equal(clarify.action, 'clarify');

@@ -2,6 +2,8 @@ export const PARSED_INTENT_SCHEMA_VERSION = '1.0.0';
 export const PARSED_INTENT_ACTIONS = Object.freeze([
   'transfer.create',
   'bill.summary',
+  'bill.analyze',
+  'subscription.list',
   'card.get',
   'card.set_budget',
   'card.freeze',
@@ -139,7 +141,13 @@ export function validateParsedIntent(value) {
       validateTransfer(input, slots);
       break;
     case 'bill.summary':
+    case 'bill.analyze':
       validateBill(input, slots);
+      break;
+    case 'subscription.list':
+      rejectUnknownKeys(slots, [], 'slots');
+      requireMissingSlots(input.missingSlots, []);
+      requireStatus(input.status, 'ready_for_resolution');
       break;
     case 'card.get':
     case 'card.set_budget':

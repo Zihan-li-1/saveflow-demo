@@ -1,6 +1,7 @@
 import { validateParsedIntent } from './validate-parsed-intent.mjs';
 import { transferFromResolvedIntent } from '../banking-core/wire.mjs';
 import { handleCard } from './handlers/card-handler.mjs';
+import { analyzeMonth, querySubscriptions, summarizeTransactions } from '../skills/bill/runtime.mjs';
 
 function clarification(intent) {
   return { ok: false, kind: 'needs_clarification', action: intent.action, source: 'parser', ...(intent.missingSlots.length ? { missingSlots: [...intent.missingSlots] } : {}) };
@@ -12,7 +13,8 @@ export async function dispatchParsedIntent(value, dependencies) {
   if (intent.status === 'unsupported') return { ok: false, kind: 'unsupported' };
   try {
     if (intent.action === 'transfer.create') return await dependencies.transferHandler(intent);
-    if (intent.action === 'bill.summary') return await dependencies.billHandler(intent);
+    if (intent.action === 'bill.summary' || intent.action === 'bill.analyze') return await dependencies.billHandler(intent);
+    if (intent.action === 'subscription.list') return dependencies.subscriptionHandler ? await dependencies.subscriptionHandler(intent) : { ok: false, kind: 'unsupported' };
     if (intent.action.startsWith('card.')) return dependencies.cardHandler ? await dependencies.cardHandler(intent) : { ok: false, kind: 'unsupported' };
     return { ok: false, kind: 'unsupported' };
   } catch (error) {
@@ -24,16 +26,21 @@ export async function handleBillSummary(intent, repository) {
   const month = intent.slots.month;
   if (!month) throw new Error('bill.summary requires month before dispatch');
   const transactions = await repository.getTransactions({ month });
-  const summary = transactions.reduce((result, transaction) => {
-    if (transaction.type === 'income') result.totalIncomeFen += transaction.amountFen;
-    if (transaction.type === 'expense') {
-      result.totalExpenseFen += transaction.amountFen;
-      result.categoryTotals[transaction.category] = (result.categoryTotals[transaction.category] ?? 0) + transaction.amountFen;
-    }
-    return result;
-  }, { totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: transactions.length, categoryTotals: {} });
+  const summary = summarizeTransactions(transactions);
   const context = await repository.getContextInfo();
   return { ok: true, kind: 'bill_result', action: 'bill.summary', data: summary, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: transactions.map(transaction => transaction.id) }] };
+}
+
+export async function handleBillAnalysis(intent, repository) {
+  const month = intent.slots.month;
+  if (!month) throw new Error('bill.analyze requires month before dispatch');
+  const analysis = await analyzeMonth(repository, month);
+  return { ok: true, kind: 'bill_result', action: 'bill.analyze', data: analysis, evidence: analysis.evidence };
+}
+
+export async function handleSubscriptionList(_intent, repository) {
+  const result = await querySubscriptions(repository);
+  return { ok: true, kind: 'subscription_result', action: 'subscription.list', data: result, evidence: result.evidence };
 }
 
 function transferRepository(repository, selections = {}) {

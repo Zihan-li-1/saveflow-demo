@@ -2,12 +2,14 @@ import type { ParsedIntent } from "./parsed-intent";
 import { validateParsedIntent } from "./validate-parsed-intent";
 import type { DispatchResult } from "./dispatch-result";
 
-export type BillSummaryIntent = Extract<ParsedIntent, { action: "bill.summary" }>;
+export type BillSummaryIntent = Extract<ParsedIntent, { action: "bill.summary" | "bill.analyze" }>;
+export type SubscriptionListIntent = Extract<ParsedIntent, { action: "subscription.list" }>;
 export type TransferCreateIntent = Extract<ParsedIntent, { action: "transfer.create" }>;
 export type CardIntent = Extract<ParsedIntent, { action: `card.${string}` }>;
 
 export type DispatcherDependencies = {
   billHandler: (intent: BillSummaryIntent) => Promise<DispatchResult>;
+  subscriptionHandler?: (intent: SubscriptionListIntent) => Promise<DispatchResult>;
   transferHandler: (intent: TransferCreateIntent) => Promise<DispatchResult>;
   cardHandler?: (intent: CardIntent) => Promise<DispatchResult>;
 };
@@ -44,7 +46,10 @@ export async function dispatchParsedIntent(
       case "transfer.create":
         return await dependencies.transferHandler(intent);
       case "bill.summary":
+      case "bill.analyze":
         return await dependencies.billHandler(intent);
+      case "subscription.list":
+        return dependencies.subscriptionHandler ? await dependencies.subscriptionHandler(intent) : { ok: false, kind: "unsupported" };
       case "card.get":
       case "card.set_budget":
       case "card.freeze":

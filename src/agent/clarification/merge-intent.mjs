@@ -3,6 +3,8 @@ import { validateParsedIntent } from '../validate-parsed-intent.mjs';
 const required = {
   'transfer.create': ['payee_ref', 'amount', 'source_account_ref'],
   'bill.summary': ['month'],
+  'bill.analyze': ['month'],
+  'subscription.list': [],
   'card.get': ['card_ref'],
   'card.set_budget': ['card_ref', 'amount'],
   'card.freeze': ['card_ref'],

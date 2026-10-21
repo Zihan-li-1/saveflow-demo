@@ -34,7 +34,7 @@ export function restoreBankingChat(raw: string | null, now = Date.now()): Snapsh
     if (value.flows && typeof value.flows === "object" && !Array.isArray(value.flows)) {
       for (const [id, flow] of Object.entries(value.flows).slice(-25)) {
         if (!flow || !/^[a-zA-Z0-9-]{1,64}$/.test(id) || flow.id !== id || !trialContinuation(flow.token) ||
-            !["transfer.create", "card.get", "card.set_budget", "card.freeze", "card.unfreeze", "bill.summary", "product.list", "subscription.list"].includes(flow.action) ||
+            !["transfer.create", "card.get", "card.set_budget", "card.freeze", "card.unfreeze", "bill.summary", "bill.analyze", "product.list", "subscription.list"].includes(flow.action) ||
             !Number.isFinite(flow.expiresAt) || flow.expiresAt <= now || flow.expiresAt > value.savedAt + continuationMs ||
             (flow.previewOperationId !== undefined && (typeof flow.previewOperationId !== "string" || !flow.previewOperationId.startsWith("tfpreview:"))) ||
             (flow.slot !== undefined && typeof flow.slot !== "string")) continue;
