@@ -1,6 +1,4 @@
 // @ts-check
-import { randomUUID } from 'node:crypto';
-
 export const SCENARIO_ACTIONS = Object.freeze(['scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule', 'scenario.review_event']);
 const SAFE_STEP_ACTIONS = new Set(['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get']);
 
@@ -74,26 +72,20 @@ export function createInMemoryScenarioStore(seedEvents = []) {
 }
 
 /** @param {{store:{getRule:(id:string)=>any,putRule:(rule:any)=>any,getEvent:(id:string)=>any,getEventReview?:(id:string)=>any,putEventReview?:(id:string,review:any)=>any},now?:()=>string,id?:()=>string,contextProvider?:()=>any}} dependencies */
-export function createScenarioSkill({ store, now = () => new Date().toISOString(), id = () => `rule_${randomUUID()}`, contextProvider = async () => null }) {
-  if (!store || typeof store.getRule !== 'function' || typeof store.putRule !== 'function' || typeof store.getEvent !== 'function') throw new TypeError('Scenario Skill 需要规则与事件 Store');
-  return async function runScenarioAction(/** @type {unknown} */ raw, { confirmed = false } = {}) {
+export function createScenarioSkill({ store, contextProvider = async () => null }) {
+  if (!store || typeof store.getRule !== 'function' || typeof store.getEvent !== 'function') throw new TypeError('Scenario Skill 需要规则与事件 Store');
+  return async function runScenarioAction(/** @type {unknown} */ raw) {
     try {
       const input = validateScenarioAction(raw);
       if (input.action === 'scenario.create_rule') {
         const proposed = { status: 'active', trigger: structuredClone(input.trigger), conditions: structuredClone(input.conditions), proposed_steps: structuredClone(input.proposed_steps), authorization_scope: 'suggest_only' };
-        if (!confirmed) return { ok: true, kind: 'scenario_rule_preview', action: input.action, data: { change: 'create', rule: proposed, requires_confirmation: true, execution_policy: '规则只生成建议；任何写操作仍须重新预览并确认。' } };
-        const createdAt = now();
-        const rule = { id: id(), ...proposed, created_at: createdAt, updated_at: createdAt };
-        await store.putRule(rule);
-        return { ok: true, kind: 'scenario_rule', action: input.action, data: { rule, execution_policy: '触发时只生成建议；任何写操作都必须重新预览并由用户确认。' } };
+        return { ok: true, kind: 'scenario_action_request', action: input.action, data: { change: 'create', rule: proposed, requires_confirmation: true, execution_policy: '规则只生成建议；任何写操作仍须重新预览并确认。', request: { action: input.action, input: { trigger: input.trigger, conditions: input.conditions, proposed_steps: input.proposed_steps, authorization_scope: 'suggest_only' } } } };
       }
       if (input.action === 'scenario.update_rule' || input.action === 'scenario.disable_rule') {
         const rule = await store.getRule(input.rule_ref);
         if (!rule) throw new ScenarioSkillError('RULE_NOT_FOUND', '找不到可访问的场景规则');
-        const updated = input.action === 'scenario.disable_rule' ? { ...rule, status: 'disabled', updated_at: now() } : { ...rule, ...structuredClone(input.changes), updated_at: now() };
-        if (!confirmed) return { ok: true, kind: 'scenario_rule_preview', action: input.action, data: { change: input.action === 'scenario.disable_rule' ? 'disable' : 'update', before: rule, rule: updated, requires_confirmation: true } };
-        await store.putRule(updated);
-        return { ok: true, kind: 'scenario_rule', action: input.action, data: { rule: updated } };
+        const updated = input.action === 'scenario.disable_rule' ? { ...rule, status: 'disabled' } : { ...rule, ...structuredClone(input.changes) };
+        return { ok: true, kind: 'scenario_action_request', action: input.action, data: { change: input.action === 'scenario.disable_rule' ? 'disable' : 'update', before: rule, rule: updated, requires_confirmation: true, request: input.action === 'scenario.disable_rule' ? { action: input.action, input: { ruleRef: input.rule_ref } } : { action: input.action, input: { ruleRef: input.rule_ref, changes: input.changes } } } };
       }
       const event = await store.getEvent(input.event_ref);
       if (!event || event.trusted !== true) throw new ScenarioSkillError('EVENT_NOT_TRUSTED', '事件不存在或不是可信事件源，不能触发场景复核');

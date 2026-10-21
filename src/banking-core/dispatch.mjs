@@ -15,6 +15,8 @@ export async function dispatchBanking(action, value, core = bankingCore) {
       'transaction.list': ['accountId', 'month'], 'product.list': [], 'card.list': [], 'card.get': ['id'], 'subscription.list': [],
       'transfer.prepare': ['fromAccountId', 'payeeId', 'amountFen', 'currency', 'memo'],
       'card.set_budget': ['cardId', 'monthlyBudgetFen'], 'card.freeze': ['cardId'], 'card.unfreeze': ['cardId'],
+      'scenario.create_rule': ['trigger', 'conditions', 'proposed_steps', 'authorization_scope'],
+      'scenario.update_rule': ['ruleRef', 'changes'], 'scenario.disable_rule': ['ruleRef'],
       'action.decide': ['operationId', 'previewHash', 'decision', 'confirmedStepIds'],
       'action.execute': ['operationId', 'previewHash'], 'action.status': ['operationId'],
     };
@@ -47,6 +49,9 @@ export async function dispatchBanking(action, value, core = bankingCore) {
       case 'card.set_budget':
       case 'card.freeze':
       case 'card.unfreeze': return core.prepare({ action, input: /** @type {import('./contracts').CardInput} */(input) });
+      case 'scenario.create_rule':
+      case 'scenario.update_rule':
+      case 'scenario.disable_rule': return core.prepare({ action, input: /** @type {import('./contracts').ScenarioInput} */(input) });
       case 'action.decide': return core.decide(/** @type {string} */(input.operationId), /** @type {import('./contracts').DecisionInput} */({ previewHash: input.previewHash, decision: input.decision, confirmedStepIds: input.confirmedStepIds }));
       case 'action.execute': return core.execute(/** @type {string} */(input.operationId), /** @type {string} */(input.previewHash));
       case 'action.status': return core.getOperation(/** @type {string} */(input.operationId));

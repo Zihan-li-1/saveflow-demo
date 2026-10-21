@@ -16,6 +16,8 @@ function validateTransfer(input) {
 }
 
 const cardActions = new Set(['card.set_budget', 'card.freeze', 'card.unfreeze']);
+const scenarioActions = new Set(['scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule']);
+const safeScenarioSteps = new Set(['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get']);
 /** @param {string} action @param {unknown} input @returns {import('./contracts').CardInput} */
 function validateCardInput(action, input) {
   if (!cardActions.has(action) || !input || typeof input !== 'object' || Array.isArray(input)) throw new BankingError('VALIDATION_ERROR', '卡片操作参数无效');
@@ -25,6 +27,42 @@ function validateCardInput(action, input) {
   assertId(body.cardId, '卡片');
   if (action === 'card.set_budget' && (!Number.isSafeInteger(body.monthlyBudgetFen) || Number(body.monthlyBudgetFen) < 0 || Number(body.monthlyBudgetFen) > 10_000_000)) throw new BankingError('VALIDATION_ERROR', '月预算必须是 0 到 10000000 的整数分');
   return /** @type {import('./contracts').CardInput} */ (body);
+}
+
+/** @param {string} action @param {unknown} input @returns {import('./contracts').ScenarioInput} */
+function validateScenarioInput(action, input) {
+  if (!scenarioActions.has(action) || !input || typeof input !== 'object' || Array.isArray(input)) throw new BankingError('VALIDATION_ERROR', '场景规则参数无效');
+  const body = /** @type {Record<string, any>} */ (input);
+  /** @param {any} value */
+  const validateTrigger = value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).sort().join(',') !== 'type,value' || !['manual', 'date', 'financial_event'].includes(value.type) || typeof value.value !== 'string' || !value.value.trim() || value.value.length > 256) throw new BankingError('VALIDATION_ERROR', '场景触发条件无效');
+  };
+  /** @param {any} value */
+  const validateConditions = value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length > 20 || Object.values(value).some(item => !['string', 'number', 'boolean'].includes(typeof item))) throw new BankingError('VALIDATION_ERROR', '场景条件只能包含简单值');
+  };
+  /** @param {any} value */
+  const validateSteps = value => {
+    if (!Array.isArray(value) || value.length < 1 || value.length > 10) throw new BankingError('VALIDATION_ERROR', '场景建议步骤必须包含 1 到 10 步');
+    for (const step of value) {
+      if (!step || typeof step !== 'object' || Array.isArray(step) || Object.keys(step).sort().join(',') !== 'action,parameters' || !safeScenarioSteps.has(step.action) || !step.parameters || typeof step.parameters !== 'object' || Array.isArray(step.parameters) || Object.values(step.parameters).some(item => !['string', 'number', 'boolean'].includes(typeof item) && !(Array.isArray(item) && item.length <= 20 && item.every(value => typeof value === 'string' && value.length <= 128)))) throw new BankingError('VALIDATION_ERROR', '场景规则只能包含已注册的只读建议步骤');
+    }
+  };
+  if (action === 'scenario.create_rule') {
+    if (Object.keys(body).sort().join(',') !== 'authorization_scope,conditions,proposed_steps,trigger' || body.authorization_scope !== 'suggest_only') throw new BankingError('VALIDATION_ERROR', '新场景规则字段或授权范围无效');
+    validateTrigger(body.trigger); validateConditions(body.conditions); validateSteps(body.proposed_steps);
+  } else if (action === 'scenario.update_rule') {
+    if (Object.keys(body).sort().join(',') !== 'changes,ruleRef') throw new BankingError('VALIDATION_ERROR', '修改场景规则字段无效');
+    assertId(body.ruleRef, '规则');
+    if (!body.changes || typeof body.changes !== 'object' || Array.isArray(body.changes) || Object.keys(body.changes).length === 0 || Object.keys(body.changes).some(key => !['trigger', 'conditions', 'proposed_steps'].includes(key))) throw new BankingError('VALIDATION_ERROR', '规则修改内容无效');
+    if (Object.hasOwn(body.changes, 'trigger')) validateTrigger(body.changes.trigger);
+    if (Object.hasOwn(body.changes, 'conditions')) validateConditions(body.changes.conditions);
+    if (Object.hasOwn(body.changes, 'proposed_steps')) validateSteps(body.changes.proposed_steps);
+  } else {
+    if (Object.keys(body).join(',') !== 'ruleRef') throw new BankingError('VALIDATION_ERROR', '停用场景规则字段无效');
+    assertId(body.ruleRef, '规则');
+  }
+  return /** @type {import('./contracts').ScenarioInput} */ (structuredClone(body));
 }
 
 /** One isolated Mock banking session. Never feed model output to decide()/execute().
@@ -111,6 +149,26 @@ export function createBankingCore(options = {}) {
     if (effect.action === 'card.set_budget' && effect.after.monthlyBudgetFen < effect.monthlySpentFen) warnings.push(`当前已超预算 ¥${((effect.monthlySpentFen - effect.after.monthlyBudgetFen) / 100).toFixed(2)}；预算不会阻止消费。`);
     return { allowed: true, riskLevel: effect.action === 'card.unfreeze' ? 'L3' : 'L2', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', warnings };
   }
+  /** @param {import('./contracts').ScenarioAction} action @param {import('./contracts').ScenarioInput} input @param {string|undefined} reservedRuleId @param {string|undefined} fixedTimestamp @returns {Promise<import('./contracts').ScenarioEffect>} */
+  async function scenarioEffectFor(action, input, reservedRuleId, fixedTimestamp) {
+    if (typeof store.getScenarioRule !== 'function') throw new BankingError('INTERNAL_ERROR', '场景规则存储未配置', true);
+    const timestamp = fixedTimestamp ?? new Date(now()).toISOString();
+    if (action === 'scenario.create_rule') {
+      const createInput = /** @type {Extract<import('./contracts').ScenarioInput,{trigger:any}>} */ (input);
+      const ruleId = reservedRuleId ?? `rule_${crypto.randomUUID()}`;
+      const existing = await store.getScenarioRule(ownerId, ruleId);
+      if (existing) throw new BankingError('PREVIEW_STALE', '规则编号已存在，请重新预览');
+      const after = { id: ruleId, status: /** @type {const} */ ('active'), trigger: structuredClone(createInput.trigger), conditions: structuredClone(createInput.conditions), proposed_steps: structuredClone(createInput.proposed_steps), authorization_scope: /** @type {const} */ ('suggest_only'), version: 1, previewGeneration: 0, created_at: timestamp, updated_at: timestamp };
+      return { kind: 'scenario_rule_change', action, ruleId, ruleVersion: null, previewGeneration: 0, before: null, after };
+    }
+    const ruleRef = /** @type {{ruleRef:string}} */ (input).ruleRef;
+    const current = await store.getScenarioRule(ownerId, ruleRef);
+    if (!current) throw new BankingError('OPERATION_NOT_FOUND', '找不到可访问的场景规则');
+    if (action === 'scenario.disable_rule' && current.status === 'disabled') throw new BankingError('INVALID_STATE', '场景规则已经停用');
+    const changes = action === 'scenario.update_rule' ? /** @type {{changes:Record<string,unknown>}} */ (input).changes : {};
+    const after = { ...structuredClone(current), ...structuredClone(changes), status: action === 'scenario.disable_rule' ? /** @type {const} */ ('disabled') : current.status, version: current.version + 1, updated_at: timestamp };
+    return { kind: 'scenario_rule_change', action, ruleId: current.id, ruleVersion: current.version, previewGeneration: current.previewGeneration, before: current, after };
+  }
   /** @param {import('./contracts').OperationRecord} record @param {'succeeded'|'failed'|'cancelled'} status @param {string} message @param {string[]} [transactionIds] @returns {import('./contracts').ActionReceipt} */
   function receiptFor(record, status, message, transactionIds = []) {
     return { receiptId: `receipt_${record.operationId}`, operationId: record.operationId, action: record.action, planId: record.preview?.planId ?? record.operationId, stepId: record.preview?.stepIds[0] ?? 'legacy_plan', status, message, executedAt: new Date(now()).toISOString(), dataSource: 'synthetic_demo_only', transactionIds, effects: status === 'succeeded' ? structuredClone(record.preview?.exactEffects ?? []) : [], ...(record.error ? { error: record.error } : {}) };
@@ -133,6 +191,13 @@ export function createBankingCore(options = {}) {
       const request = /** @type {{action:import('./contracts').CardAction,input:import('./contracts').CardInput}} */ (record.request);
       const effect = await cardEffectFor(request.action, request.input);
       if (record.risk?.policyVersion !== policy.version || canonical(effect) !== canonical(record.preview.exactEffects[0])) throw new BankingError('PREVIEW_STALE', '卡片状态、版本或预览已变化，请重新预览并确认');
+      return;
+    }
+    if (scenarioActions.has(record.action)) {
+      const request = /** @type {{action:import('./contracts').ScenarioAction,input:import('./contracts').ScenarioInput}} */ (record.request);
+      const expected = /** @type {import('./contracts').ScenarioEffect} */ (record.preview.exactEffects[0]);
+      const effect = await scenarioEffectFor(request.action, request.input, expected.ruleId, expected.after.updated_at);
+      if (record.risk?.policyVersion !== policy.version || canonical(effect) !== canonical(expected)) throw new BankingError('PREVIEW_STALE', '场景规则已变化，请重新预览并确认');
       return;
     }
     const transferRequest = /** @type {{action:'transfer_money',input:import('./contracts').TransferInput}} */ (record.request);
@@ -177,14 +242,55 @@ export function createBankingCore(options = {}) {
     }
   }
 
+  /** @param {import('./contracts').ActionRequest} request @param {string} operationId */
+  async function prepareScenario(request, operationId) {
+    /** @type {import('./contracts').OperationRecord | undefined} */
+    let record;
+    try {
+      if (!scenarioActions.has(request.action) || Object.keys(request).some(key => !['action', 'input'].includes(key))) throw new BankingError('VALIDATION_ERROR', '场景规则请求含有未注册字段');
+      const action = /** @type {import('./contracts').ScenarioAction} */ (request.action);
+      const input = validateScenarioInput(action, request.input);
+      let effect = await scenarioEffectFor(action, input, undefined, undefined);
+      record = { operationId, action, fingerprint: store.fingerprint(action, input), state: 'preparing', request: { action, input } };
+      await save(record); await move(record, 'PREPARED');
+      if (action !== 'scenario.create_rule') {
+        if (typeof store.reserveScenarioPreview !== 'function') throw new BankingError('INTERNAL_ERROR', '场景规则预览存储未配置', true);
+        const generation = await store.reserveScenarioPreview(ownerId, effect.ruleId);
+        effect = await scenarioEffectFor(action, input, undefined, effect.after.updated_at);
+        if (effect.previewGeneration !== generation) throw new BankingError('PREVIEW_STALE', '场景规则预览已变化，请重新尝试');
+      }
+      const risk = { allowed: true, riskLevel: /** @type {const} */ ('L2'), policyVersion: policy.version, requiredConfirmation: /** @type {const} */ ('mock_explicit'), warnings: ['场景规则只生成建议，不会预授权资金或卡片操作。'] };
+      record.risk = risk;
+      const expiresAt = new Date(now() + policy.previewTtlMs).toISOString();
+      const contextSnapshotId = (await repository.getContextInfo()).snapshotId;
+      const planId = `plan_${crypto.randomUUID()}`, stepId = `step_${crypto.randomUUID()}`;
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical({ ownerId, operationId, planId, stepId, effect, expiresAt, contextSnapshotId, policy })));
+      const previewHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+      const verb = action === 'scenario.create_rule' ? '创建' : action === 'scenario.update_rule' ? '修改' : '停用';
+      record.preview = { planId, stepIds: [stepId], summary: `${verb}场景规则 ${effect.ruleId}`, exactEffects: [effect], riskLevel: risk.riskLevel, warnings: risk.warnings, expiresAt, previewHash, contextSnapshotId };
+      await move(record, 'PREVIEWED');
+      return /** @type {import('./contracts').ActionResult<import('./contracts').PreparedAction>} */ ({ ok: true, data: { operationId, state: 'awaiting_confirmation', preview: structuredClone(record.preview), risk: structuredClone(risk) } });
+    } catch (error) {
+      const data = errorData(error); if (record) await fail(record, data);
+      return /** @type {import('./contracts').ActionResult<import('./contracts').PreparedAction>} */ ({ ok: false, operationId, error: data });
+    }
+  }
+
   return Object.freeze({
     repository,
+    /** @param {string} ruleId */
+    getScenarioRule: async ruleId => {
+      assertId(ruleId, '规则');
+      if (typeof store.getScenarioRule !== 'function') return undefined;
+      return store.getScenarioRule(ownerId, ruleId);
+    },
     close: async () => { if (typeof store.close === 'function') await store.close(); },
     riskCheck,
     /** @param {import('./contracts').ActionRequest} request @returns {Promise<import('./contracts').ActionResult<import('./contracts').PreparedAction>>} */
     async prepare(request) {
       const operationId = `op_${crypto.randomUUID()}`;
       if (request && cardActions.has(request.action)) return prepareCard(request, operationId);
+      if (request && scenarioActions.has(request.action)) return prepareScenario(request, operationId);
       /** @type {import('./contracts').OperationRecord | undefined} */
       let record;
       try {
@@ -230,7 +336,7 @@ export function createBankingCore(options = {}) {
           try { await recheck(record); } catch (error) { await fail(record, errorData(error)); throw error; }
         }
         record.decision = { ...structuredClone(decision), planId: record.preview.planId, confirmationMethod: 'mock_explicit', idempotencyKey: operationId, decidedAt: new Date(now()).toISOString() };
-        if (decision.decision === 'reject') record.receipt = receiptFor(record, 'cancelled', cardActions.has(record.action) ? '已取消卡片操作，卡片未变更' : '已取消模拟转账，未扣款');
+        if (decision.decision === 'reject') record.receipt = receiptFor(record, 'cancelled', scenarioActions.has(record.action) ? '已取消场景规则变更，规则未修改' : cardActions.has(record.action) ? '已取消卡片操作，卡片未变更' : '已取消模拟转账，未扣款');
         await move(record, decision.decision === 'confirm' ? 'CONFIRM' : 'CANCEL');
         return statusFor(record);
       }, operationId);
@@ -242,7 +348,7 @@ export function createBankingCore(options = {}) {
       if (running) return running;
       const execution = guard(async () => {
         const record = await lookup(operationId);
-        if (record.action !== 'transfer_money' && !cardActions.has(record.action)) throw new BankingError('UNKNOWN_ACTION', '此执行入口不接受该动作');
+        if (record.action !== 'transfer_money' && !cardActions.has(record.action) && !scenarioActions.has(record.action)) throw new BankingError('UNKNOWN_ACTION', '此执行入口不接受该动作');
         verifyHash(record, previewHash);
         if (!record.preview) throw new BankingError('INVALID_STATE', '缺少预览');
         if (record.receipt) return record.receipt;
@@ -251,7 +357,12 @@ export function createBankingCore(options = {}) {
         try {
           await recheck(record); await move(record, 'EXECUTE');
           const at = new Date(now()).toISOString();
-          if (cardActions.has(record.action)) {
+          if (scenarioActions.has(record.action)) {
+            const effect = /** @type {import('./contracts').ScenarioEffect} */ (record.preview.exactEffects[0]);
+            if (typeof store.commitScenario !== 'function') throw new BankingError('INTERNAL_ERROR', '场景规则持久化未配置', true);
+            record.receipt = await store.commitScenario(ownerId, record, effect, () => receiptFor(record, 'succeeded', '场景规则变更已生效'));
+            record.state = transitionAction(record.state, 'SUCCEEDED');
+          } else if (cardActions.has(record.action)) {
             const effect = /** @type {import('./contracts').CardEffect} */ (record.preview.exactEffects[0]);
             if (typeof store.commitCard === 'function') {
               record.receipt = await store.commitCard(ownerId, record, effect, () => receiptFor(record, 'succeeded', '模拟卡片操作成功'));

@@ -148,7 +148,7 @@ export function useSaveflow() {
         send("ANSWER");
       } else if (answer.status === "cancelled") {
         setBankingContinuation(null);
-        addMessage({ role: "agent", text: "本次预览会话已取消，未执行资金或卡片操作。" });
+        addMessage({ role: "agent", text: answer.action?.startsWith("scenario.") ? "场景规则变更已取消，规则未修改。" : "本次预览会话已取消，未执行资金或卡片操作。" });
         send("ANSWER");
       } else if (answer.status === "awaiting_confirmation") {
         if (answer.action?.startsWith("card.") && isTrialPreview(answer)) {

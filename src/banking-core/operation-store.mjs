@@ -5,6 +5,8 @@ import { BankingError, assertId, canonical } from './errors.mjs';
 export class OperationStore {
   /** @type {Map<string, import('./contracts').OperationRecord>} */
   #records = new Map();
+  /** @type {Map<string, import('./contracts').ScenarioRule>} */
+  #scenarioRules = new Map();
   /** @param {string} owner @param {string} operationId */
   get(owner, operationId) {
     assertId(owner); assertId(operationId);
@@ -20,4 +22,35 @@ export class OperationStore {
   }
   /** @param {string} action @param {unknown} input */
   fingerprint(action, input) { return canonical({ action, input }); }
+  /** @param {string} owner @param {string} ruleId */
+  getScenarioRule(owner, ruleId) {
+    assertId(owner); assertId(ruleId);
+    const rule = this.#scenarioRules.get(`${owner}\0${ruleId}`);
+    return rule ? structuredClone(rule) : undefined;
+  }
+  /** @param {string} owner @param {string} ruleId */
+  reserveScenarioPreview(owner, ruleId) {
+    const rule = this.getScenarioRule(owner, ruleId);
+    if (!rule) throw new BankingError('OPERATION_NOT_FOUND', '找不到可访问的场景规则');
+    rule.previewGeneration += 1;
+    this.#scenarioRules.set(`${owner}\0${ruleId}`, structuredClone(rule));
+    return rule.previewGeneration;
+  }
+  /** @param {string} owner @param {import('./contracts').OperationRecord} record @param {import('./contracts').ScenarioEffect} effect @param {()=>import('./contracts').ActionReceipt} makeReceipt */
+  commitScenario(owner, record, effect, makeReceipt) {
+    const persisted = this.get(owner, record.operationId);
+    if (!persisted) throw new BankingError('OPERATION_NOT_FOUND', '未取得此操作的记录', true);
+    if (persisted.receipt) return persisted.receipt;
+    const current = this.getScenarioRule(owner, effect.ruleId);
+    if (effect.action === 'scenario.create_rule') {
+      if (current) throw new BankingError('PREVIEW_STALE', '规则编号已存在，请重新预览');
+    } else if (!current || current.version !== effect.ruleVersion || current.previewGeneration !== effect.previewGeneration) {
+      throw new BankingError('PREVIEW_STALE', '规则已变化，请重新预览并确认');
+    }
+    this.#scenarioRules.set(`${owner}\0${effect.ruleId}`, structuredClone(effect.after));
+    const receipt = makeReceipt();
+    persisted.receipt = receipt; persisted.state = 'succeeded';
+    this.put(owner, persisted);
+    return structuredClone(receipt);
+  }
 }

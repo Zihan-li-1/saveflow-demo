@@ -3,9 +3,8 @@ import assert from 'node:assert/strict';
 import { createInMemoryScenarioStore, createScenarioSkill } from '../src/skills/scenario/scenario-skill.mjs';
 
 function fixture() {
-  let tick = 0;
   const store = createInMemoryScenarioStore([{ id: 'event_001', rule_ref: 'rule_demo', type: 'balance_changed', trusted: true, occurred_at: '2026-09-01T08:00:00+08:00' }, { id: 'event_bad', type: 'user_text', trusted: false, occurred_at: '2026-09-01T08:00:00+08:00' }]);
-  const skill = createScenarioSkill({ store, id: () => 'rule_demo', now: () => `2026-09-01T08:00:0${tick++}+08:00` });
+  const skill = createScenarioSkill({ store });
   return { store, skill };
 }
 
@@ -13,20 +12,19 @@ test('E scenario: create, update and disable a suggest-only rule', async () => {
   const { skill, store } = fixture();
   const request = { action: 'scenario.create_rule', trigger: { type: 'financial_event', value: 'balance_changed' }, conditions: { balance_below_minor: 100000 }, proposed_steps: [{ action: 'bill.analyze', parameters: { period: 'last_30_days' } }, { action: 'wealth.compare', parameters: { product_refs: ['product_001', 'product_002'] } }], authorization_scope: 'suggest_only' };
   const preview = await skill(request);
-  assert.equal(preview.ok, true); assert.equal(preview.kind, 'scenario_rule_preview'); assert.equal(await store.getRule('rule_demo'), undefined);
-  const created = await skill(request, { confirmed: true });
-  assert.equal(created.ok, true); assert.equal(created.data.rule.status, 'active');
+  assert.equal(preview.ok, true); assert.equal(preview.kind, 'scenario_action_request'); assert.equal(await store.getRule('rule_demo'), undefined);
+  assert.equal(preview.data.request.action, 'scenario.create_rule');
+  await store.putRule({ id: 'rule_demo', status: 'active', trigger: request.trigger, conditions: request.conditions, proposed_steps: request.proposed_steps, authorization_scope: 'suggest_only', version: 1, previewGeneration: 0, created_at: '2026-09-01T08:00:00+08:00', updated_at: '2026-09-01T08:00:00+08:00' });
   const updateRequest = { action: 'scenario.update_rule', rule_ref: 'rule_demo', changes: { conditions: { balance_below_minor: 200000 } } };
-  assert.equal((await skill(updateRequest)).kind, 'scenario_rule_preview');
-  const updated = await skill(updateRequest, { confirmed: true });
-  assert.equal(updated.data.rule.conditions.balance_below_minor, 200000);
-  const disabled = await skill({ action: 'scenario.disable_rule', rule_ref: 'rule_demo' }, { confirmed: true });
-  assert.equal(disabled.data.rule.status, 'disabled');
+  const updated = await skill(updateRequest);
+  assert.equal(updated.kind, 'scenario_action_request'); assert.equal(updated.data.request.input.changes.conditions.balance_below_minor, 200000);
+  const disabled = await skill({ action: 'scenario.disable_rule', rule_ref: 'rule_demo' });
+  assert.equal(disabled.kind, 'scenario_action_request'); assert.equal(disabled.data.request.action, 'scenario.disable_rule');
 });
 
 test('E scenario: trusted events produce suggestions without inherited confirmation', async () => {
-  const { skill } = fixture();
-  await skill({ action: 'scenario.create_rule', trigger: { type: 'financial_event', value: 'balance_changed' }, conditions: {}, proposed_steps: [{ action: 'subscription.list', parameters: {} }], authorization_scope: 'suggest_only' }, { confirmed: true });
+  const { skill, store } = fixture();
+  await store.putRule({ id: 'rule_demo', status: 'active', trigger: { type: 'financial_event', value: 'balance_changed' }, conditions: {}, proposed_steps: [{ action: 'subscription.list', parameters: {} }], authorization_scope: 'suggest_only', version: 1, previewGeneration: 0, created_at: '2026-09-01T08:00:00+08:00', updated_at: '2026-09-01T08:00:00+08:00' });
   const result = await skill({ action: 'scenario.review_event', event_ref: 'event_001' });
   assert.equal(result.ok, true); assert.equal(result.data.inherited_confirmation, false);
   assert.equal(result.data.proposed_steps[0].action, 'subscription.list');

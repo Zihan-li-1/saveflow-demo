@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { handleBankingAgent } from '../server/banking-agent.mjs';
 import { createInMemoryScenarioStore, createScenarioSkill } from '../src/skills/scenario/scenario-skill.mjs';
+import { createBankingCore } from '../src/banking-core/core.mjs';
 
 const env = { SAVEFLOW_ACCESS_CODE: 'e-test-access-code', CONTINUATION_TOKEN_SECRET: 'e-test-continuation-secret', DASHSCOPE_API_KEY: 'unused' };
 let requestNumber = 0;
@@ -29,19 +30,21 @@ test('E agent: orchestrator goal returns read-only multi-step plan', async () =>
 
 test('E agent: scenario change is previewed, cancellation writes nothing, confirmation saves once', async () => {
   const store = createInMemoryScenarioStore();
-  let ids = 0;
-  const scenarioHandler = createScenarioSkill({ store, id: () => `rule_e2e_${++ids}`, now: () => '2026-09-01T08:00:00+08:00' });
+  const scenarioHandler = createScenarioSkill({ store });
+  const core = createBankingCore({ now: () => 4_000 });
   const parsed = intent('scenario.create_rule', { trigger: { type: 'financial_event', value: 'balance_changed' }, conditions: { balance_below_minor: 100000 }, proposed_steps: [{ action: 'bill.analyze', parameters: {} }], authorization_scope: 'suggest_only' });
-  let response = await handleBankingAgent(request({ message: '创建规则' }), { env, parseIntent: async () => parsed, scenarioHandler, now: () => 3000 });
+  let response = await handleBankingAgent(request({ message: '创建规则' }), { env, core, parseIntent: async () => parsed, scenarioHandler, now: () => 3000 });
   let payload = await body(response);
-  assert.equal(payload.data.status, 'scenario_rule_preview'); assert.equal(store.getRule('rule_e2e_1'), undefined);
-  const cancelled = await handleBankingAgent(request({ continuationToken: payload.data.continuationToken, message: '取消' }), { env, parseIntent: async () => parsed, scenarioHandler, now: () => 3001 });
-  assert.equal((await body(cancelled)).data.status, 'cancelled'); assert.equal(store.getRule('rule_e2e_1'), undefined);
-  response = await handleBankingAgent(request({ message: '创建规则' }), { env, parseIntent: async () => parsed, scenarioHandler, now: () => 4000 });
+  const cancelledRuleId = payload.data.data.rule.id;
+  assert.equal(payload.data.status, 'scenario_rule_preview'); assert.equal(await core.getScenarioRule(cancelledRuleId), undefined);
+  const cancelled = await handleBankingAgent(request({ continuationToken: payload.data.continuationToken, message: '取消' }), { env, core, parseIntent: async () => parsed, scenarioHandler, now: () => 3001 });
+  assert.equal((await body(cancelled)).data.status, 'cancelled'); assert.equal(await core.getScenarioRule(cancelledRuleId), undefined);
+  response = await handleBankingAgent(request({ message: '创建规则' }), { env, core, parseIntent: async () => parsed, scenarioHandler, now: () => 4000 });
   payload = await body(response);
-  const confirmed = await handleBankingAgent(request({ continuationToken: payload.data.continuationToken, message: '确认保存' }), { env, parseIntent: async () => parsed, scenarioHandler, now: () => 4001 });
+  const ruleId = payload.data.data.rule.id;
+  const confirmed = await handleBankingAgent(request({ continuationToken: payload.data.continuationToken, message: '确认保存' }), { env, core, parseIntent: async () => parsed, scenarioHandler, now: () => 4001 });
   const confirmedPayload = await body(confirmed);
-  assert.equal(confirmedPayload.data.status, 'scenario_rule'); assert.equal(store.getRule('rule_e2e_1').status, 'active');
-  const replay = await handleBankingAgent(request({ continuationToken: payload.data.continuationToken, message: '确认保存' }), { env, parseIntent: async () => parsed, scenarioHandler, now: () => 4002 });
-  assert.equal((await body(replay)).data.data.rule.id, 'rule_e2e_1'); assert.equal(ids, 1);
+  assert.equal(confirmedPayload.data.status, 'scenario_rule'); assert.equal((await core.getScenarioRule(ruleId)).status, 'active');
+  const replay = await handleBankingAgent(request({ continuationToken: payload.data.continuationToken, message: '确认保存' }), { env, core, parseIntent: async () => parsed, scenarioHandler, now: () => 4002 });
+  assert.equal((await body(replay)).data.data.rule.id, ruleId);
 });
