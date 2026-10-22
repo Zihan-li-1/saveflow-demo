@@ -24,6 +24,7 @@ export async function handleBillSummary(
       });
   const summary = summarizeBills(transactions);
   const context = await repository.getContextInfo();
+  const asOfDate = localDate(context.asOf);
   const startMonth = month ?? period!.start_date.slice(0, 7);
   const endMonth = month ?? period!.end_date.slice(0, 7);
   const months: string[] = [];
@@ -36,7 +37,12 @@ export async function handleBillSummary(
   }
   const monthlyBreakdown = months.map(value => {
     const items = transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(value));
-    return { month: value, ...summarizeBills(items) };
+    const [year, oneBasedMonth] = value.split("-").map(Number);
+    const monthStart = `${value}-01`;
+    const monthEnd = new Date(Date.UTC(year, oneBasedMonth, 0)).toISOString().slice(0, 10);
+    const isPartialSelection = !!period && (period.start_date > monthStart || period.end_date < monthEnd);
+    const status = monthStart > asOfDate ? "future" : monthEnd >= asOfDate || isPartialSelection ? "partial" : "complete";
+    return { month: value, status, ...summarizeBills(items) };
   });
 
   return {

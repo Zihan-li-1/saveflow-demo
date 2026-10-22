@@ -99,7 +99,7 @@ export async function askBankingAgent(
   const monthlyBreakdown = bill?.monthlyBreakdown as Array<Record<string, unknown>> | undefined;
   const validBillMonth = typeof bill?.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(bill.month);
   const validBillPeriod = !!billPeriod && typeof billPeriod.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(billPeriod.startDate) && typeof billPeriod.endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(billPeriod.endDate) && billPeriod.startDate <= billPeriod.endDate && billPeriod.timezone === 'Asia/Shanghai' && typeof billPeriod.label === 'string' && !!billPeriod.label;
-  const validMonthlyBreakdown = Array.isArray(monthlyBreakdown) && monthlyBreakdown.length >= 1 && monthlyBreakdown.length <= 13 && monthlyBreakdown.every(item => typeof item.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(item.month) && nonnegative(item.totalExpenseFen) && nonnegative(item.totalIncomeFen) && nonnegative(item.transactionCount));
+  const validMonthlyBreakdown = Array.isArray(monthlyBreakdown) && monthlyBreakdown.length >= 1 && monthlyBreakdown.length <= 13 && monthlyBreakdown.every(item => typeof item.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(item.month) && ['complete', 'partial', 'future'].includes(String(item.status)) && nonnegative(item.totalExpenseFen) && nonnegative(item.totalIncomeFen) && nonnegative(item.transactionCount));
   const valid = typeof payload.requestId === 'string' && trialMetadataValid && (
     (payload.code === 'OK' && data.status === 'cancelled' && data.source === 'trueforge-mcp' && data.previewOnly === true && data.executionAllowed === false) ||
     (payload.code === 'OK' && data.status === 'cancelled' && scenarioAction && typeof data.operationId === 'string') ||

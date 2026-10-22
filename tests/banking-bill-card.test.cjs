@@ -20,7 +20,7 @@ const text = html => html.replace(/<[^>]*>/g, '');
 
 test('August card uses structured amounts, exact signed balance, all transaction count and Chinese provenance', () => {
   const value = text(render(fixture));
-  for (const expected of ['2026 年 8 月', '月度收支概览', '本月总支出¥8,460.00', '本月收入¥12,000.00', '+¥3,540.00', '不是账户可用余额', '总交易笔数12 笔', '模拟演示数据', '2026年9月1日 00:00（北京时间）', '房租¥3,000.00']) assert.ok(value.includes(expected), expected);
+  for (const expected of ['2026 年 8 月', '月度收支概览', '本月总支出¥8,460.00', '本月收入¥12,000.00', '+¥3,540.00', '不是账户可用余额', '总交易笔数12 笔', '模拟演示数据', '2026年9月1日 00:00（北京时间）', '房租', '35.5%', '¥3,000.00']) assert.ok(value.includes(expected), expected);
   assert.ok(!value.includes('支出笔数'));
   assert.ok(!value.includes('synthetic_demo_only'));
 });
@@ -53,7 +53,7 @@ test('dates use Shanghai time consistently and reject missing or ambiguous dates
   for (const value of [undefined, '', 'bad', '2026-09-01', '2026-09-01T00:00:00']) assert.equal(formatBillAsOf(value), '日期未知');
 });
 
-test('categories preserve backend amounts in descending order without invented ratios', () => {
+test('categories preserve backend amounts in descending order and derive ratios from the total', () => {
   assert.deepEqual(billCategories({ food: 300, rent: 700 }, 1000), [{ name: 'rent', amountFen: 700 }, { name: 'food', amountFen: 300 }]);
   assert.deepEqual(billCategories({ food: 300 }, 1000), []);
   const input = structuredClone(fixture);
@@ -70,22 +70,25 @@ test('range longer than two months renders a monthly expense bar chart', () => {
       month: undefined,
       period: { startDate: '2026-07-01', endDate: '2026-12-31', timezone: 'Asia/Shanghai', label: '2026年下半年' },
       monthlyBreakdown: [
-        { month: '2026-07', totalExpenseFen: 320000, totalIncomeFen: 0, transactionCount: 2 },
-        { month: '2026-08', totalExpenseFen: 846000, totalIncomeFen: 1200000, transactionCount: 12 },
-        { month: '2026-09', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
+        { month: '2026-07', status: 'complete', totalExpenseFen: 320000, totalIncomeFen: 0, transactionCount: 2 },
+        { month: '2026-08', status: 'complete', totalExpenseFen: 846000, totalIncomeFen: 1200000, transactionCount: 12 },
+        { month: '2026-09', status: 'partial', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
+        { month: '2026-10', status: 'future', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
+        { month: '2026-11', status: 'future', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
+        { month: '2026-12', status: 'future', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
       ],
     },
   };
   const html = render(range);
   const value = text(html);
-  for (const expected of ['2026年下半年', '期间收支概览', '期间总支出', '每月支出对比', '7月', '8月', '9月']) assert.ok(value.includes(expected), expected);
-  assert.equal((html.match(/bill-report-bar-track/g) || []).length, 3);
+  for (const expected of ['2026年下半年', '2026年7月1日—2026年12月31日', '期间收支概览', '期间总支出', '每月支出对比', '最高：8月', '月均', '截至目前', '未到', '房租', '35.5%']) assert.ok(value.includes(expected), expected);
+  assert.equal((html.match(/bill-report-bar-track/g) || []).length, 6);
 });
 
 test('one or two months do not render the comparison chart', () => {
   const html = render({ ...fixture, data: { ...fixture.data, monthlyBreakdown: [
-    { month: '2026-07', totalExpenseFen: 320000, totalIncomeFen: 0, transactionCount: 2 },
-    { month: '2026-08', totalExpenseFen: 846000, totalIncomeFen: 1200000, transactionCount: 12 },
+    { month: '2026-07', status: 'complete', totalExpenseFen: 320000, totalIncomeFen: 0, transactionCount: 2 },
+    { month: '2026-08', status: 'complete', totalExpenseFen: 846000, totalIncomeFen: 1200000, transactionCount: 12 },
   ] } });
   assert.equal(html.includes('bill-report-chart'), false);
 });
@@ -96,10 +99,52 @@ test('a short range touching three calendar months does not count as longer than
     month: undefined,
     period: { startDate: '2026-06-30', endDate: '2026-08-01', timezone: 'Asia/Shanghai', label: '自定义时间段' },
     monthlyBreakdown: [
-      { month: '2026-06', totalExpenseFen: 100, totalIncomeFen: 0, transactionCount: 1 },
-      { month: '2026-07', totalExpenseFen: 200, totalIncomeFen: 0, transactionCount: 1 },
-      { month: '2026-08', totalExpenseFen: 300, totalIncomeFen: 0, transactionCount: 1 },
+      { month: '2026-06', status: 'complete', totalExpenseFen: 100, totalIncomeFen: 0, transactionCount: 1 },
+      { month: '2026-07', status: 'complete', totalExpenseFen: 200, totalIncomeFen: 0, transactionCount: 1 },
+      { month: '2026-08', status: 'complete', totalExpenseFen: 300, totalIncomeFen: 0, transactionCount: 1 },
     ],
   } });
   assert.equal(html.includes('bill-report-chart'), false);
+});
+
+test('cross-year ranges show years and do not summarize partial or future months', () => {
+  const html = render({ ...fixture, data: {
+    ...fixture.data,
+    totalIncomeFen: 0,
+    totalExpenseFen: 10000,
+    transactionCount: 1,
+    categoryTotals: { '餐饮': 10000 },
+    month: undefined,
+    period: { startDate: '2026-12-15', endDate: '2027-03-31', timezone: 'Asia/Shanghai', label: '跨年账单' },
+    monthlyBreakdown: [
+      { month: '2026-12', status: 'partial', totalExpenseFen: 10000, totalIncomeFen: 0, transactionCount: 1 },
+      { month: '2027-01', status: 'future', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
+      { month: '2027-02', status: 'future', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
+      { month: '2027-03', status: 'future', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
+    ],
+  } });
+  const value = text(html);
+  assert.ok(value.includes('2026/12'));
+  assert.ok(value.includes('2027/01'));
+  assert.ok(value.includes('截至目前'));
+  assert.equal(value.includes('最高：'), false);
+  assert.equal(value.includes('月均：'), false);
+});
+
+test('an entirely future range is labelled honestly instead of showing zero spending', () => {
+  const html = render({ ...fixture, data: {
+    ...fixture.data,
+    totalIncomeFen: 0,
+    totalExpenseFen: 0,
+    transactionCount: 0,
+    categoryTotals: {},
+    month: undefined,
+    period: { startDate: '2027-01-01', endDate: '2027-03-31', timezone: 'Asia/Shanghai', label: '未来账单' },
+    monthlyBreakdown: [
+      { month: '2027-01', status: 'future', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
+      { month: '2027-02', status: 'future', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
+      { month: '2027-03', status: 'future', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
+    ],
+  } });
+  assert.ok(text(html).includes('所选时间尚未到来'));
 });
