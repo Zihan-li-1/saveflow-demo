@@ -24,6 +24,22 @@ export function resolveBillPeriod(message, now = Date.now()) {
   const text = message.trim();
   const explicitRange = text.match(/((?:19|20)\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*(?:到|至|—|-|~|～)\s*((?:19|20)\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/);
   if (explicitRange) return range(date(Number(explicitRange[1]), Number(explicitRange[2]), Number(explicitRange[3])), date(Number(explicitRange[4]), Number(explicitRange[5]), Number(explicitRange[6])), `${explicitRange[1]}年${Number(explicitRange[2])}月${Number(explicitRange[3])}日至${explicitRange[4]}年${Number(explicitRange[5])}月${Number(explicitRange[6])}日`);
+  const sameYearDateRange = text.match(/((?:19|20)\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*(?:到|至|—|-|~|～)\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/);
+  if (sameYearDateRange) {
+    const year = Number(sameYearDateRange[1]);
+    return range(date(year, Number(sameYearDateRange[2]), Number(sameYearDateRange[3])), date(year, Number(sameYearDateRange[4]), Number(sameYearDateRange[5])), `${year}年${Number(sameYearDateRange[2])}月${Number(sameYearDateRange[3])}日至${Number(sameYearDateRange[4])}月${Number(sameYearDateRange[5])}日`);
+  }
+  const twoYearMonthRange = text.match(/((?:19|20)\d{2})\s*年\s*(\d{1,2})\s*月\s*(?:到|至|—|-|~|～)\s*((?:19|20)\d{2})\s*年\s*(\d{1,2})\s*月/);
+  if (twoYearMonthRange) {
+    const startYear = Number(twoYearMonthRange[1]); const startMonth = Number(twoYearMonthRange[2]);
+    const endYear = Number(twoYearMonthRange[3]); const endMonth = Number(twoYearMonthRange[4]);
+    return range(date(startYear, startMonth, 1), date(endYear, endMonth, lastDay(endYear, endMonth)), `${startYear}年${startMonth}月至${endYear}年${endMonth}月`);
+  }
+  const monthRange = text.match(/((?:19|20)\d{2})\s*年\s*(\d{1,2})\s*月?\s*(?:到|至|—|-|~|～)\s*(\d{1,2})\s*月/);
+  if (monthRange) {
+    const year = Number(monthRange[1]); const startMonth = Number(monthRange[2]); const endMonth = Number(monthRange[3]);
+    return range(date(year, startMonth, 1), date(year, endMonth, lastDay(year, endMonth)), `${year}年${startMonth}月至${endMonth}月`);
+  }
   const explicitMonth = text.match(/((?:19|20)\d{2})\s*(?:年|-|\/|\.)\s*(\d{1,2})\s*月?/);
   if (explicitMonth) {
     const month = Number(explicitMonth[2]);
@@ -32,9 +48,9 @@ export function resolveBillPeriod(message, now = Date.now()) {
 
   const current = partsAt(now);
   const statedYear = text.match(/((?:19|20)\d{2})\s*年/)?.[1];
-  const relativeYearOffset = /前年/.test(text) ? -2 : /去年/.test(text) ? -1 : /明年/.test(text) ? 1 : 0;
+  const relativeYearOffset = /前年|前(?=[春夏秋冬])/.test(text) ? -2 : /去年|去(?=[春夏秋冬])/.test(text) ? -1 : /明年|明(?=[春夏秋冬])/.test(text) ? 1 : 0;
   const year = statedYear ? Number(statedYear) : current.year + relativeYearOffset;
-  const season = text.match(/(春季|春天|夏季|夏天|秋季|秋天|冬季|冬天)/)?.[1];
+  const season = text.match(/(春季|春天|夏季|夏天|秋季|秋天|冬季|冬天|[春夏秋冬](?=\s*(?:的)?\s*(?:账单|消费|花销|支出|收入)))/)?.[1];
   if (season) {
     if (/春/.test(season)) return range(date(year, 3, 1), date(year, 5, 31), `${year}年春季`);
     if (/夏/.test(season)) return range(date(year, 6, 1), date(year, 8, 31), `${year}年夏季`);
@@ -48,6 +64,14 @@ export function resolveBillPeriod(message, now = Date.now()) {
     const map = { 一: 1, 二: 2, 三: 3, 四: 4 }; const q = Number(quarter[2] || map[quarter[1]] || quarter[1]); const startMonth = (q - 1) * 3 + 1;
     return range(date(year, startMonth, 1), date(year, startMonth + 2, lastDay(year, startMonth + 2)), `${year}年第${q}季度`);
   }
+  if (/(本季度|这个季度|上季度|上个季度)/.test(text)) {
+    const currentQuarterStart = Math.floor((current.month - 1) / 3) * 3 + 1;
+    const offset = /上季度|上个季度/.test(text) ? -3 : 0;
+    const start = new Date(Date.UTC(current.year, currentQuarterStart - 1 + offset, 1));
+    const startYear = start.getUTCFullYear(); const startMonth = start.getUTCMonth() + 1;
+    const q = Math.floor((startMonth - 1) / 3) + 1;
+    return range(date(startYear, startMonth, 1), date(startYear, startMonth + 2, lastDay(startYear, startMonth + 2)), `${startYear}年第${q}季度`);
+  }
   if (/今年/.test(text)) return range(date(current.year, 1, 1), date(current.year, current.month, current.day), `${current.year}年至今`);
   if (/前年|去年|明年/.test(text)) return range(date(year, 1, 1), date(year, 12, 31), `${year}年全年`);
   if (statedYear && /全年|年度|一年|年账单/.test(text)) return range(date(year, 1, 1), date(year, 12, 31), `${year}年全年`);
@@ -57,6 +81,12 @@ export function resolveBillPeriod(message, now = Date.now()) {
     const start = new Date(Date.UTC(current.year, current.month - count, 1));
     return range(date(start.getUTCFullYear(), start.getUTCMonth() + 1, 1), date(current.year, current.month, current.day), `最近${count}个月`);
   }
+  const recentNamed = text.match(/(?:最近|近|过去)\s*(半年|一年)/);
+  if (recentNamed) {
+    const count = recentNamed[1] === '半年' ? 6 : 12;
+    const start = new Date(Date.UTC(current.year, current.month - count, 1));
+    return range(date(start.getUTCFullYear(), start.getUTCMonth() + 1, 1), date(current.year, current.month, current.day), recentNamed[1] === '半年' ? '最近半年' : '最近一年');
+  }
   if (/(上个|上月|这个月|本月)/.test(text)) {
     const offset = /上个|上月/.test(text) ? -1 : 0; const d = new Date(Date.UTC(current.year, current.month - 1 + offset, 1));
     return { month: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}` };
@@ -65,5 +95,5 @@ export function resolveBillPeriod(message, now = Date.now()) {
 }
 
 export function isExtendedBillPeriodQuery(message) {
-  return typeof message === 'string' && /(春季|春天|夏季|夏天|秋季|秋天|冬季|冬天|上半年|下半年|季度|Q\s*[1-4]|今年|去年|前年|明年|全年|年度|最近\s*\d+\s*个?月|近\s*\d+\s*个?月|过去\s*\d+\s*个?月|\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日?\s*(?:到|至|—|-|~|～))/i.test(message);
+  return typeof message === 'string' && /(春季|春天|夏季|夏天|秋季|秋天|冬季|冬天|[今去前明][春夏秋冬]|上半年|下半年|季度|Q\s*[1-4]|今年|去年|前年|明年|全年|年度|(?:最近|近|过去)\s*(?:半年|一年)|最近\s*\d+\s*个?月|近\s*\d+\s*个?月|过去\s*\d+\s*个?月|\d{4}\s*年\s*\d{1,2}\s*月\s*(?:\d{1,2}\s*日?)?\s*(?:到|至|—|-|~|～))/i.test(message);
 }
