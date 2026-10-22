@@ -89,7 +89,7 @@ test('ambiguous entity, mixed tasks and unsupported requests clarify or refuse w
   const core = { ...realCore, prepare: async (...args) => { prepares++; return realCore.prepare(...args); } };
   const ambiguous = await post({ message: '从活期账户给王先生转500元' }, { core, trueforgeRuntimeClient: runtime(() => buildParsedIntent('transfer.create', { source_account_ref: '活期账户', payee_ref: '王先生', amount: { amount_minor: 50000, currency: 'CNY' } })) });
   assert.equal(ambiguous.data.slot, 'payee_ref'); assert.equal(ambiguous.data.choices.length, 2); assert.match(ambiguous.reply.text, /王先生/);
-  const mixed = await post({ message: '查询2026年8月账单然后冻结娱乐虚拟卡' }, { core, trueforgeRuntimeClient: runtime(() => buildParsedIntent('bill.summary', { month: '2026-08' })) });
+  const mixed = await post({ message: '查询2026年8月账单然后冻结娱乐虚拟卡' }, { core, trueforgeRuntimeClient: runtime(() => ({ schemaVersion: '1.0.0', action: 'clarify', slots: {}, missingSlots: ['action'], status: 'needs_clarification' })) });
   assert.equal(mixed.code, 'NEEDS_CLARIFICATION'); assert.equal(mixed.data.action, 'clarify'); assert.match(mixed.reply.text, /多个动作/);
   const unsupported = await post({ message: '申购产品' }, { core, trueforgeRuntimeClient: runtime(() => ({ schemaVersion: '1.0.0', action: 'unsupported', slots: {}, missingSlots: [], status: 'unsupported' })) });
   assert.equal(unsupported.code, 'UNSUPPORTED'); assert.equal(prepares, 0);
@@ -181,20 +181,59 @@ test('installed SDK contract: zero tools, private inline Agent, verified final s
   }
 });
 
+test('runtime-normalized sandbox download defaults are explicitly disabled and verified on every turn', async () => {
+  const sdk = sdkFixture();
+  const create = sdk.sessions.create;
+  let created;
+  sdk.sessions.create = async (request, ...options) => {
+    assert.deepEqual(request.agent.spec.config.sandbox, { enabled: false, fileDownloads: false });
+    const response = await create(request, ...options);
+    // Match the real runtime: fileDownloads is always materialized on read-back.
+    response.data.agent.spec.config.sandbox = { fileDownloads: true, ...response.data.agent.spec.config.sandbox };
+    created = response.data;
+    return response;
+  };
+  const client = createBankingRuntimeClient({ env, sdk });
+  const session = await client.createSession();
+  await client.runTurn(session, 'test');
+  assert.equal(sdk.turns, 1);
+  created.agent.spec.config.sandbox.fileDownloads = true;
+  await assert.rejects(client.runTurn(session, 'test'), { code: 'TRUEFORGE_AGENT_POLICY_ERROR' });
+  assert.equal(sdk.turns, 1); // Reject the changed permission before a model turn.
+  for (const downloads of [true, undefined]) {
+    const unsafe = sdkFixture({ mutateSpec: spec => { spec.config.sandbox.fileDownloads = downloads; } });
+    await assert.rejects(createBankingRuntimeClient({ env, sdk: unsafe }).createSession(), { code: 'TRUEFORGE_AGENT_POLICY_ERROR' });
+    assert.equal(unsafe.turns, 0);
+  }
+});
 
-test('continuation cannot silently discard authenticated known slots or misread conjunctions in a payee name', async () => {
+test('terminal snapshot may refresh createdAt but cannot change content or message identity', async () => {
+  const fixture = mutate => sdkFixture({ mutateEvents(events) {
+    events[1].createdAt = '2026-10-22T01:00:00.000Z';
+    events[2].state.output.createdAt = '2026-10-22T01:00:01.000Z';
+    mutate?.(events[2].state.output);
+  } });
+  const intent = await parseTrueforgeBankingIntent('查2026年8月账单', { env, client: createBankingRuntimeClient({ env, sdk: fixture() }) });
+  assert.equal(intent.action, 'bill.summary');
+  for (const mutate of [output => { output.content = '{}'; }, output => { output.id = 'another-message'; }, output => { output.toolCalls = [{ id: 'execute' }]; }]) {
+    await assert.rejects(parseTrueforgeBankingIntent('查2026年8月账单', { env, client: createBankingRuntimeClient({ env, sdk: fixture(mutate) }) }), { code: 'TRUEFORGE_TURN_FAILED' });
+  }
+});
+
+
+test('continuation can request reclarification without preparing, and accepts conjunctions in a payee name', async () => {
   const client = runtime(input => input.context ? buildParsedIntent('transfer.create', { source_account_ref: '活期账户' }) : buildParsedIntent('transfer.create', { payee_ref: '张三', amount: { amount_minor: 50000, currency: 'CNY' } }));
   const first = await post({ message: '给张三转500元' }, { trueforgeRuntimeClient: client });
   const result = await post({ message: '活期账户', continuationToken: first.data.continuationToken }, { trueforgeRuntimeClient: client });
-  assert.equal(result.code, 'TRUEFORGE_FORMAT_ERROR'); assert.equal(result.data.preview, undefined);
+  assert.equal(result.code, 'NEEDS_CLARIFICATION'); assert.equal(result.data.preview, undefined);
   const name = await parseTrueforgeBankingIntent('从活期账户给和先生转500元', { env, client: runtime(() => buildParsedIntent('transfer.create', { source_account_ref: '活期账户', payee_ref: '和先生', amount: { amount_minor: 50000, currency: 'CNY' } })) });
   assert.equal(name.action, 'transfer.create');
 });
 
 
-test('grounding rejects invented amounts and unsupported units without preparing an operation', async () => {
-  for (const [message, amount] of [['给张三转500元', 500000], ['给张三转5万元', 500], ['给张三转500分', 50000], ['给张三转0.001元', 1]]) {
-    await assert.rejects(parseTrueforgeBankingIntent(message, { env, client: runtime(() => buildParsedIntent('transfer.create', { payee_ref: '张三', amount: { amount_minor: amount, currency: 'CNY' } })) }), { code: 'TRUEFORGE_FORMAT_ERROR' });
+test('numeric validation rejects invalid minor units before preparing an operation', async () => {
+  for (const amount of [-1, 0, 0.1, Number.MAX_SAFE_INTEGER + 1]) {
+    await assert.rejects(parseTrueforgeBankingIntent('给张三转一万', { env, client: runtime(() => ({ schemaVersion: '1.0.0', action: 'transfer.create', slots: { payee_ref: '张三', amount: { amount_minor: amount, currency: 'CNY' } }, missingSlots: ['source_account_ref'], status: 'needs_clarification' })) }), { code: 'TRUEFORGE_FORMAT_ERROR' });
   }
 });
 

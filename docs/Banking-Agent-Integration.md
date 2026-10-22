@@ -2,6 +2,18 @@
 
 本轮工作目录为 `saveflow-demo`。当前合同见 [Banking Agent API](Banking-Agent-API.md)。本轮改造在本地实施，未提交、部署或修改既有公共站点。
 
+## 2026-10-22 自然语言金额与日期第一阶段
+
+首轮、文本补充和修改统一交给配置的模型理解，再执行数值/日历校验与既有查询、预览。真实 TrueForge 模型 26/26 场景通过，自动化宿主测试 293 项通过，另在隔离数据库中补跑全部 9 项 PostgreSQL 测试并通过；类型、Lint、构建通过。原文、模型输出、真实业务参数及限制见 [第一阶段报告](Natural-Language-Phase1.md)。下文为此前阶段记录，不代表本次完整验收范围。
+
+## 2026-10-22 权限校验兼容性修复
+
+当前本地 TrueForge 服务在未声明 sandbox.fileDownloads 时补入 true，导致原整份 config 比较拒绝。现显式发送 false，继续严格检查整个配置，不忽略新增权限。真实流式消息和终态快照的 createdAt 不同；比较时只排除时间戳，其他字段继续严格核对。
+
+通过真实 SDK/当前配置模型调用统一处理器（隔离的合成 Core）：首轮“查账单”返回 HTTP 200 / NEEDS_CLARIFICATION，携带认证续接令牌补充“2026年8月”后返回 HTTP 200 / OK / bill_result。未执行资金或卡片写操作；没有记录密钥、访问码或令牌。
+
+本次专项 29/29 通过，全量 270 项中 262 通过、8 跳过、0 失败；lint、typecheck、diff 检查通过。新增用例覆盖运行时默认下载字段、每轮重验权限、终态时间戳变化，以及内容/编号/工具调用篡改仍被拒绝。本次未重新构建前端、未做浏览器点击或部署验收。
+
 ## 自动验证范围
 
 `npm run test:banking:runtime` 包含统一 Runtime 专项和实际 TypeScript 客户端/React 卡片渲染测试：
@@ -30,7 +42,7 @@ PostgreSQL 专项需要 `BANKING_TEST_DATABASE_URL`，缺少时明确跳过，�
 
 ## 目标环境仍需验收
 
-本轮未调用真实模型/TrueForge 服务、未执行 PostgreSQL 集成、未做浏览器实际点击或部署验收。React 静态渲染验证不是浏览器交互证明。
+初次改造未调用真实模型/TrueForge 服务；2026-10-22 已补充上述本地两轮账单实测。PostgreSQL 集成、浏览器实际点击及部署环境仍未在本次验收。React 静态渲染验证不是浏览器交互证明。
 
 配置 `.env.local` 的访问码、续接密钥、TrueForge URL/模型/可选 token，以及部署所需 Core 数据库。运行 `npm run dev:qwen`；页面选择 Banking Agent，输入访问码并勾选授权。必须核对以下链路：
 

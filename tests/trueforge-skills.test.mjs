@@ -1,3 +1,4 @@
+import { continuationModel } from './fixtures/continuation-model.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -23,7 +24,7 @@ function event(tool, args, result, isError = false) {
 async function withMcp(verify, options = {}) {
   const core = createBankingCore(options.source ? { source: options.source } : {}); let prepares = 0;
   const restricted = { ...core, prepare: async input => { prepares++; return core.prepare(input); }, decide: () => assert.fail('never decide'), execute: () => assert.fail('never execute') };
-  const server = startTrialMcpServer({ host: '127.0.0.1', port: 0, core: restricted, ...options });
+  const server = startTrialMcpServer({ host: '127.0.0.1', port: 0, core: restricted, parseIntent: continuationModel, ...options });
   const mcp = new Client({ name: 'multiskill-test', version: '1' }); const seen = [];
   try {
     await once(server, 'listening'); await mcp.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.address().port}/mcp`)));

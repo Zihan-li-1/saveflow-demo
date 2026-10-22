@@ -27,7 +27,7 @@ export function bankingReply({ code, message, data, replyContext = {} }, style =
     const known = knownSummary(c.action, slots);
     const lead = style === 'friendly' ? '好的，' : style === 'professional' ? '当前请求：' : '';
     const question = (data?.recovery || replyContext.reason || c.source === 'resolver') ? c.question : c.slot === 'amount' && c.action === 'card.set_budget' ? '新的月消费预算是多少？' : c.slot === 'month' ? c.question : questions[c.slot] || c.question;
-    text = `${lead}${known ? `${known}。` : ''}${question}`;
+    text = `${lead}${known ? `${known}。` : ''}${c.action === 'orchestrator.goal' ? c.question : question}`;
     if (data?.error) safetyNotices.push(data.error.message);
   } else if (data?.status === 'awaiting_confirmation') {
     text = style === 'friendly' ? '预览准备好了，请仔细核对卡片中的操作信息。' : style === 'professional' ? '操作预览已生成，请核对明细。' : '预览已生成，请核对明细。';
@@ -39,5 +39,6 @@ export function bankingReply({ code, message, data, replyContext = {} }, style =
   } else if (data?.status === 'unsupported' || code === 'UNSUPPORTED') {
     text = '暂不支持该请求。可以查询账单、卡片、订阅或产品，或生成转账及卡片操作预览；请一次描述一个动作。';
   }
+  if (data?.status === 'bill_result' && data.data?.coverage?.warning) text += ` ${data.data.coverage.warning} 数据截至 ${data.data.coverage.asOf}。`;
   return { text, style, safetyNotices: [...new Set(safetyNotices)] };
 }

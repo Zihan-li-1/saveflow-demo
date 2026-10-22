@@ -37,6 +37,7 @@ export class BankingAgentError extends ApiError {
 }
 
 export type BankingAgentRequest = {
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   message?: string;
   continuationToken?: string;
   choice?: { optionId: string };

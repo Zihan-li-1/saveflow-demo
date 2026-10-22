@@ -2,7 +2,6 @@ import { dispatchParsedIntent, handleBillSummary, handleCard, handleGoal, handle
 import { issueContinuationToken, verifyContinuationToken } from '../src/agent/clarification/continuation-token.mjs';
 import { resolveChoice } from '../src/agent/clarification/choice-resolver.mjs';
 import { buildParsedIntent, mergeSlots } from '../src/agent/clarification/merge-intent.mjs';
-import { isBillTask, isCardTask, isTransferTask, parseClarificationAnswer } from './banking-clarification-parser.mjs';
 import { billClarificationQuestion } from '../src/lib/trueforge-routing.mjs';
 import { validateParsedIntent } from '../src/agent/validate-parsed-intent.mjs';
 import { dispatchBanking } from '../src/banking-core/dispatch.mjs';
@@ -59,6 +58,8 @@ const clarificationQuestions = {
 };
 
 function questionFor(action, slot, message, slots = {}) {
+  if (action === 'orchestrator.goal' && slot === 'amount') return '希望存到的准确目标金额是多少？';
+  if (action === 'orchestrator.goal' && slot === 'deadline') return '希望在哪一天完成目标？';
   if (slot === 'month' && action === 'bill.summary') return billClarificationQuestion(slots.year ? `${slots.year}年账单` : slots.monthNumber ? `${slots.monthNumber}月账单` : message);
   return slot === 'amount' && action === 'card.set_budget'
     ? '新的月消费预算是多少元？例如 1000 元。'
@@ -73,8 +74,8 @@ function tokenError(error) {
   return Object.assign(new Error(error instanceof Error ? error.message : '续接凭据无效'), { code: 'CONTINUATION_INVALID', status: 400 });
 }
 
-function issueState({ action, slots, pendingSlot, choices = [], selections = {}, operation, env, now }) {
-  return issueContinuationToken({ action, slots, pendingSlot, choices, selections, operation }, continuationSecret(env), now());
+function issueState({ action, slots, pendingSlot, question, choices = [], selections = {}, operation, env, now }) {
+  return issueContinuationToken({ action, slots, pendingSlot, question, choices, selections, operation }, continuationSecret(env), now());
 }
 
 async function accountChoices(repository) {
@@ -105,7 +106,7 @@ function cardChoices(cards) {
 }
 
 function clarificationResponse(reply, { action, slot, question, choices = [], slots, selections = {}, env, now, message, source }) {
-  const token = issueState({ action, slots, pendingSlot: slot, choices, selections, env, now });
+  const token = issueState({ action, slots, pendingSlot: slot, question, choices, selections, env, now });
   return reply(200, 'NEEDS_CLARIFICATION', question, {
     kind: 'clarification', status: 'needs_clarification', action, question, slot, ...(source ? { source } : {}), choices: choices.map(({ optionId, label }) => ({ optionId, label })), continuationToken: token,
     ...(message ? { message } : {}),
@@ -119,22 +120,10 @@ function nextMissingSlot(intent) {
   return order.find(slot => intent.missingSlots?.includes(slot)) || intent.missingSlots?.[0];
 }
 
-function switchesTask(message, continuation) {
-  if (isBillTask(message) && continuation.action !== 'bill.summary') return true;
-  if (isTransferTask(message) && continuation.action !== 'transfer.create') return true;
-  if (!isCardTask(message)) return false;
-  if (!continuation.action.startsWith('card.')) return true;
-  if (/解冻|解除冻结/.test(message)) return continuation.action !== 'card.unfreeze';
-  if (/冻结|锁卡/.test(message)) return continuation.action !== 'card.freeze';
-  if (/预算/.test(message) && /调整|修改|设置|改成/.test(message)) return continuation.action !== 'card.set_budget';
-  if (/查(?:询|看)?.{0,4}(?:银行卡|卡片)|卡片?信息/.test(message)) return continuation.action !== 'card.get';
-  return false;
-}
-
 /** Shared clarification and preview workflow. The only Core capability used is prepare(). */
 export async function runBankingConversation(body, {
-  core, repository = core.repository, env = process.env, now = Date.now,
-  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, requestId = crypto.randomUUID(), origin = 'user_requested', understandContinuation = false, scenarioHandler, scenarioScope = 'fixed_mock_user',
+  core, repository = core.repository, env = process.env, now = Date.now, timezone = 'Asia/Shanghai',
+  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, requestId = crypto.randomUUID(), origin = 'user_requested', scenarioHandler, scenarioScope = 'fixed_mock_user',
 }) {
   let replyContext = {};
   const reply = (httpStatus, code, message, data) => ({ httpStatus, code, message, data, replyContext });
@@ -162,6 +151,8 @@ export async function runBankingConversation(body, {
   const history = body.history ?? [];
   if (!Array.isArray(history) || history.length > 12 || history.some(item => !item || !['user', 'assistant'].includes(item.role) || typeof item.content !== 'string' || !item.content.trim() || item.content.length > 2000)) throw inputError('INVALID_REQUEST', 'history 格式无效', 400);
 
+  const financialContext = typeof repository.getContextInfo === 'function' ? await repository.getContextInfo() : undefined;
+  const modelOptions = { env, fetchImpl, requestId, now, timezone, financialContext };
   let parsed;
   let selections = {};
   let continuation;
@@ -188,51 +179,35 @@ export async function runBankingConversation(body, {
       const effect = executed.data.effects?.[0];
       return reply(200, 'OK', '场景规则已保存', { status: 'scenario_rule', action: continuation.action, operationId: continuation.operation.operationId, receipt: executed.data, data: { rule: effect?.after, execution_policy: '规则只生成建议；写操作仍须另行预览并确认。' } });
     }
-    if (understandContinuation && body.message) {
-      parsed = validateParsedIntent(await parseIntent(body.message, { history: [], env, fetchImpl, requestId,
-        context: { action: continuation.action, slots: continuation.slots, pendingSlot: continuation.pendingSlot } }));
+    if (body.message) {
+      parsed = validateParsedIntent(await parseIntent(body.message, { ...modelOptions, history,
+        context: { action: continuation.action, slots: continuation.slots, pendingSlot: continuation.pendingSlot, question: continuation.question,
+          choices: continuation.choices.map(({ optionId, label, rawValue }) => ({ optionId, label, rawValue })) } }));
       // A model cannot convert an opaque candidate selection into entity IDs.
       // Keep server selections only while their raw references remain unchanged.
       if (parsed.action === continuation.action) {
         selections = { ...continuation.selections };
         for (const key of Object.keys(selections)) if (parsed.slots[key] !== continuation.slots[key]) delete selections[key];
       }
-    } else if (body.message && (continuation.action === 'clarify' || switchesTask(body.message, continuation))) {
-      if (expectedAction) throw Object.assign(new Error('请调用对应工具开始新任务'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
-      parsed = await parseIntent(body.message, { history, env, fetchImpl, requestId });
-    } else {
-      if (body.choice && !resolveChoice(body.choice, continuation.choices)) throw Object.assign(new Error('选项不存在或已失效'), { code: 'INVALID_CHOICE', status: 400 });
-      const answer = parseClarificationAnswer(body.message || '', { action: continuation.action, slot: continuation.pendingSlot, slots: continuation.slots, choices: continuation.choices, choice: body.choice, now: now() });
-      if (answer.kind === 'choice') {
-        const selected = resolveChoice(body.choice || body.message, continuation.choices);
-        if (!selected) throw Object.assign(new Error('选项不存在或已失效'), { code: 'INVALID_CHOICE', status: 400 });
-        selections = { ...continuation.selections, [continuation.pendingSlot]: { entityId: selected.entityId, optionId: selected.optionId } };
-        parsed = buildParsedIntent(continuation.action, mergeSlots(continuation.slots, { [continuation.pendingSlot]: selected.rawValue || selected.label }));
-      } else if (answer.kind === 'slot') {
-        parsed = buildParsedIntent(continuation.action, mergeSlots(continuation.slots, answer.updates));
-        selections = { ...continuation.selections };
-        for (const slot of Object.keys(answer.updates)) delete selections[slot];
-      } else {
-        return clarificationResponse(reply, {
-          action: continuation.action,
-          slot: continuation.pendingSlot,
-          question: questionFor(continuation.action, continuation.pendingSlot, body.message, continuation.slots),
-          choices: continuation.choices,
-          slots: continuation.slots,
-          selections: continuation.selections || {},
-          env, now,
-          message: '无法识别这次回答，请从候选项中选择或重新描述。',
-          source: 'parser',
-        });
+      if (parsed.choice) {
+        const selected = resolveChoice(parsed.choice, continuation.choices);
+        if (!selected || parsed.action !== continuation.action || !continuation.pendingSlot.endsWith('_ref') || parsed.slots[continuation.pendingSlot] !== (selected.rawValue || selected.label)) throw inputError('INVALID_CHOICE', '选项不存在或已失效', 400);
+        selections[continuation.pendingSlot] = { entityId: selected.entityId, optionId: selected.optionId };
       }
+    } else {
+      const selected = resolveChoice(body.choice, continuation.choices);
+      if (!selected) throw Object.assign(new Error('选项不存在或已失效'), { code: 'INVALID_CHOICE', status: 400 });
+      selections = { ...continuation.selections, [continuation.pendingSlot]: { entityId: selected.entityId, optionId: selected.optionId } };
+      parsed = buildParsedIntent(continuation.action, mergeSlots(continuation.slots, { [continuation.pendingSlot]: selected.rawValue || selected.label }));
     }
   } else {
-    parsed = initialIntent ?? await parseIntent(body.message, { history, env, fetchImpl, requestId });
+    parsed = initialIntent ?? await parseIntent(body.message, { ...modelOptions, history });
   }
   // Apply exactly the same boundary to all configured/injected understanders.
   parsed = validateParsedIntent(parsed);
   replyContext = { slots: parsed.slots };
-  if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'VALIDATION_ERROR', status: 400 });
+  if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
+  if (!continuing && parsed.choice) throw inputError('INVALID_CHOICE', '当前请求没有可选择的候选项', 400);
   if (['subscription.list', 'product.list'].includes(parsed.action)) {
     const result = await dispatchBanking(parsed.action, {}, { repository });
     if (!result.ok) return reply(502, 'SKILL_ERROR', '只读查询失败，请稍后重试。', errorData('SKILL_ERROR', '只读查询失败，请稍后重试。'));

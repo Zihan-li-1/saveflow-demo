@@ -9,7 +9,7 @@ export type Card = { id: string; name: string; accountId: string; status: "activ
 export type Subscription = { id: string; name: string; monthlyFeeFen: number; status: "active" | "cancelled"; lastUsedDate: string; isPotentiallyUnused: boolean; mandateId: string | null };
 /** expectedYield is an illustrative annual rate in BPS, never a guaranteed yield. */
 export type InvestmentProduct = { id: string; name: string; riskLevel: "R1" | "R2" | "R3"; expectedYield: number; liquidity: "T+0" | "T+1" | "AT_MATURITY"; minimumAmountFen: number; durationDays: number; currency: Currency; isSynthetic: true };
-export type ContextInfo = { datasetId: string; asOf: string; currentMonth: string; previousMonth: string; snapshotId: string; dataSource: "synthetic_demo_only"; currency: Currency };
+export type ContextInfo = { availableMonths?: string[]; datasetId: string; asOf: string; currentMonth: string; previousMonth: string; snapshotId: string; dataSource: "synthetic_demo_only"; currency: Currency };
 export type SavingGoal = { id: string; targetAmountFen: number; currentAmountFen: number; targetDate: string; proposedMonthlySavingFen: number };
 export type DemoSettings = { monthlyIncomeFen: number; defaultMonthlySavingFen: number; monthlySavingCapFen: number };
 export type MaybePromise<T> = T | Promise<T>;
@@ -19,7 +19,7 @@ export interface FinancialContextRepository {
   getAccount(id: string): MaybePromise<Account | undefined>;
   getPayees(): MaybePromise<Payee[]>;
   getPayee(id: string): MaybePromise<Payee | undefined>;
-  getTransactions(filter?: { accountId?: string; month?: string }): MaybePromise<Transaction[]>;
+  getTransactions(filter?: { accountId?: string; month?: string; startDate?: string; endDate?: string; timezone?: string }): MaybePromise<Transaction[]>;
   getCards(): MaybePromise<Card[]>;
   getCard(id: string): MaybePromise<Card | undefined>;
   getSubscriptions(): MaybePromise<Subscription[]>;
@@ -69,4 +69,4 @@ export type OperationStatus = { operationId: string; state: ActionState; status:
 export type ToolCall<T = Record<string, unknown>> = { toolCallId: string; tool: string; arguments: T; planId?: string; stepId?: string };
 export type ToolResult<T = unknown> = { toolCallId: string; tool: string; result: ActionResult<T>; evidence: { source: string; asOf: string; entityIds: string[] }[] };
 export type AuditEvent = { operationId: string; action: string; state: ActionState; at: string; errorCode?: ErrorCode };
-export type OperationRecord = { operationId: string; action: "transfer_money" | CardAction | ScenarioAction | "legacy.create-plan"; fingerprint: string; state: ActionState; request?: ActionRequest; preview?: ActionPreview; decision?: UserDecision; receipt?: ActionReceipt; risk?: RiskResult; error?: ActionError };
+export type OperationRecord = { legacyPlan?: { monthlySavingFen: number; targetAmountFen: number | null; deadline: string | null }; operationId: string; action: "transfer_money" | CardAction | ScenarioAction | "legacy.create-plan"; fingerprint: string; state: ActionState; request?: ActionRequest; preview?: ActionPreview; decision?: UserDecision; receipt?: ActionReceipt; risk?: RiskResult; error?: ActionError };

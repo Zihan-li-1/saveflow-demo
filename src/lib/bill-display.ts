@@ -64,12 +64,12 @@ export function shouldShowMonthlyBillChart(period: unknown, monthCount: number):
   return end.getTime() > twoMonthsLater.getTime();
 }
 
-export type BillMonthRow = { month: string; status: "complete" | "partial" | "future"; totalIncomeFen: number; totalExpenseFen: number; transactionCount: number };
+export type BillMonthRow = { month: string; status: "complete" | "partial" | "future" | "unavailable"; totalIncomeFen: number; totalExpenseFen: number; transactionCount: number };
 
 export function billMonthlyBreakdown(value: unknown): BillMonthRow[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > 13) return [];
   const rows = value.filter(row => row && typeof row === "object" && !Array.isArray(row)).map(row => row as Record<string, unknown>);
-  if (rows.length !== value.length || rows.some(row => typeof row.month !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(row.month) || !["complete", "partial", "future"].includes(String(row.status)) || billFen(row.totalIncomeFen) === undefined || billFen(row.totalExpenseFen) === undefined || billFen(row.transactionCount) === undefined)) return [];
+  if (rows.length !== value.length || rows.some(row => typeof row.month !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(row.month) || !["complete", "partial", "future", "unavailable"].includes(String(row.status)) || billFen(row.totalIncomeFen) === undefined || billFen(row.totalExpenseFen) === undefined || billFen(row.transactionCount) === undefined)) return [];
   return rows.map(row => ({ month: row.month as string, status: row.status as BillMonthRow["status"], totalIncomeFen: row.totalIncomeFen as number, totalExpenseFen: row.totalExpenseFen as number, transactionCount: row.transactionCount as number }));
 }
 

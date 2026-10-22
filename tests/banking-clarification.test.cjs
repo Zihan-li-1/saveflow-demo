@@ -23,7 +23,8 @@ const transfer = slots => ({
 });
 const bill = slots => ({ schemaVersion: '1.0.0', action: 'bill.summary', slots, missingSlots: slots.month ? [] : ['month'], status: slots.month ? 'ready_for_resolution' : 'needs_clarification' });
 
-function parseIntent(message) {
+function parseIntent(message, options) {
+  if (options?.context && !/账单|转账/.test(message)) return require('./fixtures/continuation-model.mjs').continuationModel(message, options);
   if (/账单/.test(message)) return bill(/8月/.test(message) ? { month: '2026-08' } : {});
   if (/重名/.test(message)) return transfer({ payee_ref: '王先生', amount: { amount_minor: 50000, currency: 'CNY' }, source_account_ref: '活期账户' });
   if (/缺金额/.test(message)) return transfer({ payee_ref: '张三', source_account_ref: '活期账户' });

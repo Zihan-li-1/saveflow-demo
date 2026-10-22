@@ -102,7 +102,13 @@ export async function createPostgresBankingCore({ connectionString, source = see
       const clauses = ['owner_id = $1'];
       const params = [ownerId];
       if (filter.accountId) { params.push(filter.accountId); clauses.push(`account_id = $${params.length}`); }
-      if (filter.month) { params.push(filter.month); clauses.push(`to_char(occurred_at AT TIME ZONE 'UTC', 'YYYY-MM') = $${params.length}`); }
+      if (filter.month || filter.startDate || filter.endDate) {
+        params.push(filter.timezone ?? 'Asia/Shanghai');
+        const localDay = `(occurred_at AT TIME ZONE $${params.length})::date`;
+        if (filter.month) { params.push(filter.month); clauses.push(`to_char(${localDay}, 'YYYY-MM') = $${params.length}`); }
+        if (filter.startDate) { params.push(filter.startDate); clauses.push(`${localDay} >= $${params.length}::date`); }
+        if (filter.endDate) { params.push(filter.endDate); clauses.push(`${localDay} <= $${params.length}::date`); }
+      }
       const rows = await sql.unsafe(`SELECT record FROM banking_transactions WHERE ${clauses.join(' AND ')} ORDER BY occurred_at, transaction_id`, params);
       return rows.map(row => fromRecord(row.record));
     },
