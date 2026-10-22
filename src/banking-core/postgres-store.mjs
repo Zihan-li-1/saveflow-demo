@@ -8,6 +8,8 @@ import { createWealthMockPorts } from '../skills/wealth/mock-ports.mjs';
 const terminalStates = new Set(['succeeded', 'failed', 'cancelled']);
 let configuredUrl;
 let configuredCore;
+let demoCore;
+let demoCoreCode;
 
 function fromRecord(record) {
   if (record === undefined) return undefined;
@@ -39,7 +41,7 @@ function cardFromRow(row) {
 }
 
 /** Creates an async Postgres adapter; migrations 001 through 003 must be applied first. */
-export async function createPostgresBankingCore({ connectionString, source = seed } = {}) {
+export async function createPostgresBankingCore({ connectionString, source = seed, demoOtpCode } = {}) {
   if (typeof connectionString !== 'string' || !connectionString.trim()) throw new Error('DATABASE_URL is required');
   const { default: postgres } = await import('postgres');
   const sql = postgres(connectionString, { max: 1, idle_timeout: 20, connect_timeout: 10 });
@@ -288,16 +290,24 @@ export async function createPostgresBankingCore({ connectionString, source = see
     },
   };
 
-  return createBankingCore({ source, repository, store, wealthPorts, ownerId });
+  return createBankingCore({ source, repository, store, wealthPorts, ownerId, demoOtpCode });
 }
 
 export async function getConfiguredBankingCore(env = process.env) {
+  // 演示视频专用：设置 SAVEFLOW_DEMO_OTP_CODE=123456 可把高风险转账验证码固定为 6 位数字，否则仍是密码学随机。
+  const demoOtpCode = env.SAVEFLOW_DEMO_OTP_CODE || undefined;
   if (!env.DATABASE_URL) {
     if (env.NETLIFY && env.ALLOW_EPHEMERAL_BANKING !== 'true') throw Object.assign(new Error('DATABASE_URL is required for Netlify banking persistence'), { code: 'DATABASE_NOT_CONFIGURED' });
+    if (demoOtpCode) {
+      if (demoCore && demoCoreCode === demoOtpCode) return demoCore;
+      demoCoreCode = demoOtpCode;
+      demoCore = createBankingCore({ demoOtpCode });
+      return demoCore;
+    }
     return bankingCore;
   }
   if (configuredCore && configuredUrl === env.DATABASE_URL) return configuredCore;
   configuredUrl = env.DATABASE_URL;
-  configuredCore = createPostgresBankingCore({ connectionString: configuredUrl });
+  configuredCore = createPostgresBankingCore({ connectionString: configuredUrl, demoOtpCode });
   return configuredCore;
 }

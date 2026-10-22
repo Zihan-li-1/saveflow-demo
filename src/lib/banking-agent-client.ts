@@ -163,3 +163,58 @@ export async function executeTrialTransfer(
     !Array.isArray((receipt as ActionReceipt).effects)) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', '执行桥回执格式异常。');
   return receipt as ActionReceipt;
 }
+
+export type TrialVerificationStart = { challengeId: string; expiresAt: string; remainingAttempts: number; deliveryHint: string };
+
+/** 经服务端「执行桥」为高风险试点转账发起 OTP 挑战。验证码走受控测试渠道，响应不含验证码。 */
+export async function startTrialVerification(
+  trialOperationId: string,
+  previewHash: string,
+  accessCode: string,
+  signal: AbortSignal,
+): Promise<TrialVerificationStart> {
+  let response: Response;
+  try {
+    response = await fetch('/api/execute-trial', {
+      method: 'POST',
+      signal: AbortSignal.any([signal, AbortSignal.timeout(30000)]),
+      headers: { 'Content-Type': 'application/json', 'X-Saveflow-Access': accessCode },
+      body: JSON.stringify({ action: 'verification.start', trialOperationId, previewHash }),
+    });
+  } catch {
+    throw new ApiError('BANKING_AGENT_NETWORK_ERROR', '验证服务连接失败，请稍后重试。');
+  }
+  let payload: { code?: string; message?: string; requestId?: string; data?: unknown };
+  try { payload = await response.json(); } catch { throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', '验证服务返回格式异常。'); }
+  if (response.status === 401) throw new ApiError('UNAUTHORIZED', '访问验证失败，请检查演示访问码后重试。');
+  if (!payload || !response.ok || payload.code !== 'OK') throw new ApiError(String(payload?.code || 'VERIFICATION_START_ERROR'), payload?.message || '验证码发起失败');
+  const data = payload.data as Record<string, unknown> | undefined;
+  if (!data || typeof data.challengeId !== 'string' || typeof data.expiresAt !== 'string') throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', '验证挑战格式异常。');
+  return { challengeId: data.challengeId, expiresAt: data.expiresAt, remainingAttempts: Number(data.remainingAttempts) || 0, deliveryHint: String(data.deliveryHint || '') };
+}
+
+/** 经服务端「执行桥」校验 OTP。验证码只在这里发送给执行桥，绝不进入聊天历史或模型上下文。 */
+export async function verifyTrialVerification(
+  trialOperationId: string,
+  previewHash: string,
+  challengeId: string,
+  code: string,
+  accessCode: string,
+  signal: AbortSignal,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch('/api/execute-trial', {
+      method: 'POST',
+      signal: AbortSignal.any([signal, AbortSignal.timeout(30000)]),
+      headers: { 'Content-Type': 'application/json', 'X-Saveflow-Access': accessCode },
+      body: JSON.stringify({ action: 'verification.verify', trialOperationId, previewHash, challengeId, code }),
+    });
+  } catch {
+    throw new ApiError('BANKING_AGENT_NETWORK_ERROR', '验证服务连接失败，请稍后重试。');
+  }
+  let payload: { code?: string; message?: string; requestId?: string };
+  try { payload = await response.json(); } catch { throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', '验证服务返回格式异常。'); }
+  if (response.status === 401) throw new ApiError('UNAUTHORIZED', '访问验证失败，请检查演示访问码后重试。');
+  if (!payload || !response.ok || payload.code !== 'OK') throw new ApiError(String(payload?.code || 'VERIFICATION_ERROR'), payload?.message || '验证码校验失败');
+}

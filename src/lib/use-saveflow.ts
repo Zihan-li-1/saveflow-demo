@@ -5,7 +5,7 @@ import { saveflowMock } from "./saveflow-mock";
 import { request } from "./api/client";
 import { apiConfig } from "./api/config";
 import { askQwen, type AgentTurn } from "./agent-client";
-import { askBankingAgent, BankingAgentError, executeTrialTransfer, type BankingAgentData } from "./banking-agent-client";
+import { askBankingAgent, BankingAgentError, executeTrialTransfer, startTrialVerification, verifyTrialVerification, type BankingAgentData } from "./banking-agent-client";
 import { createBankingClient } from "./api/banking-client";
 import type { ActionReceipt } from "../banking-core/contracts";
 import { ApiError, validatePlan, type Analysis, type Receipt } from "./api/contracts";
@@ -44,6 +44,8 @@ export function useSaveflow() {
   const [activeTransferOperationId, setActiveTransferOperationId] = useState<string | null>(null);
   const [transferBusy, setTransferBusy] = useState(false);
   const transferBusyRef = useRef(false);
+  const [otpChallenge, setOtpChallenge] = useState<{ operationId: string; challengeId: string; expiresAt: string } | null>(null);
+  const [otpError, setOtpError] = useState<string | null>(null);
   const lastBankingRequest = useRef<{ text: string; choice?: { optionId: string; label: string }; resumeFlowId?: string } | null>(null);
   const active = useRef<AbortController | null>(null);
   const generation = useRef(0);
@@ -299,6 +301,18 @@ export function useSaveflow() {
     if (!isTrialPreview(data)) return;
     const previewHash = data.preview?.previewHash;
     if (!data.operationId || !isTrialOperationId(data.operationId) || typeof previewHash !== "string" || transferBusyRef.current) return;
+    // 高风险转账（>¥1000）先发起一次性验证码，进入 OTP 输入态；验证通过后才执行，绝不未验证直接扣款。
+    if (data.risk?.requiredVerification === "otp") {
+      transferBusyRef.current = true; setTransferBusy(true);
+      try {
+        const started = await startTrialVerification(data.operationId, previewHash, accessCode, active.current?.signal ?? new AbortController().signal);
+        setOtpChallenge({ operationId: data.operationId, challengeId: started.challengeId, expiresAt: started.expiresAt });
+        setOtpError(null);
+      } catch (error) {
+        addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "验证码发起失败", errorHint: "验证码未发出；可重新点击确认转账。" });
+      } finally { transferBusyRef.current = false; setTransferBusy(false); }
+      return;
+    }
     transferBusyRef.current = true; setTransferBusy(true);
     try {
       const receipt = await executeTrialTransfer(data.operationId, previewHash, accessCode, active.current?.signal ?? new AbortController().signal);
@@ -307,6 +321,22 @@ export function useSaveflow() {
       addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "转账未取得可靠结果", errorHint: error instanceof ApiError && error.uncertain ? `结果待核实，操作编号：${data.operationId}。请勿重复提交，可重新发起转账后查询。` : "试点转账未显示为已扣款；可重新预览。" });
     } finally { transferBusyRef.current = false; setTransferBusy(false); }
   };
+  const verifyTransferOperation = async (data: BankingAgentData, code: string) => {
+    const challenge = otpChallenge;
+    if (!challenge || challenge.operationId !== data.operationId || transferBusyRef.current) return;
+    const previewHash = data.preview?.previewHash;
+    if (!data.operationId || typeof previewHash !== "string") return;
+    transferBusyRef.current = true; setTransferBusy(true); setOtpError(null);
+    try {
+      await verifyTrialVerification(data.operationId, previewHash, challenge.challengeId, code, accessCode, active.current?.signal ?? new AbortController().signal);
+      const receipt = await executeTrialTransfer(data.operationId, previewHash, accessCode, active.current?.signal ?? new AbortController().signal);
+      setOtpChallenge(null);
+      await showTransferOutcome(data, receipt);
+    } catch (error) {
+      setOtpError(error instanceof Error ? error.message : "验证码校验失败");
+    } finally { transferBusyRef.current = false; setTransferBusy(false); }
+  };
+  const cancelTransferVerification = () => { setOtpChallenge(null); setOtpError(null); };
   const confirmTransferOperation = async (data: BankingAgentData) => {
     if (isTrialPreview(data)) { await confirmTrialTransferOperation(data); return; }
     if (!data.operationId || data.operationId !== activeTransferOperationId || transferBusyRef.current) return;
@@ -435,5 +465,5 @@ export function useSaveflow() {
       void startBanking(message);
     }
   };
-  return { stage, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId) : startDemo(goal.current), canStart: ["welcome", "success", "cancelled", "clarifying", "answered"].includes(stage), canReset: canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
+  return { stage, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, otpChallenge, otpError, verifyTransferOperation, cancelTransferVerification, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId) : startDemo(goal.current), canStart: ["welcome", "success", "cancelled", "clarifying", "answered"].includes(stage), canReset: canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
 }
