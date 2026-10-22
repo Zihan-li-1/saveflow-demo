@@ -1,5 +1,7 @@
 import { getLegacyContext } from '../src/banking-core/legacy-adapter.mjs';
 import { timingSafeEqual } from 'node:crypto';
+import { understandingContext } from './understanding-context.mjs';
+import { validCalendarDate } from '../src/lib/calendar.mjs';
 
 const intents = ['create_plan', 'analyze_bills', 'subscriptions', 'clarify', 'unsupported'];
 export const context = getLegacyContext();
@@ -10,7 +12,9 @@ intent: create_plan|analyze_bills|subscriptions|clarify|unsupported;
 reply: 中文说明或追问，最多800字;
 targetAmountFen: 用户明确的目标总额（整数分）或null;
 monthlySavingFen: 用户明确的月储蓄金额（整数分）或null;
-months: 用户目标剩余月数（1至120整数）或null。
+months: 用户明确的目标剩余月数（1至120整数）或null;
+deadline: 用户目标截止日期（YYYY-MM-DD）或null，使用服务端 calendar.currentDate 和 timezone 理解相对日期，不得用模拟财务数据月份当今天。
+中文数字、混合金额和省略由你理解为整数分；例如“两千五”为250000分。不精确的“一两千”“几百”“差不多一万”不能转成任意精确金额，需要追问。超过分精度、非法日期或不确定指代必须澄清，不能四舍五入、自动修正日期或编造金额。明确的“去年”“年底”在日期已知时直接理解。截止日期支持1900至2099年；给出日历期限时填 deadline，由宿主按包含当月计算剩余月数。
 金额必须来自用户，不能编造。仅要求降低娱乐消费或调整限额时给出建议或说明当前不能执行限额修改，不要引导设置储蓄比例。消费比例储蓄规则已不支持；用户要求设置此类规则时使用 unsupported，不生成计划。用户只给目标金额但没给期限时追问期限，不能擅自补值。根据提供的今天日期将年底等期限换算为包含当月的剩余月数；过期或不清楚则追问。
 无法提供当前实现支持的建议时用unsupported或clarify，解释范围。账单分析与订阅查询只回答，不生成储蓄计划。不要在回复里自行计算每月目标，金额计算由宿主程序完成。`;
 
@@ -18,7 +22,7 @@ class ServiceError extends Error {
   constructor(code, message, status = 400) { super(message); this.code = code; this.status = status; }
 }
 function integerOrNull(value, min, max) { return value === null || (Number.isSafeInteger(value) && value >= min && value <= max); }
-export function interpret(value, userMessage = '') {
+export function interpret(value, userMessage = '', { now = Date.now, timezone = 'Asia/Shanghai' } = {}) {
   if (/(?:储蓄|存钱|自动存|消费).{0,12}(?:比例|百分之|\d+(?:\.\d+)?\s*%)|(?:餐饮|购物|娱乐|交通).{0,12}(?:储蓄规则|自动存|存\s*\d+(?:\.\d+)?\s*%)/.test(userMessage)) {
     return { intent: 'unsupported', reply: '消费比例储蓄规则已不支持。你可以设定普通储蓄目标和每月金额。', needsClarification: false, plan: null };
   }
@@ -27,16 +31,21 @@ export function interpret(value, userMessage = '') {
   }
   if (!value || !intents.includes(value.intent) || typeof value.reply !== 'string' || !value.reply.trim() || value.reply.length > 1500 ||
     !integerOrNull(value.targetAmountFen, 1, 100000000) || !integerOrNull(value.monthlySavingFen, 1, 100000000) ||
-    !integerOrNull(value.months, 1, 120) || 'saveRateBps' in value || 'category' in value) {
+    !integerOrNull(value.months, 1, 120) || (value.deadline != null && !validCalendarDate(value.deadline)) || 'saveRateBps' in value || 'category' in value) {
     throw new ServiceError('MODEL_FORMAT_ERROR', '模型结果格式不符合约定，请重新描述目标。', 502);
   }
-  const result = { intent: value.intent, reply: value.reply, needsClarification: value.intent === 'clarify', plan: null };
+  const today = understandingContext({ now, timezone }).currentDate;
+  const deadline = value.deadline ?? null;
+  const result = { intent: value.intent, reply: value.reply, needsClarification: value.intent === 'clarify', plan: null, goal: { targetAmountFen: value.targetAmountFen, deadline } };
   if (value.intent === 'create_plan') {
-    const monthly = value.monthlySavingFen ?? (value.targetAmountFen !== null && value.months !== null ? Math.ceil(Math.max(0, value.targetAmountFen - context.savedAmountFen) / value.months) : null);
+    if (deadline && deadline < today) return { ...result, needsClarification: true, reply: '目标截止日期已过，请确认新的完成日期。' };
+    const months = deadline ? (Number(deadline.slice(0, 4)) - Number(today.slice(0, 4))) * 12 + Number(deadline.slice(5, 7)) - Number(today.slice(5, 7)) + 1 : value.months;
+    if (months !== null && (months < 1 || months > 120)) return { ...result, needsClarification: true, reply: '目标期限超出演示支持的 1 至 120 个月，请确认期限。' };
+    const monthly = value.monthlySavingFen ?? (value.targetAmountFen !== null && months !== null ? Math.ceil(Math.max(0, value.targetAmountFen - context.savedAmountFen) / months) : null);
     if (monthly === null) return { ...result, needsClarification: true, reply: '请补充每月计划储蓄金额，或者目标总额及完成期限。' };
     if (monthly === 0) return { ...result, reply: `当前模拟已储蓄金额为 ¥${(context.savedAmountFen / 100).toFixed(2)}，已达到这个目标，无需创建新计划。` };
     if (monthly > context.monthlySavingCapFen || monthly > context.monthlyIncomeFen - context.totalExpenseFen) return { ...result, needsClarification: true, reply: '这个安排超过演示月度储蓄上限或模拟现金流结余。请延长期限或降低每月金额。' };
-    result.plan = { monthlySavingFen: monthly, targetAmountFen: value.targetAmountFen };
+    result.plan = { monthlySavingFen: monthly, targetAmountFen: value.targetAmountFen, deadline };
   }
   if (result.plan) {
     result.needsClarification = false;
@@ -69,7 +78,7 @@ async function readBody(request) {
     return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   } catch (error) { if (error instanceof ServiceError) throw error; throw new ServiceError('INVALID_REQUEST', '请求体必须为 JSON'); }
 }
-export async function handleAgent(request, { env = process.env, fetchImpl = fetch } = {}) {
+export async function handleAgent(request, { env = process.env, fetchImpl = fetch, now = Date.now, timezone = 'Asia/Shanghai' } = {}) {
   const requestId = crypto.randomUUID();
   const respond = (status, code, message, data) => Response.json({ code, message, requestId, ...(data ? { data } : {}) }, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
   try {
@@ -89,7 +98,7 @@ export async function handleAgent(request, { env = process.env, fetchImpl = fetc
     const upstream = await fetchImpl(settings.endpoint, {
       method: 'POST', signal, headers: { Authorization: `Bearer ${settings.key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: settings.model, stream: false, enable_thinking: false, temperature: 0.2, max_tokens: 1000, response_format: { type: 'json_object' }, messages: [
-        { role: 'system', content: `${systemPrompt}\n今天：${new Date().toISOString().slice(0, 10)}\n模拟账单摘要：${JSON.stringify(context)}` },
+        { role: 'system', content: `${systemPrompt}\n服务端 calendar：${JSON.stringify(understandingContext({ now, timezone, financialContext: context }))}\n模拟账单摘要：${JSON.stringify(context)}` },
         ...body.history, { role: 'user', content: body.message },
       ] }),
     });
@@ -102,7 +111,7 @@ export async function handleAgent(request, { env = process.env, fetchImpl = fetc
     if (choice?.finish_reason !== 'stop' || typeof choice?.message?.content !== 'string') throw new ServiceError('MODEL_FORMAT_ERROR', '模型未返回完整结果，请缩短问题后重试。', 502);
     let parsed;
     try { parsed = JSON.parse(choice.message.content); } catch { throw new ServiceError('MODEL_FORMAT_ERROR', '模型返回了无效的结构化结果，请重试。', 502); }
-    const decision = interpret(parsed, body.message);
+    const decision = interpret(parsed, body.message, { now, timezone });
     const tokens = key => Number.isSafeInteger(payload.usage?.[key]) && payload.usage[key] >= 0 ? payload.usage[key] : 0;
     return respond(200, 'OK', 'Qwen 建议已生成，业务执行仍为模拟', { ...decision, analysis: { asOf: context.asOf, currentMonth: context.currentMonth, previousMonth: context.previousMonth, dataSource: context.dataSource, totalExpenseFen: context.totalExpenseFen, subscriptionCount: context.subscriptionCount, momIncreaseFen: context.expenseIncreaseFen, categories: context.categoryChanges }, model: settings.model, usage: { inputTokens: tokens('prompt_tokens'), outputTokens: tokens('completion_tokens') } });
   } catch (error) {

@@ -1,0 +1,18 @@
+Banking persistence schema is up to date.
+✔ Postgres range and month queries share inclusive local-day boundaries and honor timezone (107.821254ms)
+✔ Postgres JSONB: driver serializes once; operation fields and seeded/executed transactions are objects (88.900182ms)
+✔ Postgres legacy JSONB: transfer/card previews and receipts survive cross-instance reads and execution (125.168978ms)
+✔ Postgres legacy transactions: month/account filters return decoded records without losing bills (86.413085ms)
+✔ Postgres legacy idempotency: same request replays; changed fingerprint/action and decisions still conflict (97.879293ms)
+✔ Postgres malformed legacy records fail closed without changing balances (73.899736ms)
+✔ Postgres B: independent Core instances share preview, confirmation, receipt and ledger (146.015617ms)
+✔ Postgres cards: a second instance and restart see the committed budget and state (208.275745ms)
+✔ Postgres scenario rules: preview, cross-instance execution, update and restart are durable (187.965531ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1188.798889

@@ -9,7 +9,7 @@
 `SAVEFLOW_BANKING_RUNTIME` 整体选择实现，默认 `trueforge`：
 
 - `trueforge`：TrueForge Agent Runtime 提出一个 ParsedIntent，由服务端验证和编排。需要 `TRUEFORGE_BASE_URL`（不带路径/查询的 HTTP(S) origin）、`TRUEFORGE_MODEL`、按部署需要配置 `TRUEFORGE_TOKEN`。Qwen 可以是该运行时注册的模型名称。
-- `legacy-qwen`：迁移期显式选择旧 Qwen 单意图解析和确定性续聊，仍经过同一服务端编排器和回复合同，需要 `DASHSCOPE_API_KEY` 等旧配置。
+- `legacy-qwen`：迁移期显式选择 Qwen 单意图理解；首轮、补充和修改均调用同一模型，仍经过同一服务端编排器和回复合同，需要 `DASHSCOPE_API_KEY` 等旧配置。
 - 其他值为配置错误。没有按句式选择实现、按请求试探多个后端或失败静默回退。旧 `SAVEFLOW_TRUEFORGE_*_ENABLED` 开关不再选择此 API 的路由。
 
 `SAVEFLOW_ACCESS_CODE`、`CONTINUATION_TOKEN_SECRET` 分别至少 16 字符。持久 Core 部署还需配置 `DATABASE_URL` 并迁移；同一部署的实例使用相同续接密钥和一致 Repository。访问码通过 `X-Saveflow-Access` 发送；服务端拒绝不同源 Origin、限流每分钟 10 次、限制 JSON 请求体 16KB。密钥不得使用 `NEXT_PUBLIC_` 前缀。
@@ -32,7 +32,21 @@
 
 首次 message 为 1–2000 字符（页面限制 500）；history 最多 12 条，每条 role 为 user/assistant、content 为 1–2000 字符。history 是不可信文本，不能授权实体、余额或确认。consent 可省略，提供时只能为 true；页面要求勾选授权。choice 只能含非空 optionId，必须携带 token，不能同时携带 message。请求不接受实体 ID、confirmed、riskLevel、operationId、工具名等额外字段。
 
-续接令牌为有效期 5 分钟的 AES-GCM 加密认证草稿，包含槽位及服务端候选映射，不是确认授权或写入幂等键。自由文本续聊由同一 TrueForge 理解器接收已认证的 action/slots/pendingSlot；结构化选项由服务端核对映射，无需额外模型调用。实体原始引用变化时删除旧选择。模型丢失已知槽位的结果被拒绝，避免把已知内容当作缺失再次询问。
+续接令牌为有效期 5 分钟的 AES-GCM 加密认证草稿，包含槽位、追问及服务端候选映射，不是确认授权或写入幂等键。自由文本续聊由当前配置的同一理解器接收已认证的 action/slots/pendingSlot/question 和候选项；结构化选项由服务端核对映射，无需额外模型调用。模型理解文本候选选择时，可在 ParsedIntent 顶层返回 `choice:{optionId}`，服务端仍须核对令牌中的候选和原始引用，模型不能提供实体 ID。实体原始引用变化时删除旧选择。补充时保留已知槽位；改为不确定值时可省略并明确标记待澄清。
+
+## 金额、日历和目标参数（第一阶段）
+
+原始自然语言直接交给模型；金额和日期校验不再对输入原文做阿拉伯数字或显式年月匹配。金额统一为 `{amount_minor:整数分,currency:"CNY"}`，保留现有预算上限、余额、风险与确认校验；无法确定的精确金额必须澄清，不能从示例或余额填值。
+
+服务端 `now:()=>毫秒时间戳` 与 `timezone` 可由宿主/测试注入，默认动态 `Date.now` 和 `Asia/Shanghai`。每轮模型获得 `calendar.currentTime/currentDate/timezone`，以及单独标识的财务 `asOf/currentMonth/availableMonths`。HTTP 用户不能指定时钟。口语日期只以当前日历为准，不能以样例数据月份为准。
+
+`bill.summary` 继续使用已有 `month` 或 `period`。日期支持 1900–2099 年；范围不超过 366 个日历日，`start_date` 和 `end_date` 均包含该时区下的全天。其他用户时区的单月使用 `period`，`month` 默认为上海时区。Repository 新增 `getTransactions({startDate,endDate,timezone})`，内存与 PostgreSQL 使用相同边界；SQL 单月查询同步修正为用户本地日期。返回的 `coverage` 和缺数据月份明确提示覆盖与新鲜度限制，无记录不代表零支出。
+
+`orchestrator.goal.slots` 新增可选 `amount`、`deadline:YYYY-MM-DD`，实际结果返回 `targetAmountFen`、`deadline`。目标需要精确值而尚不确定时可将 `amount/deadline` 放入 `missingSlots`，保留其他已知内容并续接；普通只读建议不强制提供这两项。未增加规划算法或执行权限。
+
+独立 `/api/agent` 储蓄助手也获得相同日历基准，新增结构化 `deadline` 与 `goal` 返回值；已存在的月数计算由宿主按截止日期换算，现有确认保存请求和模拟计划记录保留截止日期。MCP 的结构化参数/按钮仍可直接处理，自由文本补参由配置的理解器处理；服务不可用时明确报错，不退回固定解析。
+
+验收与限制见 [第一阶段报告](Natural-Language-Phase1.md)。`npm run verify:natural-language` 使用真实 TrueForge 服务和合成数据，独立于 `npm test` 的模型桩验证。
 
 旧试点 `tfm1`/`tfb1` 令牌返回 CONTINUATION_INVALID，必须重新开始。统一入口不暴露远端 TrueForge session ID。浏览器可恢复有效澄清草稿，但不能从存储恢复 Core 确认/执行按钮的有效状态。
 
@@ -92,4 +106,4 @@ Core risk/preview warnings 原文进入 safetyNotices，不交给模型润色。
 
 来源核验目前支持原文实体称谓、阿拉伯数字元金额（最多两位小数）、明确年月及保留的部分年月；中文数字金额、相对月份等尚未完整支持，不会猜测。多动作防护包含提示约束、单动作 schema 和保守连接词检查，不代表通用计划识别或多意图支持。实体解析仍由现有 Resolver 处理。要求清空某个已知槽位的自由文本尚不作为独立编辑协议，无法可靠保留的草稿会失败，可重新开始请求。
 
-未完成真实 TrueForge 服务/供应商部署验证；某些服务端默认配置规范化可能导致严格会话检查拒绝，需在目标服务上验收，不会为兼容性放宽权限验证。当前专项测试通过 SDK 协议桩验证调用和拒绝行为，不等于真实服务验收。检查记录见 [联调与验证](Banking-Agent-Integration.md)。
+2026-10-22 已针对当前本地 TrueForge 服务实测会话配置及两轮账单请求：显式设置 sandbox.fileDownloads=false，避免服务补入默认 true 后触发严格配置比较；终态消息仅忽略 createdAt 的时间戳差异，内容、消息编号、工具调用及其他字段仍须与流式事件一致。真实“查账单”→年月澄清→“2026年8月”→账单结果已通过，不代表浏览器、其他动作或部署环境均已验收。检查记录见 [联调与验证](Banking-Agent-Integration.md)。

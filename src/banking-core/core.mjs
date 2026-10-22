@@ -1,4 +1,5 @@
 // @ts-check
+import { validCalendarDate } from '../lib/calendar.mjs';
 import { createFinancialContext } from './repository.mjs';
 import { BankingError, assertFen, assertId, canonical } from './errors.mjs';
 import { OperationStore } from './operation-store.mjs';
@@ -498,6 +499,7 @@ export function createBankingCore(options = {}) {
       if ('saveRateBps' in input || 'savingRate' in input || 'category' in input) throw new BankingError('VALIDATION_ERROR', '消费比例储蓄规则已不支持');
       if (input.monthlySavingFen > (await repository.getDemoSettings()).monthlySavingCapFen) throw new BankingError('VALIDATION_ERROR', '月金额超出模拟范围');
       if (input.targetAmountFen !== undefined && input.targetAmountFen !== null) assertFen(input.targetAmountFen);
+      if (input.deadline != null && !validCalendarDate(input.deadline)) throw new BankingError('VALIDATION_ERROR', '目标截止日期无效');
       const fingerprint = store.fingerprint('legacy.create-plan', input);
       const existing = await store.get(ownerId, operationId);
       if (existing) {
@@ -506,7 +508,7 @@ export function createBankingCore(options = {}) {
         return existing.receipt;
       }
       /** @type {import('./contracts').OperationRecord} */
-      const record = { operationId, action: 'legacy.create-plan', fingerprint, state: 'succeeded' };
+      const record = { operationId, action: 'legacy.create-plan', fingerprint, state: 'succeeded', legacyPlan: { monthlySavingFen: input.monthlySavingFen, targetAmountFen: input.targetAmountFen ?? null, deadline: typeof input.deadline === 'string' ? input.deadline : null } };
       record.receipt = receiptFor(record, 'succeeded', '模拟储蓄计划已生效；本次未发起支付。');
       await save(record); return structuredClone(record.receipt);
     },

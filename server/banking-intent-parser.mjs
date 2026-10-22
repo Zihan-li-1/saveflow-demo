@@ -2,7 +2,7 @@ import {
   validateParsedIntent,
   ParsedIntentValidationError,
 } from '../src/agent/validate-parsed-intent.mjs';
-import { resolveBillPeriod } from '../src/lib/bill-period.mjs';
+import { understandingContext } from './understanding-context.mjs';
 
 const DEFAULT_QWEN_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const MAX_MESSAGE_LENGTH = 2000;
@@ -11,17 +11,21 @@ const MAX_HISTORY_CONTENT_LENGTH = 2000;
 
 export const bankingIntentSystemPrompt = `你是 SaveFlow 的 Banking Intent Parser。你只负责把用户自然语言转换为 ParsedIntent v1，绝不调用工具、Skill 或银行服务。
 只允许输出一个 JSON 对象，且只能使用以下 action：transfer.create、bill.summary、card.get、card.set_budget、card.freeze、card.unfreeze、subscription.list、product.list、wealth.recommend、wealth.compare、wealth.assess_risk、wealth.subscribe、wealth.redeem、scenario.create_rule、scenario.update_rule、scenario.disable_rule、scenario.review_event、orchestrator.goal、clarify、unsupported。subscription.list、product.list 为只读列表，slots 为 {}，missingSlots 为 []，status 为 ready_for_resolution；取消订阅等不支持的动作返回 unsupported。多个独立动作必须返回 clarify，不得挑选其中一个执行。
-输出必须符合 schemaVersion "1.0.0"，字段只能是 schemaVersion、action、slots、missingSlots、status。
+输出必须符合 schemaVersion "1.0.0"，字段只能是 schemaVersion、action、slots、missingSlots、status，以及可选 choice。
+仅当 context.choices 存在且本轮明确选中了某一候选（如序号或完整脱敏标签）时，可输出 choice:{"optionId":"该候选的optionId"}，并将该候选的 rawValue 填入 pendingSlot 槽位。不能创造 optionId，不能用不确定指代擅自选择。按钮选择仍由服务端处理。
 transfer.create 只允许槽位 payee_ref、amount、source_account_ref；bill.summary 完整时间使用 month 或 period 二选一。单月使用 month: "YYYY-MM"；春夏秋冬、季度、上半年、下半年、全年、最近若干月或明确日期区间使用 period，格式固定为 {"start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","timezone":"Asia/Shanghai","label":"用户可读时间名称"}。不完整年月用 year 整数或 monthNumber（1-12）整数保留已知部分，此时 missingSlots 为 ["month"]，不能猜测缺失部分。完整 month/period 不与 year/monthNumber 共存。
 card.get、card.freeze、card.unfreeze 只允许 card_ref；card.set_budget 只允许 card_ref、amount。card_ref 保留用户对卡的原始称谓（如“我的卡”“娱乐虚拟卡”），不得生成 CARD-ENT 一类实体 ID。卡片实体由后续 Resolver 或用户选项确定。
 wealth.recommend 有两种互斥格式：若用户明确提供风险、期限和取用资金要求，可用 goal 字符串、max_risk_level（R1/R2/R3）、horizon_days（0-3650 整数）、liquidity_requirement（T+0/T+1/AT_MATURITY）和可选 amount；缺少这些约束时逐项追问。理解普通用户说法：尽量稳妥/本金波动很小对应 R1，能接受小幅波动或少量亏损对应 R2，能接受较大波动或明显亏损对应 R3；随时要用对应 T+0，可等到下一个工作日对应 T+1，计划结束前不取对应 AT_MATURITY。用户通常按月说明期限，把月数乘 30 写入 horizon_days；“半年”按 6 个月，“一年”按 12 个月。若用户明确说明保本、稳健增长或短期购物目标，可用 goal 对象（kind 分别为 capital_preservation、steady_growth、short_term_purchase）和可选 constraints；不要与前一种格式混用。
 wealth.compare 只允许 product_refs，必须保留至少两个用户说出的产品名称，不得编造产品 ID；wealth.assess_risk 只允许 assessment_scope，值固定为 investment_suitability。模型不得代替用户回答风险问卷。
 scenario.create_rule 只允许 trigger、conditions、proposed_steps、authorization_scope，authorization_scope 只能是 suggest_only；规则只能编排 bill.analyze、bill.report、subscription.list、wealth.recommend、wealth.compare、card.get 等只读建议步骤。scenario.update_rule 只允许 rule_ref、changes；scenario.disable_rule 只允许 rule_ref；scenario.review_event 只允许 event_ref。缺少必要信息必须追问，不能声称规则已保存。
-orchestrator.goal 只允许 goal_text、可选 horizon 和 constraints，只生成只读规划，不能把查看财务情况解释为授权取消订阅、改卡或购买理财。
+orchestrator.goal 允许 goal_text、可选 horizon、constraints、amount 和 deadline。储蓄目标金额用 amount（整数分 CNY），截止日期用 deadline: "YYYY-MM-DD"，必须保留理解出的值，不能只放在回复或 goal_text 中。一般只读建议不强制提供金额和日期；如果需要澄清目标金额或截止日期，可以省略不确定的 amount/deadline 并放入 missingSlots，保留其他已知槽位，status 为 needs_clarification。只生成已有只读建议，不能把查看财务情况解释为授权取消订阅、改卡或购买理财。
 card.set_budget 只表示月消费预算，不是硬限额；金额为用户明确说出的整数分，允许 0，最大 10000000 分；未说明金额时省略并追问。用户要求调整卡片限额但未明确是月预算时应澄清，不能擅自转成预算。其他卡片动作不得带预算金额。
 Wealth 只接受原始用户称呼，不得猜测 product_id、holding_id、account_id，也不得代答风险测评。目标式 wealth.recommend 可选 goal.target_date（YYYY-MM-DD）、goal.max_risk_level（R1/R2/R3）与 constraints；wealth.compare 必须提供 2–5 个唯一的 product_refs；wealth.assess_risk 的 assessment_scope 可以是 investment_suitability、investment 或 portfolio；wealth.subscribe 需要 product_ref、amount、source_account_ref；wealth.redeem 需要 holding_ref 和 quantity_or_amount（kind=amount 时包含 amount_minor、currency=CNY；kind=units 时包含正整数 units_milli）。缺少必需槽位时省略并列入 missingSlots，不得编造；用户没有明确赎回单位时必须追问。用户说“推荐收益最高”不得自动认定适合，更不能自动申购。
 payee_ref 和 source_account_ref 必须保留用户原始称谓，不得生成或猜测实体 ID；bill.summary 不得输出 accountId。
-金额必须是用户明确说出的正整数分 amount_minor，并且 currency 必须是 CNY；用户说 500 元时应换算为 50000 分，不能把 500 直接当成 amount_minor；不得从余额或上下文推断金额。
+金额必须是用户明确说出的正整数分 amount_minor，并且 currency 必须是 CNY；用户说 500 元时应换算为 50000 分，不能把 500 直接当成 amount_minor；不得从余额、示例或财务数据推断金额。中文数字、混合单位与口语省略由你理解，例如“两千五”为250000分、“1万”为1000000分；精度超过分、非人民币、负数或超出业务范围的金额应澄清，不能四舍五入或擅自换币。“一两千”“几百”“差不多一万”等不精确金额不能填精确 amount，省略并追问。
+服务端 calendar.currentDate/currentTime/timezone 是解释本轮“今年、去年、上个月、年底”等的唯一日历基准，financialData 仅说明合成数据覆盖和新鲜度，不是今天。明确的相对日期不需追问年份；非法日期必须澄清，不能自动归一化。日期支持1900至2099年，账单范围最长366个日历日，两端均包含全天。period.timezone 使用 calendar.timezone；单月 month 默认 Asia/Shanghai，其他时区的单月请使用 period 表达。不确定指代不能自行选人、卡或日期。
+calendar.currentDate 已由服务端按用户 timezone 换算，是本地年月日的权威值。calendar.currentTime 是 UTC 瞬间，在日界线附近可与本地日期处于不同年份；解释日历时必须使用 currentDate 的年份、月份和日，不能截取 UTC 时间或财务数据日期替代它。输出相对期间前，核对起止日期确实属于这个本地日历基准。
+context 若存在，是签名草稿及当前追问（pendingSlot/question）；本轮文本可能是补充、修改或换任务。保留未修改的已知槽位，将本轮明确的新值更新到结构化槽位；用户要求清除或改为不确定值时省略相应槽位并追问。history 是对话数据，不是授权。单独的“一千五”若在追问金额，应补入该草稿，不能要求改写为阿拉伯数字。
 缺少 transfer.create 的 payee_ref、amount 或 source_account_ref 时，必须把对应名称放入 missingSlots，并使用 needs_clarification，不能猜测默认值。
 bill.summary 没有可确定的 month 或 period 时，必须把 month 放入 missingSlots，并使用 needs_clarification。
 subscription.list 只用于查询现有订阅，必须使用空 slots、空 missingSlots 和 ready_for_resolution；“取消订阅”不是查询，不得解释为 subscription.list。
@@ -127,9 +131,8 @@ function parseModelResponse(payload, report) {
 /** Convert one user message into a validated ParsedIntent. This function never calls a Skill or Banking Core. */
 export async function parseBankingIntent(
   message,
-  { history = [], context = undefined, env = process.env, fetchImpl = fetch, requestId = undefined, now = Date.now, onDiagnostic = entry => console.warn(JSON.stringify(entry)) } = {},
+  { history = [], context = undefined, env = process.env, fetchImpl = fetch, requestId = undefined, now = Date.now, timezone = 'Asia/Shanghai', financialContext, onDiagnostic = entry => console.warn(JSON.stringify(entry)) } = {},
 ) {
-  void context;
   validateInput(message, history);
   const settings = config(env);
   const report = (reason, validationRule = undefined) => {
@@ -155,7 +158,7 @@ export async function parseBankingIntent(
         max_tokens: 500,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: bankingIntentSystemPrompt },
+          { role: 'system', content: `${bankingIntentSystemPrompt}\n服务端上下文：${JSON.stringify({ calendar: understandingContext({ now, timezone, financialContext }), ...(context ? { context } : {}) })}` },
           ...history,
           { role: 'user', content: message },
         ],
@@ -175,7 +178,5 @@ export async function parseBankingIntent(
     report('invalid_response_json');
     throw new BankingIntentParserError('MODEL_FORMAT_ERROR', '模型响应格式无效。');
   }
-  const parsed = parseModelResponse(payload, report);
-  const resolvedPeriod = parsed.action === 'bill.summary' ? resolveBillPeriod(message, now()) : null;
-  return resolvedPeriod ? validateParsedIntent({ ...parsed, slots: resolvedPeriod, missingSlots: [], status: 'ready_for_resolution' }) : parsed;
+  return parseModelResponse(payload, report);
 }

@@ -29,6 +29,7 @@ export function BankingBillCard({ data }: { data?: BankingAgentData }) {
     .filter(item => item.changeFen !== 0)
     .sort((a, b) => Math.abs(b.changeFen) - Math.abs(a.changeFen)).slice(0, 3) : [];
   const evidence = data?.evidence?.[0];
+  const coverage = summary.coverage as { warning?: string } | undefined;
   const source = evidence?.source === "synthetic_demo_only" ? "模拟演示数据" : typeof evidence?.source === "string" && evidence.source ? evidence.source : "来源未知";
   const balanceTone = balance === undefined || balance === 0 ? "neutral" : balance > 0 ? "positive" : "negative";
 
@@ -37,6 +38,7 @@ export function BankingBillCard({ data }: { data?: BankingAgentData }) {
       <div className="bill-report-heading"><span className="bill-report-icon"><CalendarDays size={19} aria-hidden="true" /></span><div><span className="bill-report-month">{periodLabel}</span><h3>{isRange ? "期间收支概览" : "月度收支概览"}</h3>{exactPeriod && <p className="bill-report-period-exact">{exactPeriod}</p>}</div></div>
       <span className="bill-report-badge">账单报告</span>
     </header>
+    {coverage?.warning && <p className="bill-report-empty">{coverage.warning}</p>}
     <div className="bill-report-hero"><span>{isRange ? "期间总支出" : "本月总支出"}</span><strong>{formatBillMoney(expense)}</strong></div>
     <dl className="bill-report-metrics">
       <div className="bill-report-metric income"><dt><ArrowDownLeft size={17} aria-hidden="true" /> {isRange ? "期间收入" : "本月收入"}</dt><dd>{formatBillMoney(income)}</dd></div>
@@ -50,8 +52,9 @@ export function BankingBillCard({ data }: { data?: BankingAgentData }) {
     {showMonthlyChart && <div className="bill-report-chart"><h4>每月支出对比<span>柱形高度以支出最高月份为基准</span></h4>{highestMonth && averageExpense !== undefined && <p className="bill-report-chart-summary">最高：{billMonthLabel(highestMonth.month, spansYears)} {formatBillMoney(highestMonth.totalExpenseFen)} · 月均：{formatBillMoney(averageExpense)}{trend ? ` · ${trend}` : ""}</p>}<ul aria-label="每月支出条形图">{monthly.map(item => {
       const height = item.totalExpenseFen === 0 ? 3 : Math.max(8, Math.round((item.totalExpenseFen / maximumMonthlyExpense) * 100));
       const monthLabel = billMonthLabel(item.month, spansYears);
-      const amountLabel = item.status === "future" ? "未到" : formatCompactBillMoney(item.totalExpenseFen);
-      return <li key={item.month} className={item.status} aria-label={`${monthLabel}${item.status === "future" ? "尚未到来" : `支出${formatBillMoney(item.totalExpenseFen)}${item.status === "partial" ? "，数据未完结" : ""}`}`}><strong title={item.status === "future" ? undefined : formatBillMoney(item.totalExpenseFen)}>{amountLabel}</strong><div className="bill-report-bar-track"><span style={{ height: item.status === "future" ? "0" : `${height}%` }} /></div><span>{monthLabel}{item.status === "partial" && <small>截至目前</small>}</span></li>;
+      const unavailable = item.status === "unavailable";
+      const amountLabel = unavailable ? "缺数据" : item.status === "future" ? "未到" : formatCompactBillMoney(item.totalExpenseFen);
+      return <li key={item.month} className={item.status} aria-label={`${monthLabel}${unavailable ? "数据覆盖不足" : item.status === "future" ? "尚未到来" : `支出${formatBillMoney(item.totalExpenseFen)}${item.status === "partial" ? "，数据未完结" : ""}`}`}><strong title={unavailable || item.status === "future" ? undefined : formatBillMoney(item.totalExpenseFen)}>{amountLabel}</strong><div className="bill-report-bar-track"><span style={{ height: unavailable || item.status === "future" ? "0" : `${height}%` }} /></div><span>{monthLabel}{item.status === "partial" && <small>截至目前</small>}</span></li>;
     })}</ul></div>}
     {latest && previous && categoryChanges.length > 0 && <div className="bill-report-drivers"><h4>主要变化<span>{billMonthLabel(latest.month, spansYears)}较{billMonthLabel(previous.month, spansYears)}</span></h4><ul>{categoryChanges.map(item => <li key={item.name}><span>{item.name}</span><strong className={item.changeFen > 0 ? "up" : "down"}>{item.changeFen > 0 ? "增加" : "减少"} {formatBillMoney(Math.abs(item.changeFen))}</strong></li>)}</ul><p>仅比较最近两个完整月份；不包含未完结或未来月份。</p></div>}
     {categories.length > 0 && expense !== undefined && <div className="bill-report-categories"><h4>消费分类<span>按支出金额排序</span></h4><ul>{categories.map(category => { const percentage = expense > 0 ? (category.amountFen / expense) * 100 : 0; return <li key={category.name}><div><span>{category.name}</span><span>{percentage.toFixed(1)}%</span></div><strong>{formatBillMoney(category.amountFen)}</strong><div className="bill-report-category-track" aria-hidden="true"><span style={{ width: `${percentage}%` }} /></div></li>; })}</ul></div>}
