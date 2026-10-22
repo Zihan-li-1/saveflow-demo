@@ -210,3 +210,22 @@ test('SDK streaming deltas are merged and tool call fragments are rejected', asy
   assert.equal(intent.slots.month, '2026-08');
   await assert.rejects(parseTrueforgeBankingIntent('查2026年8月账单', { env, client: createBankingRuntimeClient({ env, sdk: streaming(true) }) }), { code: 'TRUEFORGE_AGENT_POLICY_ERROR' });
 });
+
+
+test('merged bill periods and wealth comparisons pass through the unified runtime and styled reply envelope', async () => {
+  const cases = [
+    ['查询2026年上半年账单', 'bill.summary', { period: { start_date: '2026-01-01', end_date: '2026-06-30', timezone: 'Asia/Shanghai', label: '2026年上半年' } }, 'bill_result'],
+    ['比较模拟灵活现金 A与模拟稳健现金 B', 'wealth.compare', { product_refs: ['模拟灵活现金 A', '模拟稳健现金 B'] }, 'wealth_comparison'],
+  ];
+  for (const [message, action, slots, status] of cases) {
+    const client = runtime(() => buildParsedIntent(action, slots));
+    const result = await post({ message, replyStyle: 'professional' }, { trueforgeRuntimeClient: client });
+    assert.equal(result.httpStatus, 200, JSON.stringify(result));
+    assert.equal(result.data.status, status); assert.equal(result.reply.style, 'professional');
+    assert.equal(client.seen.length, 1);
+    if (action === 'bill.summary') {
+      assert.equal(result.data.data.period.startDate, '2026-01-01');
+      assert.equal(result.data.data.monthlyBreakdown.length, 6);
+    }
+  }
+});

@@ -1,4 +1,4 @@
-import { dispatchParsedIntent, handleBillSummary, handleCard, handleTransfer, prepareTransferPreview, transferRepository } from '../src/agent/runtime.mjs';
+import { dispatchParsedIntent, handleBillSummary, handleCard, handleGoal, handleTransfer, prepareTransferPreview, transferRepository } from '../src/agent/runtime.mjs';
 import { issueContinuationToken, verifyContinuationToken } from '../src/agent/clarification/continuation-token.mjs';
 import { resolveChoice } from '../src/agent/clarification/choice-resolver.mjs';
 import { buildParsedIntent, mergeSlots } from '../src/agent/clarification/merge-intent.mjs';
@@ -6,6 +6,14 @@ import { isBillTask, isCardTask, isTransferTask, parseClarificationAnswer } from
 import { billClarificationQuestion } from '../src/lib/trueforge-routing.mjs';
 import { validateParsedIntent } from '../src/agent/validate-parsed-intent.mjs';
 import { dispatchBanking } from '../src/banking-core/dispatch.mjs';
+import { createWealthSkill } from '../src/skills/wealth/wealth-skill.mjs';
+import { createInMemoryScenarioStore, createScenarioSkill } from '../src/skills/scenario/scenario-skill.mjs';
+
+const scenarioStores = new Map();
+function scenarioStoreFor(scope) {
+  if (!scenarioStores.has(scope)) scenarioStores.set(scope, createInMemoryScenarioStore([{ id: 'event_balance_2026_09_01', type: 'balance_changed', trusted: true, occurred_at: '2026-09-01T00:00:00+08:00', source: 'synthetic_demo_event_bus' }]));
+  return scenarioStores.get(scope);
+}
 
 function errorData(code, message) {
   return { status: 'error', error: { code, message } };
@@ -34,6 +42,20 @@ const clarificationQuestions = {
   source_account_ref: '要从哪个账户转出？',
   payee_ref: '要转给谁？',
   card_ref: '请选择要查看或操作的卡片。',
+  goal: '请说明理财目标。',
+  max_risk_level: '请说明可接受的最高风险等级：R1、R2 或 R3。',
+  horizon_days: '请说明计划持有多少天。',
+  liquidity_requirement: '请说明流动性要求：T+0、T+1 或持有到期。',
+  product_refs: '请提供至少两个要比较的理财产品名称。',
+  assessment_scope: '是否要开始投资适当性风险测评？',
+  trigger: '请说明规则在什么事件或日期触发。',
+  conditions: '请说明规则生效条件。',
+  proposed_steps: '请说明触发后希望获得哪些只读建议。',
+  authorization_scope: '当前规则只允许 suggest_only（仅生成建议），请确认。',
+  rule_ref: '请提供要修改或停用的规则编号。',
+  changes: '请说明要修改的规则内容。',
+  event_ref: '请提供要复核的可信事件编号。',
+  goal_text: '请说明希望分析或规划的财务目标。',
 };
 
 function questionFor(action, slot, message, slots = {}) {
@@ -51,8 +73,8 @@ function tokenError(error) {
   return Object.assign(new Error(error instanceof Error ? error.message : '续接凭据无效'), { code: 'CONTINUATION_INVALID', status: 400 });
 }
 
-function issueState({ action, slots, pendingSlot, choices = [], selections = {}, env, now }) {
-  return issueContinuationToken({ action, slots, pendingSlot, choices, selections }, continuationSecret(env), now());
+function issueState({ action, slots, pendingSlot, choices = [], selections = {}, operation, env, now }) {
+  return issueContinuationToken({ action, slots, pendingSlot, choices, selections, operation }, continuationSecret(env), now());
 }
 
 async function accountChoices(repository) {
@@ -112,10 +134,17 @@ function switchesTask(message, continuation) {
 /** Shared clarification and preview workflow. The only Core capability used is prepare(). */
 export async function runBankingConversation(body, {
   core, repository = core.repository, env = process.env, now = Date.now,
-  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, requestId = crypto.randomUUID(), origin = 'user_requested', understandContinuation = false,
+  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, requestId = crypto.randomUUID(), origin = 'user_requested', understandContinuation = false, scenarioHandler, scenarioScope = 'fixed_mock_user',
 }) {
   let replyContext = {};
   const reply = (httpStatus, code, message, data) => ({ httpStatus, code, message, data, replyContext });
+  const wealthHandler = raw => createWealthSkill(repository)(raw);
+  const eventStore = scenarioStoreFor(scenarioScope);
+  const scenarioStore = { ...eventStore, getRule: ruleId => core.getScenarioRule(ruleId) };
+  const activeScenarioHandler = scenarioHandler ?? createScenarioSkill({ store: scenarioStore, contextProvider: async () => {
+    const [context, accounts, subscriptions] = await Promise.all([repository.getContextInfo(), repository.getAccounts(), repository.getSubscriptions()]);
+    return { as_of: context.asOf, available_balance_minor: accounts.filter(item => item.status === 'active').reduce((sum, item) => sum + item.availableBalanceFen, 0), active_subscription_count: subscriptions.filter(item => item.status === 'active').length };
+  } });
   if (typeof continuationSecret(env) !== 'string' || continuationSecret(env).length < 16) {
     throw Object.assign(new Error('续接令牌密钥未配置'), { code: 'CONTINUATION_CONFIG_ERROR', status: 503 });
   }
@@ -140,9 +169,25 @@ export async function runBankingConversation(body, {
     try { continuation = verifyContinuationToken(body.continuationToken, continuationSecret(env), now()); }
     catch (error) { throw tokenError(error); }
     replyContext = { slots: continuation.slots };
-    if (body.message && /^(?:确认|确认转账|确认执行|执行|同意)[。！!]?\s*$/.test(body.message.trim())) throw inputError('CONFIRMATION_REQUIRED', '聊天文字不能确认执行，请在页面核对预览并完成所需确认与验证。', 403);
-    if (body.message && /^(?:取消|取消操作|取消本次操作|不用了)[。！!]?\s*$/.test(body.message.trim())) return reply(200, 'OK', '本次会话已取消，未执行资金或卡片操作。', { status: 'cancelled', action: continuation.action });
+    if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:确认|确认转账|确认执行|执行|同意)[。！!]?\s*$/.test(body.message.trim())) throw inputError('CONFIRMATION_REQUIRED', '聊天文字不能确认执行，请在页面核对预览并完成所需确认与验证。', 403);
+    if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:取消|取消操作|取消本次操作|不用了)[。！!]?\s*$/.test(body.message.trim())) return reply(200, 'OK', '本次会话已取消，未执行资金或卡片操作。', { status: 'cancelled', action: continuation.action });
     if (expectedAction && continuation.action !== expectedAction) throw Object.assign(new Error('续接凭据与当前工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
+    if (continuation.pendingSlot === '__scenario_confirmation') {
+      if (!continuation.operation) throw inputError('CONTINUATION_INVALID', '规则操作续接信息无效', 400);
+      const answer = String(body.message || '').trim();
+      if (/^(?:取消|拒绝|不确认|算了)[。！]?$/.test(answer)) {
+        const decision = await core.decide(continuation.operation.operationId, { previewHash: continuation.operation.previewHash, decision: 'reject', confirmedStepIds: [] });
+        if (!decision.ok) return reply(statusFor(decision.error.code), decision.error.code, decision.error.message, { status: 'core_error', action: continuation.action, operationId: continuation.operation.operationId, error: decision.error });
+        return reply(200, 'OK', '已取消规则变更，未保存任何修改', { status: 'cancelled', action: continuation.action, operationId: continuation.operation.operationId });
+      }
+      if (!/^(?:确认|确认保存|同意|保存规则)[。！]?$/.test(answer)) return clarificationResponse(reply, { action: continuation.action, slot: '__scenario_confirmation', question: '请回复“确认保存”或“取消”。', slots: continuation.slots, selections: {}, env, now, source: 'scenario_preview' });
+      const decision = await core.decide(continuation.operation.operationId, { previewHash: continuation.operation.previewHash, decision: 'confirm', confirmedStepIds: continuation.operation.stepIds });
+      if (!decision.ok) return reply(statusFor(decision.error.code), decision.error.code, decision.error.message, { status: 'core_error', action: continuation.action, operationId: continuation.operation.operationId, error: decision.error });
+      const executed = await core.execute(continuation.operation.operationId, continuation.operation.previewHash);
+      if (!executed.ok) return reply(statusFor(executed.error.code), executed.error.code, executed.error.message, { status: 'core_error', action: continuation.action, operationId: continuation.operation.operationId, error: executed.error });
+      const effect = executed.data.effects?.[0];
+      return reply(200, 'OK', '场景规则已保存', { status: 'scenario_rule', action: continuation.action, operationId: continuation.operation.operationId, receipt: executed.data, data: { rule: effect?.after, execution_policy: '规则只生成建议；写操作仍须另行预览并确认。' } });
+    }
     if (understandContinuation && body.message) {
       parsed = validateParsedIntent(await parseIntent(body.message, { history: [], env, fetchImpl, requestId,
         context: { action: continuation.action, slots: continuation.slots, pendingSlot: continuation.pendingSlot } }));
@@ -201,6 +246,9 @@ export async function runBankingConversation(body, {
     billHandler: intent => handleBillSummary(intent, repository),
     transferHandler: intent => handleTransfer(intent, transferRepository(repository, selections)),
     cardHandler: intent => handleCard(intent, repository, selections),
+    wealthHandler,
+    scenarioHandler: activeScenarioHandler,
+    goalHandler: intent => handleGoal(intent, repository),
   };
   const dispatched = await dispatchParsedIntent(parsed, dependencies);
   const prepareTransfer = typeof core.prepare === 'function'
@@ -208,8 +256,18 @@ export async function runBankingConversation(body, {
     : { prepare: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'Banking Core prepare 未配置', uncertain: true } }) };
   const result = await prepareTransferPreview(dispatched, prepareTransfer);
 
-  if (result.ok && result.kind === 'bill_result') return reply(200, 'OK', '账单统计已生成', { status: 'bill_result', action: result.action, data: { ...result.data, month: parsed.slots.month }, evidence: result.evidence });
+  if (result.ok && result.kind === 'bill_result') return reply(200, 'OK', '账单统计已生成', { status: 'bill_result', action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && result.kind === 'card_result') return reply(200, 'OK', '卡片信息已查询', { status: 'card_result', action: result.action, data: result.data, evidence: result.evidence });
+  if (result.ok && ['wealth_recommendation', 'wealth_comparison', 'risk_assessment_required'].includes(result.kind)) return reply(200, 'OK', result.kind === 'wealth_comparison' ? '理财产品对比已生成' : result.kind === 'wealth_recommendation' ? '理财条件筛选已生成' : '需要完成风险测评', { status: result.kind, action: result.action, data: result.data, evidence: result.evidence });
+  if (result.ok && result.kind === 'goal_plan') return reply(200, 'OK', '只读财务规划已生成', { status: 'goal_plan', action: result.action, data: result.data, evidence: result.evidence });
+  if (result.ok && result.kind === 'scenario_event_review') return reply(200, 'OK', '可信事件复核已生成', { status: 'scenario_event_review', action: result.action, data: result.data, evidence: result.evidence });
+  if (result.ok && result.kind === 'scenario_action_request') {
+    const prepared = await core.prepare(result.data.request);
+    if (!prepared.ok) return reply(statusFor(prepared.error.code), prepared.error.code, prepared.error.message, { status: 'core_error', action: result.action, ...(prepared.operationId ? { operationId: prepared.operationId } : {}), error: prepared.error });
+    const operation = { operationId: prepared.data.operationId, previewHash: prepared.data.preview.previewHash, stepIds: prepared.data.preview.stepIds };
+    const continuationToken = issueState({ action: result.action, slots: parsed.slots, pendingSlot: '__scenario_confirmation', operation, env, now });
+    return reply(200, 'OK', '规则变更正式预览已生成，尚未保存', { status: 'scenario_rule_preview', action: result.action, operationId: prepared.data.operationId, preview: prepared.data.preview, risk: prepared.data.risk, data: { change: result.data.change, rule: prepared.data.preview.exactEffects[0]?.after, requires_confirmation: true }, continuationToken });
+  }
   if (result.ok && result.kind === 'card_action_request') {
     const prepared = await core.prepare(result.data.request);
     if (!prepared.ok) return reply(statusFor(prepared.error.code), prepared.error.code, prepared.error.message, { status: 'core_error', action: result.action, ...(prepared.operationId ? { operationId: prepared.operationId } : {}), error: prepared.error });

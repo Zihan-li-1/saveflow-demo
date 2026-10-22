@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { getConfiguredBankingCore } from '../src/banking-core/postgres-store.mjs';
 import { BankingIntentParserError, parseBankingIntent as defaultParseBankingIntent } from './banking-intent-parser.mjs';
 import { ParsedIntentValidationError } from '../src/agent/validate-parsed-intent.mjs';
@@ -112,7 +112,8 @@ export async function handleBankingAgent(
     if (/^tf[mb]1\./.test(body?.continuationToken || '')) throw Object.assign(new Error('Retired continuation'), { code: 'CONTINUATION_INVALID', status: 400, userMessage: '旧试点会话已失效，请开始新请求。' });
     const core = options.core ?? await getConfiguredBankingCore(env);
     const repository = options.repository ?? core.repository;
-    const result = await runBankingConversation(body, { core, repository, env, now, parseIntent, fetchImpl, requestId, understandContinuation: implementation === 'trueforge' });
+    const scenarioScope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
+    const result = await runBankingConversation(body, { core, repository, env, now, parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope, understandContinuation: implementation === 'trueforge' });
     const data = result.data?.recovery ? { ...result.data, recovery: { ...result.data.recovery, continuationToken: result.data.continuationToken } } : result.data;
     return reply(result.httpStatus, result.code, result.message, data, result.replyContext);
   } catch (error) {

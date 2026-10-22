@@ -4,6 +4,7 @@
 前两条主链路的接口与验收约定见 [本轮开发交接契约：转账预览安全与双月账单分析](iteration-handoff-transfer-bill.md)。
 A 负责合同、解析、校验、路由、HTTP 整合及解析与拒绝执行测试；C 负责订阅 handler 的业务测试；D 负责页面测试。
 E 原分工为 Wealth + Scenario，可提供少量跨场景样例，不承担订阅整套测试，也不作为订阅接入的前置确认人。
+E 第一阶段已在当前分支接入 `wealth.recommend`、`wealth.compare`、`wealth.assess_risk`、`scenario.create_rule/update_rule/disable_rule/review_event` 与 `orchestrator.goal` 的单意图解析、严格校验、Agent 路由、HTTP 响应和页面只读卡片。理财推荐当前明确为基于用户声明约束的条件筛选，不代表已完成正式适当性评估；申购与赎回仍返回 unsupported。场景规则变更现在统一经过 Banking Core 正式预览、精确确认或取消、幂等执行和回执；规则支持 PostgreSQL 持久化，并用版本与预览代次阻止旧预览覆盖新状态。生产部署必须执行 `003_scenario_rules.sql`；可信事件复核仍只生成建议，实际事件调度器尚未接入。
 订阅动作仍待前两条主链路验收及 B、C、D 接口确认后注册。卡片查询、月消费预算、冻结和解冻已接入解析器、Agent、Core 正式预览、独立页面确认、执行回执和持久化适配，范围见 [卡片查询与月预算操作](Card-Actions.md)。跨实例数据库验收需配置 `BANKING_TEST_DATABASE_URL` 后运行测试。当前保持 `schemaVersion: "1.0.0"` 单意图结构，不宣称实现目标合同的多意图 `1.1.0`。
 
 | 用户要做的事 | action ID / 含义 | 负责成员 | 当前实现与是否可调用 | 本轮状态 | 缺少的能力 |

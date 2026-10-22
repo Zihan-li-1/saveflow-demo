@@ -16,7 +16,7 @@ async function fixture(t) {
   const cores = [];
   t.after(async () => {
     for (const core of cores) await core.close();
-    for (const table of ['banking_transactions', 'banking_operations', 'banking_cards', 'banking_accounts']) {
+    for (const table of ['banking_scenario_rules', 'banking_transactions', 'banking_operations', 'banking_cards', 'banking_accounts']) {
       await sql.unsafe(`DELETE FROM ${table} WHERE owner_id = $1`, [source.user.id]);
     }
     await sql.end({ timeout: 5 });
@@ -191,4 +191,33 @@ test('Postgres cards: a second instance and restart see the committed budget and
     if (!firstClosed) await first.close();
     await second.close();
   }
+});
+
+test('Postgres scenario rules: preview, cross-instance execution, update and restart are durable', { skip: !connectionString }, async t => {
+  const { core: first, open } = await fixture(t);
+  const second = await open();
+  const request = {
+    action: 'scenario.create_rule',
+    input: {
+      trigger: { type: 'financial_event', value: 'balance_changed' },
+      conditions: { balance_below_minor: 100000 },
+      proposed_steps: [{ action: 'bill.analyze', parameters: { period: 'last_30_days' } }],
+      authorization_scope: 'suggest_only',
+    },
+  };
+  const prepared = value(await first.prepare(request));
+  const ruleId = prepared.preview.exactEffects[0].ruleId;
+  assert.equal(await second.getScenarioRule(ruleId), undefined);
+  value(await second.decide(prepared.operationId, { previewHash: prepared.preview.previewHash, decision: 'confirm', confirmedStepIds: prepared.preview.stepIds }));
+  const receipt = value(await second.execute(prepared.operationId, prepared.preview.previewHash));
+  assert.deepEqual(value(await first.execute(prepared.operationId, prepared.preview.previewHash)), receipt);
+  assert.equal((await first.getScenarioRule(ruleId)).version, 1);
+
+  const update = value(await first.prepare({ action: 'scenario.update_rule', input: { ruleRef: ruleId, changes: { conditions: { balance_below_minor: 250000 } } } }));
+  value(await second.decide(update.operationId, { previewHash: update.preview.previewHash, decision: 'confirm', confirmedStepIds: update.preview.stepIds }));
+  value(await first.execute(update.operationId, update.preview.previewHash));
+  const restarted = await open();
+  const durable = await restarted.getScenarioRule(ruleId);
+  assert.equal(durable.conditions.balance_below_minor, 250000);
+  assert.equal(durable.version, 2);
 });
