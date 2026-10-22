@@ -271,7 +271,7 @@ export function useSaveflow() {
         setFocusedFlowId(current => current && bankingFlows[current]?.previewOperationId === data.operationId ? null : current);
       }
     }
-    addMessage({ role: "agent", kind: "banking_receipt", text: `转账已完成，已从同一后端核对余额与交易记录：余额 ¥${(account.availableBalanceFen / 100).toFixed(2)}，交易 ${booked.id} 已记账。`, receipt,
+    addMessage({ role: "agent", kind: "banking_receipt", text: "转账已完成，凭证可在账户概览中查看。", receipt,
       verification: { availableBalanceFen: account.availableBalanceFen, transactionId: booked.id, occurredAt: booked.occurredAt, amountFen: booked.amountFen, status: booked.status } });
     setActiveTransferOperationId(current => current === data.operationId ? null : current);
   };
@@ -417,9 +417,14 @@ export function useSaveflow() {
     void startBanking("", { optionId, label });
   };
   const editTransferPreview = (data: BankingAgentData, message: string) => {
-    const flow = transferFlow(bankingFlows, data);
-    if (modelMode !== "banking" || !isTrialPreview(data) || !flow || !canTransition(stageRef.current, "START")) return;
-    void startBanking(message, undefined, flow.id);
+    if (modelMode !== "banking" || !canTransition(stageRef.current, "START")) return;
+    if (isTrialPreview(data)) {
+      const flow = transferFlow(bankingFlows, data);
+      if (!flow) return;
+      void startBanking(message, undefined, flow.id);
+    } else {
+      void startBanking(message);
+    }
   };
   return { stage, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId) : startDemo(goal.current), canStart: ["welcome", "success", "cancelled", "clarifying", "answered"].includes(stage), canReset: canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage };
 }
