@@ -13,6 +13,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { BankingCardPreview } = require('../src/app/BankingCardCards.tsx');
 const { askBankingAgent, BankingAgentError, hasBankingChoices } = require('../src/lib/banking-agent-client.ts');
 const { BankingTransferPreview } = require('../src/app/BankingTransferPreview.tsx');
+const { BankingTransferReceipt } = require('../src/app/BankingTransferReceipt.tsx');
 const { saveBankingChat, restoreBankingChat } = require('../src/lib/banking-chat-storage.ts');
 const { updateBankingFlows, transferFlow } = require('../src/lib/banking-flow-state.ts');
 const { bankingTaskBoundary } = require('../src/lib/trueforge-routing.mjs');
@@ -170,4 +171,18 @@ test('unified clarification drafts survive refresh without restoring Core previe
   const history = [{ id: 2, role: 'agent', kind: 'banking_card_preview', text: '预览', banking: preview }];
   const saved = restoreBankingChat(saveBankingChat(history, null, 0, 2000, { flows: updateBankingFlows({}, 'preview', preview, 1000), focusedFlowId: null }), 3000);
   assert.deepEqual(saved.flows, {}); assert.equal(saved.continuation, null); assert.equal(saved.messages[0].banking.previewCurrent, false);
+});
+
+test('executed transfer preview is read-only (no confirm/cancel) and renders a receipt card', () => {
+  const data = { status: 'succeeded', action: 'transfer.create', operationId: 'tfpreview:op_done', source: 'trueforge-mcp', previewOnly: true, executed: true,
+    preview: { summary: '已执行', exactEffects: [{ amountFen: 40000, accountName: '模拟活期账户', payeeName: '房东王先生' }] } };
+  const done = renderToStaticMarkup(React.createElement(BankingTransferPreview, { data, active: true, busy: false, onEdit: () => {}, onConfirm: () => {}, onReject: () => {}, onCheck: () => {} }));
+  assert.ok(done.includes('已完成'), done);
+  assert.ok(!done.includes('<button'), done);
+  assert.ok(!done.includes('确认转账') && !done.includes('取消本次转账'), done);
+  const receipt = { receiptId: 'rcpt_1', operationId: 'op_done', action: 'transfer_money', planId: 'plan_1', stepId: 'step_1', status: 'succeeded', message: '模拟转账成功', executedAt: '2026-10-21T00:00:00.000Z', dataSource: 'synthetic_demo_only', transactionIds: ['txn_op_done'],
+    effects: [{ kind: 'transfer_out', fromAccountId: 'ACC-CHECKING', accountName: '模拟活期账户', payeeId: 'payee_001', payeeName: '房东王先生', accountNoMasked: '**** 1234', amountFen: 40000, feeFen: 0, currency: 'CNY', balanceBeforeFen: 540000, balanceAfterFen: 500000, availableBalanceAfterFen: 500000, accountVersion: 2, memo: '', arrival: 'mock_immediate' }] };
+  const verification = { availableBalanceFen: 500000, transactionId: 'txn_op_done', occurredAt: '2026-10-21T00:00:00.000Z', amountFen: 40000, status: 'posted' };
+  const card = renderToStaticMarkup(React.createElement(BankingTransferReceipt, { receipt, verification }));
+  for (const text of ['转账回执', '已完成', '收款人', '房东王先生', '¥400.00', '实际状态', '已成功（succeeded）', '交易编号', 'txn_op_done', 'rcpt_1', '2026-10-21T00:00:00.000Z', '后端交易记录', '已记账（posted）', '后端查询余额']) assert.ok(card.includes(text), card);
 });
