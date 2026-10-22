@@ -182,7 +182,7 @@ export function createBankingCore(options = {}) {
       if (input.amountFen < product.minimumAmountFen) throw new BankingError('BELOW_MINIMUM_AMOUNT', '申购金额低于产品最低金额');
       if (account.availableBalanceFen < input.amountFen) throw new BankingError('INSUFFICIENT_BALANCE', '账户余额不足');
       const holding = (await wealthPorts.getHoldings()).find(/** @param {any} item */ item => item.product_id === product.id);
-      return { kind: 'wealth_change', action, productId: product.id, productName: product.name, holdingId: holding?.id ?? `holding_${product.id}`, holdingVersion: holding?.version ?? null, fundingAccountId: account.id, accountVersion: account.version, amountFen: input.amountFen, unitsMilli: input.amountFen, disclosureVersion: disclosure.version, assessmentId: assessment.assessment_id };
+      return { kind: 'wealth_change', action, productId: product.id, productName: product.name, holdingId: holding?.id ?? `holding_${product.id}`, holdingVersion: holding?.version ?? null, fundingAccountId: account.id, accountVersion: account.version, amountFen: input.amountFen, unitsMilli: input.amountFen, accountBalanceBeforeFen: account.availableBalanceFen, accountBalanceAfterFen: account.availableBalanceFen - input.amountFen, holdingAmountBeforeFen: holding?.amount_fen ?? 0, holdingAmountAfterFen: (holding?.amount_fen ?? 0) + input.amountFen, disclosureVersion: disclosure.version, assessmentId: assessment.assessment_id };
     }
     if (!['amount', 'units'].includes(input.quantityKind) || (input.quantityKind === 'amount' ? Object.keys(input).sort().join() !== ['holdingId', 'quantityKind', 'amountFen', 'currency'].sort().join() : Object.keys(input).sort().join() !== ['holdingId', 'quantityKind', 'unitsMilli'].sort().join())) throw new BankingError('VALIDATION_ERROR', '赎回数量单位无效');
     assertId(input.holdingId);
@@ -196,7 +196,7 @@ export function createBankingCore(options = {}) {
     const amountFen = input.quantityKind === 'amount' ? input.amountFen : input.unitsMilli;
     const unitsMilli = input.quantityKind === 'units' ? input.unitsMilli : input.amountFen;
     if (holding.amount_fen < amountFen || holding.units_milli < unitsMilli) throw new BankingError('INSUFFICIENT_HOLDING', '持仓不足');
-    return { kind: 'wealth_change', action, productId: product.id, productName: product.name, holdingId: holding.id, holdingVersion: holding.version, amountFen, unitsMilli, settlement: rule.settlement };
+    return { kind: 'wealth_change', action, productId: product.id, productName: product.name, holdingId: holding.id, holdingVersion: holding.version, amountFen, unitsMilli, holdingAmountBeforeFen: holding.amount_fen, holdingAmountAfterFen: holding.amount_fen - amountFen, settlement: rule.settlement };
   }
   /** @param {import('./contracts').CardEffect} effect @returns {import('./contracts').RiskResult} */
   function cardRisk(effect) {

@@ -45,6 +45,12 @@ test('subscription requires preview and exact confirmation; repeated execution h
   const preview = response.body.data;
   assert.equal(preview.status, 'awaiting_confirmation');
   assert.equal(preview.risk.riskLevel, 'L3');
+  assert.match(preview.disclosure.risk_disclosure, /not guaranteed/i);
+  assert.equal(preview.requirements.explicitUserConfirmation, true);
+  assert.equal(preview.preview.exactEffects[0].accountBalanceBeforeFen, account.availableBalanceFen);
+  assert.equal(preview.preview.exactEffects[0].accountBalanceAfterFen, account.availableBalanceFen - 10000);
+  assert.equal(preview.preview.exactEffects[0].holdingAmountBeforeFen, 0);
+  assert.equal(preview.preview.exactEffects[0].holdingAmountAfterFen, 10000);
   assert.equal((await core.repository.getAccount(account.id)).availableBalanceFen, account.availableBalanceFen);
   const premature = await core.execute(preview.operationId, preview.preview.previewHash);
   assert.equal(premature.ok, false);
@@ -55,6 +61,8 @@ test('subscription requires preview and exact confirmation; repeated execution h
   const second = await core.execute(preview.operationId, preview.preview.previewHash);
   assert.equal(first.ok, true);
   assert.deepEqual(second, first);
+  assert.equal(first.data.effects[0].accountBalanceAfterFen, account.availableBalanceFen - 10000);
+  assert.equal(first.data.effects[0].holdingAmountAfterFen, 10000);
   assert.equal((await core.repository.getAccount(account.id)).availableBalanceFen, account.availableBalanceFen - 10000);
   assert.equal((await core.wealthPorts.getHoldings()).find(item => item.product_id === 'product_001').amount_fen, 10000);
 });
@@ -66,10 +74,13 @@ test('redemption requires separate confirmation; changing holdings invalidates p
   assert.equal(response.status, 200);
   const preview = response.body.data;
   assert.equal(preview.action, 'wealth.redeem');
+  assert.equal(preview.preview.exactEffects[0].holdingAmountBeforeFen, 200000);
+  assert.equal(preview.preview.exactEffects[0].holdingAmountAfterFen, 190000);
   assert.equal((await core.wealthPorts.getHoldings()).find(item => item.id === 'holding_001').amount_fen, 200000);
   const decided = await core.decide(preview.operationId, { previewHash: preview.preview.previewHash, decision: 'confirm', confirmedStepIds: preview.preview.stepIds });
   assert.equal(decided.ok, true);
   const executed = await core.execute(preview.operationId, preview.preview.previewHash);
   assert.equal(executed.ok, true);
+  assert.equal(executed.data.effects[0].holdingAmountAfterFen, 190000);
   assert.equal((await core.wealthPorts.getHoldings()).find(item => item.id === 'holding_001').amount_fen, 190000);
 });

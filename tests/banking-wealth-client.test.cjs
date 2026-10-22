@@ -31,6 +31,9 @@ test('browser accepts Wealth result, preview and the verified execution receipt'
     action = 'wealth.subscribe';
     const prepared = await askBankingAgent({ message: '申购模拟灵活现金 A' }, env.SAVEFLOW_ACCESS_CODE, new AbortController().signal);
     assert.equal(prepared.status, 'awaiting_confirmation');
+    assert.match(prepared.disclosure.risk_disclosure, /not guaranteed/i);
+    assert.equal(prepared.requirements.explicitUserConfirmation, true);
+    assert.equal(prepared.preview.exactEffects[0].holdingAmountAfterFen, 10000);
     const client = createBankingClient({ mode: 'http', baseUrl: 'http://localhost', accessCode: () => env.SAVEFLOW_ACCESS_CODE, fetchImpl: (url, init) => handleBanking(new Request(url, init), { env, core }) });
     const decision = await client.request('action.decide', { operationId: prepared.operationId, previewHash: prepared.preview.previewHash, decision: 'confirm', confirmedStepIds: prepared.preview.stepIds });
     assert.equal(decision.state, 'confirmed');
@@ -38,5 +41,7 @@ test('browser accepts Wealth result, preview and the verified execution receipt'
     assert.equal(receipt.action, 'wealth.subscribe');
     assert.equal(receipt.status, 'succeeded');
     assert.equal(receipt.effects[0].kind, 'wealth_change');
+    assert.equal(receipt.effects[0].accountBalanceAfterFen, 490000);
+    assert.equal(receipt.effects[0].holdingAmountAfterFen, 10000);
   } finally { global.fetch = oldFetch; }
 });

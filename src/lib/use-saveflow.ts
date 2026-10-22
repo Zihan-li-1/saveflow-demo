@@ -13,7 +13,7 @@ import { isTrialOperationId, isTrialPreview } from "./trial-preview.mjs";
 import { bankingChatKey, restoreBankingChat, saveBankingChat } from "./banking-chat-storage";
 import { transferFlow, bankingContinuationToken, updateBankingFlows, type BankingFlows } from "./banking-flow-state";
 
-export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
+export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_wealth_receipt"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
 const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。可以查询模拟账单，或生成转账正式预览，例如：给张三转 500 元。" }];
 const pendingKey = "saveflow.pending-operation.v1";
 
@@ -203,7 +203,7 @@ export function useSaveflow() {
     if (data.action?.startsWith("wealth.")) {
       const checked = await cardClient().request("action.status", { operationId: data.operationId! });
       if (checked.receipt?.receiptId !== receipt.receiptId) throw new ApiError("INVALID_RESPONSE", "理财回执无法核实，请查询原操作");
-      addMessage({ role: "agent", text: `${receipt.message}；已核对操作回执。合成数据仅供演示。` });
+      addMessage({ role: "agent", kind: "banking_wealth_receipt", text: `${receipt.message}；已核对操作回执。`, receipt });
       setActiveCardOperationId(current => current === data.operationId ? null : current);
       return;
     }
