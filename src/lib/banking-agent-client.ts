@@ -27,6 +27,8 @@ export type BankingAgentData = {
   previewCurrent?: boolean;
   /** 预览已执行：界面只读，不再提供确认/取消入口。 */
   executed?: boolean;
+  /** UI lifecycle only; never grants Core confirmation or execution authority. */
+  coreStage?: import('./flow-machine').CoreOperationStage;
   error?: { code?: string; message?: string };
   recovery?: BankingAgentData;
 };
@@ -154,17 +156,20 @@ export async function executeTrialTransfer(
       body: JSON.stringify({ trialOperationId, previewHash }),
     });
   } catch {
-    throw new ApiError('BANKING_AGENT_NETWORK_ERROR', '执行桥连接失败，请稍后重试。');
+    throw new ApiError('BANKING_AGENT_NETWORK_ERROR', '执行结果待核实，请保留原操作编号查询。', true);
   }
   let payload: { code?: string; message?: string; requestId?: string; data?: unknown };
-  try { payload = await response.json(); } catch { throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', '执行桥返回格式异常。'); }
+  try { payload = await response.json(); } catch { throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', '执行桥返回格式异常，请查询原操作。', true); }
   if (response.status === 401) throw new ApiError('UNAUTHORIZED', '访问验证失败，请检查演示访问码后重试。');
   if (response.status === 503 && ['ACCESS_NOT_CONFIGURED', 'DATABASE_NOT_CONFIGURED'].includes(payload?.code || '')) throw new ApiError('SERVICE_UNAVAILABLE', '执行服务未配置，请联系演示维护者。');
-  if (!payload || !response.ok || payload.code !== 'OK') throw new ApiError(String(payload?.code || 'EXECUTE_TRIAL_ERROR'), payload?.message || '试点转账执行失败');
+  if (!payload || !response.ok || payload.code !== 'OK') {
+    const safeRejection = !response.ok && response.status < 500 && ['VALIDATION_ERROR', 'FORBIDDEN', 'CONFIRMATION_REQUIRED', 'CONFIRMATION_INVALID', 'INVALID_STATE', 'PREVIEW_EXPIRED', 'PREVIEW_STALE', 'INSUFFICIENT_BALANCE', 'LIMIT_EXCEEDED'].includes(payload?.code || '');
+    throw new ApiError(String(payload?.code || 'EXECUTE_TRIAL_ERROR'), payload?.message || '试点转账执行失败', !safeRejection);
+  }
   const receipt = payload.data;
   if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt) ||
     typeof (receipt as ActionReceipt).operationId !== 'string' ||
     !['succeeded', 'failed', 'cancelled'].includes(String((receipt as ActionReceipt).status)) ||
-    !Array.isArray((receipt as ActionReceipt).effects)) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', '执行桥回执格式异常。');
+    !Array.isArray((receipt as ActionReceipt).effects)) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', '执行桥回执格式异常。', true);
   return receipt as ActionReceipt;
 }
