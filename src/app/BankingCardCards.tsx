@@ -1,5 +1,6 @@
 "use client";
 
+import { stageCopy } from "@/lib/flow-machine";
 import type { BankingAgentData } from "@/lib/banking-agent-client";
 import { isTrialPreview } from "@/lib/trial-preview.mjs";
 
@@ -42,7 +43,7 @@ export function BankingCardPreview({ data, active, busy, onConfirm, onReject, on
   const operation = data.action === "card.set_budget" ? "设置月消费预算" : data.action === "card.set_controls" ? "修改交易权限与消费提醒" : data.action === "card.freeze" ? "冻结卡片" : "解冻卡片";
   const change = data.action === "card.set_budget" ? `${yuan(effect.before.monthlyBudgetFen)} → ${yuan(effect.after.monthlyBudgetFen)}` : data.action === "card.set_controls" ? `线上支付：${effect.after.onlinePaymentsEnabled ? "开启" : "关闭"}；禁用类别：${effect.after.blockedCategories?.length ? effect.after.blockedCategories.join("、") : "无"}；单笔提醒：${effect.after.alertThresholdFen == null ? "关闭" : yuan(effect.after.alertThresholdFen)}；余额提醒：${effect.after.balanceReminderAmountFen != null ? `剩余 ${yuan(effect.after.balanceReminderAmountFen)}` : effect.after.balanceReminderPercent != null ? `剩余 ${effect.after.balanceReminderPercent}%` : "关闭"}` : `${cardStatus(effect.before.status)} → ${cardStatus(effect.after.status)}`;
   return <div className="banking-preview-card card-action-preview">
-    <div><b>卡片操作预览</b><span>{trial ? data.previewCurrent === false ? "旧预览 · 已替换" : "仅供预览 · 尚未执行" : active ? "等待确认" : "已失效"}</span></div>
+    <div><b>卡片操作预览</b><span>{trial ? data.previewCurrent === false ? "旧预览 · 已替换" : "仅供预览 · 尚未执行" : data.coreStage && data.coreStage !== "plan" ? stageCopy[data.coreStage] : active ? "等待确认" : "已失效"}</span></div>
     <strong>{effect.cardName}</strong>
     <p>操作：{operation}</p>
     <p>变更前后：{change}</p>
