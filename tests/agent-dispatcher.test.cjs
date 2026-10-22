@@ -109,6 +109,28 @@ test('real bill handler reads the shared repository and reflects changed transac
   assert.ok(second.evidence[0].entityIds.includes('TXN-EXTRA-202608'));
 });
 
+test('range bill includes every calendar month for monthly comparison', async () => {
+  const { createFinancialContext } = await import('../src/banking-core/repository.mjs');
+  const summer = intent('bill.summary', {
+    period: { start_date: '2026-06-01', end_date: '2026-08-31', timezone: 'Asia/Shanghai', label: '2026年夏季' },
+  }, [], 'ready_for_resolution');
+  const result = await handleBillSummary(summer, createFinancialContext().repository);
+  assert.deepEqual(result.data.period, { startDate: '2026-06-01', endDate: '2026-08-31', timezone: 'Asia/Shanghai', label: '2026年夏季' });
+  assert.deepEqual(result.data.monthlyBreakdown.map(item => item.month), ['2026-06', '2026-07', '2026-08']);
+  assert.deepEqual(result.data.monthlyBreakdown.map(item => item.status), ['complete', 'complete', 'complete']);
+  assert.equal(result.data.totalExpenseFen, result.data.monthlyBreakdown.reduce((sum, item) => sum + item.totalExpenseFen, 0));
+  assert.equal(result.data.totalIncomeFen, result.data.monthlyBreakdown.reduce((sum, item) => sum + item.totalIncomeFen, 0));
+});
+
+test('custom ranges mark incomplete boundary months as partial', async () => {
+  const { createFinancialContext } = await import('../src/banking-core/repository.mjs');
+  const custom = intent('bill.summary', {
+    period: { start_date: '2026-06-15', end_date: '2026-08-10', timezone: 'Asia/Shanghai', label: '自定义时间段' },
+  }, [], 'ready_for_resolution');
+  const result = await handleBillSummary(custom, createFinancialContext().repository);
+  assert.deepEqual(result.data.monthlyBreakdown.map(item => item.status), ['partial', 'complete', 'partial']);
+});
+
 test('real transfer handler resolves raw account and payee references without executing Banking Core', async () => {
   const { createFinancialContext } = await import('../src/banking-core/repository.mjs');
   const repository = createFinancialContext().repository;

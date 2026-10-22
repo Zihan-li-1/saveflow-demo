@@ -1,4 +1,5 @@
 import { resolveChoice } from '../src/agent/clarification/choice-resolver.mjs';
+import { resolveBillPeriod } from '../src/lib/bill-period.mjs';
 
 function amount(message, allowZero = false) {
   const match = message.replaceAll(',', '').match(/(-?\d+(?:\.\d+)?)/);
@@ -31,7 +32,7 @@ function month(message, now) {
   return `${year}-${String(value).padStart(2, '0')}`;
 }
 
-export function parseClarificationAnswer(message, { action, slot, choices = [], now = Date.now(), choice } = {}) {
+export function parseClarificationAnswer(message, { action, slot, slots = {}, choices = [], now = Date.now(), choice } = {}) {
   // Explicit edits replace the old resolution as well as the visible draft.
   if (!choice) {
     const card = message.trim().match(/^(?:卡片?改成|卡片?换成|改成|改为|换成|改选)\s*(.+卡)[。！]?$/);
@@ -57,11 +58,72 @@ export function parseClarificationAnswer(message, { action, slot, choices = [], 
     return amountAnswer(message, action);
   }
   if (slot === 'card_ref' && message.trim()) return { kind: 'slot', updates: { card_ref: message.trim() } };
+  if (slot === 'product_ref' && message.trim()) return { kind: 'slot', updates: { product_ref: message.trim() } };
+  if (slot === 'holding_ref' && message.trim()) return { kind: 'slot', updates: { holding_ref: message.trim() } };
+  if (slot === 'source_account_ref' && message.trim()) return { kind: 'slot', updates: { source_account_ref: message.trim() } };
+  if (slot === 'product_refs') {
+    const refs = message.split(/[、,，和与]/).map(item => item.trim()).filter(Boolean);
+    return refs.length >= 2 && refs.length <= 5 ? { kind: 'slot', updates: { product_refs: refs } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'quantity_or_amount') {
+    const value = amount(message);
+    return value && /元|人民币/.test(message) ? { kind: 'slot', updates: { quantity_or_amount: { kind: 'amount', ...value } } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'goal') {
+    const kind = /购物|短期|消费/.test(message) ? 'short_term_purchase' : /稳健|增长/.test(message) ? 'steady_growth' : /保本/.test(message) ? 'capital_preservation' : null;
+    return kind ? { kind: 'slot', updates: { goal: { kind } } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'assessment_scope') {
+    const scope = /组合/.test(message) ? 'portfolio' : /投资|理财/.test(message) ? 'investment' : null;
+    return scope ? { kind: 'slot', updates: { assessment_scope: scope } } : { kind: 'unrecognized' };
+  }
   if (slot === 'payee_ref' && message.trim()) return { kind: 'slot', updates: { payee_ref: message.trim() } };
   if (slot === 'month') {
-    const value = month(message, now);
-    return value ? { kind: 'slot', updates: { month: value } } : { kind: 'unrecognized' };
+    const resolved = resolveBillPeriod(message, now);
+    if (resolved?.month) return { kind: 'slot', updates: { month: resolved.month, period: undefined, year: undefined, monthNumber: undefined } };
+    if (resolved?.period) return { kind: 'slot', updates: { period: resolved.period, month: undefined, year: undefined, monthNumber: undefined } };
+    let value = month(message, now);
+    const year = message.trim().match(/^(20\d{2})\s*年?[。！]?$/);
+    const m = message.trim().match(/^(\d{1,2})\s*月?[。！]?$/);
+    if (!value && slots.monthNumber && year) value = `${year[1]}-${String(slots.monthNumber).padStart(2, '0')}`;
+    if (!value && slots.year && m && Number(m[1]) >= 1 && Number(m[1]) <= 12) value = `${slots.year}-${String(Number(m[1])).padStart(2, '0')}`;
+    return value ? { kind: 'slot', updates: { month: value, year: undefined, monthNumber: undefined, period: undefined } } : { kind: 'unrecognized' };
   }
+  const text = message.trim().replace(/[。！]$/, '');
+  if (slot === 'goal' && text) return { kind: 'slot', updates: { goal: text } };
+  if (slot === 'goal_text' && text) return { kind: 'slot', updates: { goal_text: text } };
+  if (slot === 'max_risk_level') {
+    const match = text.toUpperCase().match(/R[1-3]/);
+    return match ? { kind: 'slot', updates: { max_risk_level: match[0] } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'horizon_days') {
+    const match = text.match(/(\d+)\s*(天|日|个月|月|年)/);
+    if (!match) return { kind: 'unrecognized' };
+    const count = Number(match[1]); const days = /年/.test(match[2]) ? count * 365 : /月/.test(match[2]) ? count * 30 : count;
+    return Number.isSafeInteger(days) && days >= 0 && days <= 3650 ? { kind: 'slot', updates: { horizon_days: days } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'liquidity_requirement') {
+    const liquidity = /T\s*\+?\s*0|随时|当天/.test(text) ? 'T+0' : /T\s*\+?\s*1|次日/.test(text) ? 'T+1' : /到期/.test(text) ? 'AT_MATURITY' : null;
+    return liquidity ? { kind: 'slot', updates: { liquidity_requirement: liquidity } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'product_refs') {
+    const refs = text.replace(/^比较/, '').split(/、|，|,|和|与|以及/).map(value => value.trim()).filter(Boolean);
+    return refs.length >= 2 ? { kind: 'slot', updates: { product_refs: refs } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'assessment_scope' && /^(?:是|需要|开始|确认|进行风险测评)/.test(text)) return { kind: 'slot', updates: { assessment_scope: 'investment_suitability' } };
+  if (slot === 'authorization_scope' && /仅.*建议|suggest_only|确认/.test(text)) return { kind: 'slot', updates: { authorization_scope: 'suggest_only' } };
+  if (slot === 'trigger' && text) return { kind: 'slot', updates: { trigger: { type: /\d{4}|每月|日期|生日/.test(text) ? 'date' : /余额|账单|消费|收入/.test(text) ? 'financial_event' : 'manual', value: text } } };
+  if (slot === 'conditions' && text) return { kind: 'slot', updates: { conditions: { description: text } } };
+  if (slot === 'proposed_steps' && text) {
+    const proposed_steps = [];
+    if (/账单|支出|消费/.test(text)) proposed_steps.push({ action: 'bill.analyze', parameters: {} });
+    if (/订阅/.test(text)) proposed_steps.push({ action: 'subscription.list', parameters: {} });
+    if (/理财|产品/.test(text)) proposed_steps.push({ action: 'wealth.recommend', parameters: {} });
+    if (/卡片|银行卡/.test(text)) proposed_steps.push({ action: 'card.get', parameters: {} });
+    return proposed_steps.length ? { kind: 'slot', updates: { proposed_steps } } : { kind: 'unrecognized' };
+  }
+  if (slot === 'rule_ref' && text) return { kind: 'slot', updates: { rule_ref: text } };
+  if (slot === 'event_ref' && text) return { kind: 'slot', updates: { event_ref: text } };
   return { kind: 'unrecognized' };
 }
 

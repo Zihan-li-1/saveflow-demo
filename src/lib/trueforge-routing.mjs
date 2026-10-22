@@ -1,5 +1,5 @@
-// Pure routing only: shared by UI task selection and server allowlisting.
-// Contains no service configuration, credentials or SDK dependencies.
+// Retired standalone MCP pilot phrase helpers plus period copy.
+// The Banking API and UI do not use these to choose an understanding backend.
 const trueforgeError = (code, userMessage, status) => Object.assign(new Error(userMessage), { code, userMessage, status });
 
 export const YEAR_MONTH = '(?:\\d{4}\\s*年\\s*\\d{1,2}\\s*月|\\d{4}-\\d{1,2})';
@@ -108,8 +108,12 @@ export function bankingTaskBoundary(message, currentAction, pendingSlot) {
   catch { return 'new'; } // Explicit task with an invalid amount: server validates it.
   const families = [
     ['bill', /账单|流水/], ['card', /卡|冻结|解冻|预算/], ['transfer', /转账|付款|汇款|转给/],
-    ['subscription', /订阅/], ['product', /产品/],
+    ['subscription', /订阅/], ['wealth', /理财|产品|风险测评/], ['scenario', /场景规则|规则编号|事件编号/], ['orchestrator', /财务情况|财务规划|综合规划/],
   ].filter(([, pattern]) => pattern.test(message));
+  // With no focused TrueForge flow, a phrase that names one business family
+  // starts a new task. A family-free answer (for example "R2", "2026年8月"
+  // or "确认保存") must keep the opaque non-TrueForge continuation token.
+  if (!currentAction) return families.length === 0 ? 'continue' : families.length === 1 ? 'new' : 'clarify';
   const currentFamily = currentAction?.split('.')[0];
   if (families.length > 1 || families.some(([family]) => family !== currentFamily)) return 'clarify';
   if (currentAction && !pendingSlot && !/^(?:改成|改为|金额|预算|收款人|改给|换给|换成|重新选择|改选|更换|取消|不用了|确认|执行|同意|-?\d)/.test(message.trim())) return 'clarify';

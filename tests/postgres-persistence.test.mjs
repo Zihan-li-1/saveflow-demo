@@ -16,7 +16,7 @@ async function fixture(t) {
   const cores = [];
   t.after(async () => {
     for (const core of cores) await core.close();
-    for (const table of ['banking_transactions', 'banking_operations', 'banking_cards', 'banking_accounts']) {
+    for (const table of ['banking_scenario_rules', 'banking_transactions', 'banking_operations', 'banking_cards', 'banking_accounts']) {
       await sql.unsafe(`DELETE FROM ${table} WHERE owner_id = $1`, [source.user.id]);
     }
     await sql.end({ timeout: 5 });
@@ -139,6 +139,7 @@ test('Postgres B: independent Core instances share preview, confirmation, receip
       await tx.unsafe('DELETE FROM banking_transactions WHERE owner_id = $1', [source.user.id]);
       await tx.unsafe('DELETE FROM banking_operations WHERE owner_id = $1', [source.user.id]);
       await tx.unsafe('DELETE FROM banking_cards WHERE owner_id = $1', [source.user.id]);
+      await tx.unsafe('DELETE FROM banking_wealth_holdings WHERE owner_id = $1', [source.user.id]);
       await tx.unsafe('DELETE FROM banking_accounts WHERE owner_id = $1', [source.user.id]);
     });
     await sql.end({ timeout: 5 });
@@ -185,10 +186,68 @@ test('Postgres cards: a second instance and restart see the committed budget and
       await tx.unsafe('DELETE FROM banking_transactions WHERE owner_id = $1', [source.user.id]);
       await tx.unsafe('DELETE FROM banking_operations WHERE owner_id = $1', [source.user.id]);
       await tx.unsafe('DELETE FROM banking_cards WHERE owner_id = $1', [source.user.id]);
+      await tx.unsafe('DELETE FROM banking_wealth_holdings WHERE owner_id = $1', [source.user.id]);
       await tx.unsafe('DELETE FROM banking_accounts WHERE owner_id = $1', [source.user.id]);
     });
     await sql.end({ timeout: 5 });
     if (!firstClosed) await first.close();
     await second.close();
   }
+});
+
+test('Postgres Wealth: separate instances share confirmed Mock subscription and one receipt', { skip: !connectionString }, async () => {
+  const source = structuredClone(seed);
+  source.user.id = `test_${randomUUID()}`;
+  const first = await createPostgresBankingCore({ connectionString, source });
+  const second = await createPostgresBankingCore({ connectionString, source });
+  try {
+    const account = await first.repository.getAccount('ACC-CHECKING');
+    const prepared = value(await first.prepare({ action: 'wealth.subscribe', input: { productId: 'product_001', amountFen: 10000, currency: 'CNY', sourceAccountId: account.id } }));
+    assert.equal((await second.repository.getAccount(account.id)).availableBalanceFen, account.availableBalanceFen);
+    value(await second.decide(prepared.operationId, { previewHash: prepared.preview.previewHash, decision: 'confirm', confirmedStepIds: prepared.preview.stepIds }));
+    const receipt = value(await second.execute(prepared.operationId, prepared.preview.previewHash));
+    assert.deepEqual(value(await first.execute(prepared.operationId, prepared.preview.previewHash)), receipt);
+    assert.equal((await first.repository.getAccount(account.id)).availableBalanceFen, account.availableBalanceFen - 10000);
+    assert.equal((await first.wealthPorts.getHoldings()).find(item => item.product_id === 'product_001').amount_fen, 10000);
+  } finally {
+    const postgres = await import('postgres');
+    const sql = postgres.default(connectionString, { max: 1 });
+    await sql.begin(async tx => {
+      await tx.unsafe('DELETE FROM banking_operations WHERE owner_id = $1', [source.user.id]);
+      await tx.unsafe('DELETE FROM banking_wealth_holdings WHERE owner_id = $1', [source.user.id]);
+      await tx.unsafe('DELETE FROM banking_cards WHERE owner_id = $1', [source.user.id]);
+      await tx.unsafe('DELETE FROM banking_transactions WHERE owner_id = $1', [source.user.id]);
+      await tx.unsafe('DELETE FROM banking_accounts WHERE owner_id = $1', [source.user.id]);
+    });
+    await sql.end({ timeout: 5 });
+    await first.close(); await second.close();
+  }
+});
+test('Postgres scenario rules: preview, cross-instance execution, update and restart are durable', { skip: !connectionString }, async t => {
+  const { core: first, open } = await fixture(t);
+  const second = await open();
+  const request = {
+    action: 'scenario.create_rule',
+    input: {
+      trigger: { type: 'financial_event', value: 'balance_changed' },
+      conditions: { balance_below_minor: 100000 },
+      proposed_steps: [{ action: 'bill.analyze', parameters: { period: 'last_30_days' } }],
+      authorization_scope: 'suggest_only',
+    },
+  };
+  const prepared = value(await first.prepare(request));
+  const ruleId = prepared.preview.exactEffects[0].ruleId;
+  assert.equal(await second.getScenarioRule(ruleId), undefined);
+  value(await second.decide(prepared.operationId, { previewHash: prepared.preview.previewHash, decision: 'confirm', confirmedStepIds: prepared.preview.stepIds }));
+  const receipt = value(await second.execute(prepared.operationId, prepared.preview.previewHash));
+  assert.deepEqual(value(await first.execute(prepared.operationId, prepared.preview.previewHash)), receipt);
+  assert.equal((await first.getScenarioRule(ruleId)).version, 1);
+
+  const update = value(await first.prepare({ action: 'scenario.update_rule', input: { ruleRef: ruleId, changes: { conditions: { balance_below_minor: 250000 } } } }));
+  value(await second.decide(update.operationId, { previewHash: update.preview.previewHash, decision: 'confirm', confirmedStepIds: update.preview.stepIds }));
+  value(await first.execute(update.operationId, update.preview.previewHash));
+  const restarted = await open();
+  const durable = await restarted.getScenarioRule(ruleId);
+  assert.equal(durable.conditions.balance_below_minor, 250000);
+  assert.equal(durable.version, 2);
 });

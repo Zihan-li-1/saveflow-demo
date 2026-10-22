@@ -1,3 +1,5 @@
+> 历史 MCP 试点/专项记录：文中的句式路由、SAVEFLOW_TRUEFORGE_* 开关、tfm1/tfb1 续接和部署结果不适用于当前 `/api/banking-agent`。独立适配器及执行桥按原合同保留；当前统一入口与限制以 [Banking Agent API](Banking-Agent-API.md) 为准。
+
 # TrueForge 账单最小适配层交付报告
 
 ## 本地访问码排障（2026-10-14）
