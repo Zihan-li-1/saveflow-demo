@@ -1,5 +1,5 @@
 import type { Message } from "./use-saveflow";
-import { trialContinuation, type BankingFlows } from "./banking-flow-state";
+import { bankingContinuationToken, type BankingFlows } from "./banking-flow-state";
 
 export const bankingChatKey = "saveflow.banking-chat.v1";
 const retentionMs = 30 * 60 * 1000;
@@ -12,10 +12,10 @@ type Snapshot = { version: 1; savedAt: number; messages: Message[]; continuation
 export function saveBankingChat(messages: Message[], continuation: string | null, continuationIssuedAt: number, now = Date.now(), state: { flows: BankingFlows; focusedFlowId: string | null } = { flows: {}, focusedFlowId: null }): string {
   const safeMessages = messages.slice(-100).map(message => ({ ...message, banking: message.banking ? {
     ...message.banking,
-    continuationToken: trialContinuation(message.banking.continuationToken) ? message.banking.continuationToken : undefined,
+    continuationToken: bankingContinuationToken(message.banking.continuationToken) ? message.banking.continuationToken : undefined,
   } : undefined }));
   return JSON.stringify({ version: 1, savedAt: now, messages: safeMessages,
-    continuation: trialContinuation(continuation) ? continuation : null,
+    continuation: bankingContinuationToken(continuation) ? continuation : null,
     continuationExpiresAt: continuationIssuedAt + continuationMs, ...state } satisfies Snapshot);
 }
 
@@ -28,13 +28,13 @@ export function restoreBankingChat(raw: string | null, now = Date.now()): Snapsh
         value.messages.some(m => !m || !Number.isSafeInteger(m.id) || !["agent", "user"].includes(m.role) || typeof m.text !== "string" || m.text.length > 4000 ||
           (m.kind !== undefined && !kinds.has(m.kind)) || (m.banking !== undefined && (!m.banking || typeof m.banking.status !== "string" ||
             (m.banking.choices !== undefined && (!Array.isArray(m.banking.choices) || m.banking.choices.some(c => !c || typeof c.optionId !== "string" || typeof c.label !== "string"))))))) return null;
-    const continuation = trialContinuation(value.continuation) &&
+    const continuation = bankingContinuationToken(value.continuation) &&
       now < value.continuationExpiresAt && value.continuationExpiresAt <= value.savedAt + continuationMs ? value.continuation : null;
     const flows: BankingFlows = {};
     if (value.flows && typeof value.flows === "object" && !Array.isArray(value.flows)) {
       for (const [id, flow] of Object.entries(value.flows).slice(-25)) {
-        if (!flow || !/^[a-zA-Z0-9-]{1,64}$/.test(id) || flow.id !== id || !trialContinuation(flow.token) ||
-            !["transfer.create", "card.get", "card.set_budget", "card.freeze", "card.unfreeze", "bill.summary", "product.list", "subscription.list"].includes(flow.action) ||
+        if (!flow || !/^[a-zA-Z0-9-]{1,64}$/.test(id) || flow.id !== id || !bankingContinuationToken(flow.token) ||
+            !["transfer.create", "card.get", "card.set_budget", "card.freeze", "card.unfreeze", "bill.summary", "product.list", "subscription.list", "clarify"].includes(flow.action) ||
             !Number.isFinite(flow.expiresAt) || flow.expiresAt <= now || flow.expiresAt > value.savedAt + continuationMs ||
             (flow.previewOperationId !== undefined && (typeof flow.previewOperationId !== "string" || !flow.previewOperationId.startsWith("tfpreview:"))) ||
             (flow.slot !== undefined && typeof flow.slot !== "string")) continue;

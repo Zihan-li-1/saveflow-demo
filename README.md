@@ -1,6 +1,6 @@
 # SaveFlow Demo
 
-本地 Docker 运行方式与实际检测结果见 [Docker 检测报告](docs/docker-test-report.md)。容器网页：http://127.0.0.1:4300/。PostgreSQL JSONB 与 Core 持久化回归已通过；TrueForge 多轮续接仍有独立内存状态风险，须按部署预览实测结果判断竞赛 Demo 可用性。
+本地 Docker 运行方式与实际检测结果见 [Docker 检测报告](docs/docker-test-report.md)。容器网页：http://127.0.0.1:4300/。该报告为历史环境记录，不能代替当前统一 Banking 流程的部署验收。
 
 本轮分支推送、Draft PR 与 Netlify 预览结果见 [部署预览验收](docs/netlify-preview-report.md)。预览构建成功，当前业务验收被 Netlify 登录保护拦截。
 
@@ -23,4 +23,8 @@ npm run lint
 npm run build
 ```
 
-验收脚本模拟张三 500 元转账并核验幂等，不调用真实 Qwen 或银行。自然语言转账路由和聊天确认卡属于 A/D 后续对接范围。
+Banking 页面统一使用 `/api/banking-agent`：默认 TrueForge 无工具理解 → 服务端校验 → 现有 Skill/Core 查询或预览。迁移期仅可由服务端 `SAVEFLOW_BANKING_RUNTIME=legacy-qwen` 整体切换，不按句式分流或静默回退。独立 `/api/agent` 储蓄助手保持原行为。
+
+自然语言回复与结构化卡片分离，提供简洁/亲切/专业风格；风格不改变风险、确认和安全提示。本次只支持单动作，多动作需要拆开；未完成真实 TrueForge 部署验收。配置、合同及限制见 [Banking Agent API](docs/Banking-Agent-API.md)，验证范围见 [联调记录](docs/Banking-Agent-Integration.md)。
+
+验收脚本使用模拟资金与供应商桩，不调用真实模型或银行。

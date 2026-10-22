@@ -32,7 +32,7 @@ function month(message, now) {
   return `${year}-${String(value).padStart(2, '0')}`;
 }
 
-export function parseClarificationAnswer(message, { action, slot, choices = [], now = Date.now(), choice } = {}) {
+export function parseClarificationAnswer(message, { action, slot, slots = {}, choices = [], now = Date.now(), choice } = {}) {
   // Explicit edits replace the old resolution as well as the visible draft.
   if (!choice) {
     const card = message.trim().match(/^(?:卡片?改成|卡片?换成|改成|改为|换成|改选)\s*(.+卡)[。！]?$/);
@@ -61,10 +61,14 @@ export function parseClarificationAnswer(message, { action, slot, choices = [], 
   if (slot === 'payee_ref' && message.trim()) return { kind: 'slot', updates: { payee_ref: message.trim() } };
   if (slot === 'month') {
     const resolved = resolveBillPeriod(message, now);
-    if (resolved?.month) return { kind: 'slot', updates: { month: resolved.month, period: undefined } };
-    if (resolved?.period) return { kind: 'slot', updates: { period: resolved.period, month: undefined } };
-    const value = month(message, now);
-    return value ? { kind: 'slot', updates: { month: value, period: undefined } } : { kind: 'unrecognized' };
+    if (resolved?.month) return { kind: 'slot', updates: { month: resolved.month, period: undefined, year: undefined, monthNumber: undefined } };
+    if (resolved?.period) return { kind: 'slot', updates: { period: resolved.period, month: undefined, year: undefined, monthNumber: undefined } };
+    let value = month(message, now);
+    const year = message.trim().match(/^(20\d{2})\s*年?[。！]?$/);
+    const m = message.trim().match(/^(\d{1,2})\s*月?[。！]?$/);
+    if (!value && slots.monthNumber && year) value = `${year[1]}-${String(slots.monthNumber).padStart(2, '0')}`;
+    if (!value && slots.year && m && Number(m[1]) >= 1 && Number(m[1]) <= 12) value = `${slots.year}-${String(Number(m[1])).padStart(2, '0')}`;
+    return value ? { kind: 'slot', updates: { month: value, year: undefined, monthNumber: undefined, period: undefined } } : { kind: 'unrecognized' };
   }
   const text = message.trim().replace(/[。！]$/, '');
   if (slot === 'goal' && text) return { kind: 'slot', updates: { goal: text } };

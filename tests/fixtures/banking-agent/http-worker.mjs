@@ -10,6 +10,7 @@ import netlifyHandler from '../../../netlify/functions/banking-agent.mjs';
 
 process.env.SAVEFLOW_ACCESS_CODE = 'integration-access-code-1234';
 process.env.CONTINUATION_TOKEN_SECRET = 'integration-continuation-secret-1234';
+process.env.SAVEFLOW_BANKING_RUNTIME = 'legacy-qwen';
 process.env.DASHSCOPE_API_KEY = 'test-only-provider-secret';
 globalThis.fetch = async (_url, options) => {
   const message = JSON.parse(options.body).messages.at(-1).content;

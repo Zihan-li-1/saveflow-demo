@@ -1,3 +1,5 @@
+> 历史 MCP 试点/专项记录：文中的句式路由、SAVEFLOW_TRUEFORGE_* 开关、tfm1/tfb1 续接和部署结果不适用于当前 `/api/banking-agent`。独立适配器及执行桥按原合同保留；当前统一入口与限制以 [Banking Agent API](Banking-Agent-API.md) 为准。
+
 # 零余额账户导致转账预览失败的排查与修复
 
 2026-10-17，本地 spike/trueforge-harness。先读取截图对应的真实 TrueForge 事件，再修改。未改 .env.local、Mock 种子、Banking Core、资金余额、数据库迁移；未提交或部署。

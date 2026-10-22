@@ -1,5 +1,5 @@
-// Pure routing only: shared by UI task selection and server allowlisting.
-// Contains no service configuration, credentials or SDK dependencies.
+// Retired standalone MCP pilot phrase helpers plus period copy.
+// The Banking API and UI do not use these to choose an understanding backend.
 const trueforgeError = (code, userMessage, status) => Object.assign(new Error(userMessage), { code, userMessage, status });
 
 export const YEAR_MONTH = '(?:\\d{4}\\s*年\\s*\\d{1,2}\\s*月|\\d{4}-\\d{1,2})';

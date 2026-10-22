@@ -7,6 +7,7 @@ for (const extension of ['.ts', '.tsx']) require.extensions[extension] = (module
   const source = readFileSync(filename, 'utf8').replace(/from "@\/lib\//g, 'from "../lib/');
   module._compile(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText, filename);
 };
+require.extensions['.css'] = () => {}; // Render markup without a browser stylesheet loader.
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { BankingCardPreview } = require('../src/app/BankingCardCards.tsx');
@@ -27,10 +28,10 @@ test('browser accepts validated insufficient-balance recovery only as an error/c
   const data = { status: 'error', error: { code: 'INSUFFICIENT_BALANCE' }, recovery: { kind: 'clarification', status: 'needs_clarification', action: 'transfer.create', slot: 'source_account_ref', source: 'trueforge-mcp',
     question: '模拟储蓄账户可用 ¥0.00，请重新选择账户。', choices: [{ optionId: 'real-option', label: '模拟活期账户（可用 ¥5000.00）' }], continuationToken: `tfm1.${'a'.repeat(43)}.${'b'.repeat(43)}` } };
   try {
-    global.fetch = async () => Response.json({ code: 'INSUFFICIENT_BALANCE', requestId: 'r1', data }, { status: 400 });
+    global.fetch = async () => Response.json({ code: 'INSUFFICIENT_BALANCE', requestId: 'r1', reply: { text: '请重新选择账户。', style: 'concise', safetyNotices: ['余额不足。'] }, data }, { status: 400 });
     await assert.rejects(askBankingAgent({ message: '给王先生转500元' }, 'test-access', new AbortController().signal), e => e instanceof BankingAgentError && e.code === 'INSUFFICIENT_BALANCE' && e.recovery.status === 'needs_clarification');
     for (const recovery of [null, { ...data.recovery, continuationToken: 'private-session-id' }, { ...data.recovery, operationId: 'tfpreview:forged' }, { ...data.recovery, action: 'card.get' }, { ...data.recovery, choices: [] }]) {
-      global.fetch = async () => Response.json({ code: 'INSUFFICIENT_BALANCE', requestId: 'r1', data: { ...data, recovery } }, { status: 400 });
+      global.fetch = async () => Response.json({ code: 'INSUFFICIENT_BALANCE', requestId: 'r1', reply: { text: '请重新选择账户。', style: 'concise', safetyNotices: [] }, data: { ...data, recovery } }, { status: 400 });
       await assert.rejects(askBankingAgent({ message: 'test' }, 'test-access', new AbortController().signal), { code: 'BANKING_AGENT_RESPONSE_ERROR' });
     }
   } finally { global.fetch = original; }
@@ -107,12 +108,79 @@ test('trial card previews have no execution/status buttons even if active=true; 
 test('browser validator rejects trial IDs stripped of their preview-only metadata', async () => {
   const original = global.fetch;
   try {
-    global.fetch = async () => Response.json({ code: 'OK', requestId: 'r1', data: { status: 'cancelled', source: 'trueforge-mcp', previewOnly: true, executionAllowed: false, operationId: 'tfpreview:op_actual' } });
+    global.fetch = async () => Response.json({ code: 'OK', requestId: 'r1', reply: { text: '已取消。', style: 'concise', safetyNotices: [] }, data: { status: 'cancelled', source: 'trueforge-mcp', previewOnly: true, executionAllowed: false, operationId: 'tfpreview:op_actual' } });
     assert.equal((await askBankingAgent({ message: '取消' }, 'local-test-access-code', new AbortController().signal)).status, 'cancelled');
-    global.fetch = async () => Response.json({ code: 'OK', requestId: 'r1', data: { status: 'cancelled', source: 'trueforge-mcp', previewOnly: true, executionAllowed: true, operationId: 'tfpreview:op_actual' } });
+    global.fetch = async () => Response.json({ code: 'OK', requestId: 'r1', reply: { text: '已取消。', style: 'concise', safetyNotices: [] }, data: { status: 'cancelled', source: 'trueforge-mcp', previewOnly: true, executionAllowed: true, operationId: 'tfpreview:op_actual' } });
     await assert.rejects(askBankingAgent({ message: '取消' }, 'local-test-access-code', new AbortController().signal), { code: 'BANKING_AGENT_RESPONSE_ERROR' });
   } finally { global.fetch = original; }
 });
+
+
+test('clarification card renders options and invariant safety without repeating the bubble question', async () => {
+  const { BankingClarificationCard } = require('../src/app/BankingClarificationCard.tsx');
+  const { bankingReply } = await import('../server/banking-reply.mjs');
+  const data = { status: 'needs_clarification', action: 'transfer.create', slot: 'source_account_ref', question: '请选择付款账户。', choices: [{ optionId: 'a', label: '模拟活期账户' }] };
+  const cards = new Set(), bubbles = new Set();
+  for (const style of ['concise', 'friendly', 'professional']) {
+    const reply = bankingReply({ data, replyContext: { slots: { payee_ref: '张三', amount: { amount_minor: 50000, currency: 'CNY' } } } }, style);
+    const html = renderToStaticMarkup(React.createElement(BankingClarificationCard, { data: { ...data, reply }, onChoice: () => assert.fail('render must not choose') }));
+    cards.add(html); bubbles.add(reply.text);
+    assert.ok(reply.text.includes('张三')); assert.ok(reply.text.includes('500.00')); assert.ok(reply.text.includes(data.question));
+    assert.ok(!html.includes(data.question)); assert.ok(html.includes('模拟活期账户')); assert.ok(html.includes('不代表确认或执行操作'));
+  }
+  assert.equal(cards.size, 1); assert.equal(bubbles.size, 3);
+});
+
+test('actual client and unified handler preserve reply/card separation across styles, including Core recovery', async () => {
+  const { handleBankingAgent } = await import('../server/banking-agent.mjs');
+  const { createBankingCore } = await import('../src/banking-core/core.mjs');
+  const { buildParsedIntent } = await import('../src/agent/clarification/merge-intent.mjs');
+  const { BankingBillCard } = require('../src/app/BankingBillCard.tsx');
+  const env = { SAVEFLOW_ACCESS_CODE: 'client-test-access-code', CONTINUATION_TOKEN_SECRET: 'client-test-continuation-secret', SAVEFLOW_BANKING_RUNTIME: 'trueforge' };
+  const original = global.fetch; let seq = 0, proposal, seen = [], sent = [];
+  const core = createBankingCore();
+  const client = { createSession: async () => 'private', cancel: async () => {}, runTurn: async (_id, wire) => { seen.push(JSON.parse(wire)); return JSON.stringify(proposal); } };
+  const rendered = new Set(), cards = new Set(), bubbles = new Set();
+  try {
+    global.fetch = async (url, options) => {
+      assert.equal(url, '/api/banking-agent'); sent.push(JSON.parse(options.body));
+      return handleBankingAgent(new Request('http://localhost' + url, { ...options, headers: { ...options.headers, 'x-forwarded-for': `client-${++seq}` } }), { env, core, trueforgeRuntimeClient: client });
+    };
+    proposal = buildParsedIntent('bill.summary', { month: '2026-08' });
+    for (const replyStyle of ['concise', 'friendly', 'professional']) {
+      const answer = await askBankingAgent({ message: '查询2026年8月账单', replyStyle }, env.SAVEFLOW_ACCESS_CODE, new AbortController().signal);
+      assert.equal(answer.reply.style, replyStyle); assert.equal(sent.at(-1).replyStyle, replyStyle);
+      assert.equal(seen.at(-1).replyStyle, undefined); // Style never changes the understanding context.
+      const { reply, requestId, ...data } = answer;
+      assert.ok(requestId); cards.add(JSON.stringify(data)); bubbles.add(reply.text);
+      rendered.add(renderToStaticMarkup(React.createElement(BankingBillCard, { data: answer })));
+    }
+    assert.equal(cards.size, 1); assert.equal(rendered.size, 1); assert.equal(bubbles.size, 3);
+    proposal = buildParsedIntent('transfer.create', { source_account_ref: '储蓄账户', payee_ref: '张三', amount: { amount_minor: 999999999, currency: 'CNY' } });
+    await assert.rejects(askBankingAgent({ message: '从储蓄账户给张三转9999999.99元', replyStyle: 'professional' }, env.SAVEFLOW_ACCESS_CODE, new AbortController().signal), e => {
+      assert.ok(e instanceof BankingAgentError); assert.equal(e.code, 'INSUFFICIENT_BALANCE');
+      assert.equal(e.recovery.reply.style, 'professional'); assert.ok(e.recovery.reply.text.includes('张三'));
+      assert.ok(e.recovery.reply.text.includes('可用余额')); assert.equal(e.recovery.status, 'needs_clarification');
+      assert.match(e.recovery.continuationToken, /^[\w-]{16}\.[\w-]{22}\.[\w-]+$/); return true;
+    });
+  } finally { global.fetch = original; }
+});
+
+test('unified clarification drafts survive refresh without restoring Core preview execution', () => {
+  const token = `${'a'.repeat(16)}.${'b'.repeat(22)}.${'c'.repeat(100)}`;
+  const draft = { status: 'needs_clarification', action: 'transfer.create', slot: 'source_account_ref', continuationToken: token, choices: [{ optionId: 'a', label: '账户' }] };
+  const messages = [{ id: 1, role: 'agent', kind: 'banking_clarification', text: '给张三转500元，请选择账户。', banking: draft }];
+  const flows = updateBankingFlows({}, 'draft', draft, 1000);
+  const restored = restoreBankingChat(saveBankingChat(messages, token, 1000, 2000, { flows, focusedFlowId: 'draft' }), 3000);
+  assert.equal(restored.continuation, token); assert.equal(restored.focusedFlowId, 'draft');
+  assert.equal(restored.flows.draft.slot, 'source_account_ref'); assert.equal(restoreBankingChat(saveBankingChat(messages, token, 1000, 2000), 301001).continuation, null);
+  const preview = { ...draft, status: 'awaiting_confirmation', operationId: 'op_real', previewCurrent: true };
+  assert.deepEqual(updateBankingFlows({}, 'preview', preview, 1000), {}); // Only the live Core operation state can activate controls.
+  const history = [{ id: 2, role: 'agent', kind: 'banking_card_preview', text: '预览', banking: preview }];
+  const saved = restoreBankingChat(saveBankingChat(history, null, 0, 2000, { flows: updateBankingFlows({}, 'preview', preview, 1000), focusedFlowId: null }), 3000);
+  assert.deepEqual(saved.flows, {}); assert.equal(saved.continuation, null); assert.equal(saved.messages[0].banking.previewCurrent, false);
+});
+
 test('executed transfer preview is read-only (no confirm/cancel) and renders a receipt card', () => {
   const data = { status: 'succeeded', action: 'transfer.create', operationId: 'tfpreview:op_done', source: 'trueforge-mcp', previewOnly: true, executed: true,
     preview: { summary: '已执行', exactEffects: [{ amountFen: 40000, accountName: '模拟活期账户', payeeName: '房东王先生' }] } };

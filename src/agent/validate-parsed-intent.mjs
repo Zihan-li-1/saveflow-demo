@@ -6,6 +6,8 @@ export const PARSED_INTENT_ACTIONS = Object.freeze([
   'card.set_budget',
   'card.freeze',
   'card.unfreeze',
+  'subscription.list',
+  'product.list',
   'wealth.recommend',
   'wealth.compare',
   'wealth.assess_risk',
@@ -20,7 +22,7 @@ export const PARSED_INTENT_ACTIONS = Object.freeze([
 
 const TOP_LEVEL_KEYS = ['schemaVersion', 'action', 'slots', 'missingSlots', 'status'];
 const TRANSFER_SLOT_KEYS = ['payee_ref', 'amount', 'source_account_ref'];
-const BILL_SLOT_KEYS = ['month', 'period'];
+const BILL_SLOT_KEYS = ['month', 'period', 'year', 'monthNumber'];
 const CARD_SLOT_KEYS = ['card_ref', 'amount'];
 const WEALTH_RECOMMEND_SLOT_KEYS = ['goal', 'max_risk_level', 'horizon_days', 'liquidity_requirement', 'amount'];
 const SCENARIO_CREATE_SLOT_KEYS = ['trigger', 'conditions', 'proposed_steps', 'authorization_scope'];
@@ -124,6 +126,10 @@ function validateTransfer(input, slots) {
 
 function validateBill(input, slots) {
   rejectUnknownKeys(slots, BILL_SLOT_KEYS, 'slots');
+  if ('year' in slots && (!Number.isInteger(slots.year) || slots.year < 1900 || slots.year > 2099)) fail('slots.year must be an explicit year');
+  if ('monthNumber' in slots && (!Number.isInteger(slots.monthNumber) || slots.monthNumber < 1 || slots.monthNumber > 12)) fail('slots.monthNumber must be 1-12');
+  if (('month' in slots || 'period' in slots) && ('year' in slots || 'monthNumber' in slots)) fail('slots.month cannot coexist with partial period slots');
+  if ('year' in slots && 'monthNumber' in slots) fail('complete periods must use slots.month');
   if ('month' in slots && 'period' in slots) fail('slots must contain either month or period, not both');
   if ('month' in slots) {
     const month = requireNonEmptyString(slots.month, 'slots.month');
@@ -276,6 +282,12 @@ export function validateParsedIntent(value) {
       rejectUnknownKeys(slots, [], 'slots');
       requireMissingSlots(input.missingSlots, ['action']);
       requireStatus(input.status, 'needs_clarification');
+      break;
+    case 'subscription.list':
+    case 'product.list':
+      rejectUnknownKeys(slots, [], 'slots');
+      requireMissingSlots(input.missingSlots, []);
+      requireStatus(input.status, 'ready_for_resolution');
       break;
     case 'unsupported':
       rejectUnknownKeys(slots, [], 'slots');

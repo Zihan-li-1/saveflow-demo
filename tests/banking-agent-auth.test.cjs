@@ -6,7 +6,7 @@ const { tmpdir } = require('node:os');
 const { join, dirname, resolve } = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { handleBankingAgent, bankingAuthConfigStatus } = require('../server/banking-agent.mjs');
-const env = { SAVEFLOW_ACCESS_CODE: 'auth-test-access-1234', CONTINUATION_TOKEN_SECRET: 'auth-test-secret-1234' };
+const env = { SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen', SAVEFLOW_ACCESS_CODE: 'auth-test-access-1234', CONTINUATION_TOKEN_SECRET: 'auth-test-secret-1234' };
 let sequence = 0;
 const request = access => new Request('http://localhost/api/banking-agent', {
   method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': `auth-test-${++sequence}`, ...(access === undefined ? {} : { 'x-saveflow-access': access }) },
@@ -45,7 +45,7 @@ test('missing/invalid server configuration exposes no internal reason; wrong acc
   assert.equal(correct.status, 503); assert.equal((await correct.json()).code, 'CONTINUATION_CONFIG_ERROR');
 });
 
-test('correct test access code preserves both Harness and TrueForge bill routes', async () => {
+test('correct access code permits either explicitly configured whole runtime', async () => {
   const harness = await handleBankingAgent(request(env.SAVEFLOW_ACCESS_CODE), { env,
     parseIntent: async () => ({ schemaVersion: '1.0.0', action: 'bill.summary', slots: { month: '2026-08' }, missingSlots: [], status: 'ready_for_resolution' }),
   });
@@ -53,9 +53,8 @@ test('correct test access code preserves both Harness and TrueForge bill routes'
   assert.equal(harness.status, 200); assert.equal(result.data.data.transactionCount, 12);
   let called = 0;
   const trueforge = await handleBankingAgent(request(env.SAVEFLOW_ACCESS_CODE), {
-    env: { ...env, SAVEFLOW_TRUEFORGE_BILL_ENABLED: 'true' },
-    parseIntent: () => assert.fail('TrueForge request reached Harness'),
-    trueforgeBillAdapter: { handle: async () => { called++; return { httpStatus: 200, code: 'OK', message: '账单统计已生成', data: result.data }; } },
+    env: { ...env, SAVEFLOW_BANKING_RUNTIME: 'trueforge' },
+    trueforgeRuntimeClient: { createSession: async () => 'runtime-session', cancel: async () => {}, runTurn: async () => { called++; return JSON.stringify({ schemaVersion: '1.0.0', action: 'bill.summary', slots: { month: '2026-08' }, missingSlots: [], status: 'ready_for_resolution' }); } },
   });
   assert.equal(trueforge.status, 200); assert.equal(called, 1);
   assert.deepEqual((await trueforge.json()).data, result.data);

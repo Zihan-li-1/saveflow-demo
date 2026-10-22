@@ -7,7 +7,7 @@ import { bankingIntentSystemPrompt, parseBankingIntent } from '../server/banking
 import { handleBanking } from '../server/banking.mjs';
 import { toWire } from '../src/banking-core/wire.mjs';
 
-const env = { SAVEFLOW_ACCESS_CODE: 'test-access-code-1234', CONTINUATION_TOKEN_SECRET: 'test-continuation-secret-1234', DASHSCOPE_API_KEY: 'fake-key' };
+const env = { SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen', SAVEFLOW_ACCESS_CODE: 'test-access-code-1234', CONTINUATION_TOKEN_SECRET: 'test-continuation-secret-1234', DASHSCOPE_API_KEY: 'fake-key' };
 let requestNumber = 0;
 const card = (action, slots = {}) => {
   const required = action === 'card.set_budget' ? ['card_ref', 'amount'] : ['card_ref'];
