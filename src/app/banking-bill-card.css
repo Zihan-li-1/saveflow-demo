@@ -6,6 +6,7 @@
 .bill-report-icon { display: grid; place-items: center; flex: 0 0 38px; height: 38px; border-radius: 11px; background: #eaf2ff; color: #326dc4; }
 .bill-report-month { color: #53657a; font-size: 11px; }
 .bill-report h3 { margin: 3px 0 0; font-size: 15px; font-weight: 700; color: #25374d; }
+.bill-report .bill-report-period-exact { margin: 4px 0 0; color: #607086; font-size: 10px; line-height: 1.35; }
 .bill-report-badge { flex-shrink: 0; padding: 5px 8px; border: 1px solid #dce6f1; border-radius: 6px; background: #f6f9fd; color: #4b6380; font-size: 10px; }
 .bill-report-hero { margin: 23px 0 20px; }
 .bill-report-hero > span { display: block; color: #586a7e; font-size: 12px; }
@@ -28,11 +29,25 @@
 .bill-report-count > strong { display: block; margin-top: 7px; color: #334155; font-size: 21px; }
 .bill-report-count strong span { font-size: 11px; font-weight: 400; }
 .bill-report-categories { margin-top: 16px; }
+.bill-report-chart { margin-top: 18px; padding: 15px 14px 12px; border: 1px solid #e3eaf2; border-radius: 12px; background: #f8fafc; }
+.bill-report-chart ul { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(44px, 1fr); align-items: end; gap: 9px; min-height: 176px; margin: 0; padding: 0; list-style: none; overflow-x: auto; }
+.bill-report-chart li { display: grid; grid-template-rows: 30px 112px 22px; align-items: end; min-width: 44px; text-align: center; color: #607086; font-size: 10px; }
+.bill-report-chart li > strong { align-self: center; color: #40546c; font-size: 9px; font-weight: 600; white-space: nowrap; }
+.bill-report-chart li.future { color: #94a3b8; }
+.bill-report-chart li.future .bill-report-bar-track { background: repeating-linear-gradient(135deg, #eef2f6, #eef2f6 5px, #f8fafc 5px, #f8fafc 10px); }
+.bill-report-chart li > span small { display: block; margin-top: 2px; color: #8a6a25; font-size: 8px; line-height: 1; }
+.bill-report-bar-track { position: relative; height: 108px; border-radius: 7px 7px 3px 3px; background: linear-gradient(180deg, #eef3f8 0%, #e8eef5 100%); overflow: hidden; }
+.bill-report-bar-track span { position: absolute; right: 0; bottom: 0; left: 0; min-height: 3px; border-radius: 7px 7px 3px 3px; background: linear-gradient(180deg, #5b9bea 0%, #3477cc 100%); }
 .bill-report h4 { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px; margin: 0 0 10px; color: #334155; font-size: 12px; font-weight: 600; }
 .bill-report h4 span { color: #607086; font-size: 10px; font-weight: 400; }
+.bill-report .bill-report-chart-summary { margin: -3px 0 12px; padding: 8px 10px; border-radius: 8px; background: #eef5fd; color: #40546c; font-size: 10px; line-height: 1.55; }
 .bill-report-categories ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; list-style: none; margin: 0; padding: 0; }
-.bill-report-categories li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 8px; padding: 7px 0; border-bottom: 1px solid #f0f3f7; color: #53657a; font-size: 11px; }
+.bill-report-categories li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 5px 8px; padding: 7px 0; border-bottom: 1px solid #f0f3f7; color: #53657a; font-size: 11px; }
+.bill-report-categories li > div:first-child { display: flex; min-width: 0; justify-content: space-between; gap: 6px; }
+.bill-report-categories li > div:first-child span:last-child { color: #718096; font-size: 9px; }
 .bill-report-categories li strong { color: #334155; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bill-report-category-track { grid-column: 1 / -1; height: 4px; border-radius: 999px; background: #edf1f5; overflow: hidden; }
+.bill-report-category-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #78a9e6, #3d7dce); }
 .bill-report-footer { display: grid; gap: 5px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #e7edf4; color: #607086; font-size: 10px; line-height: 1.6; }
 .bill-report-footer > div { display: flex; align-items: center; gap: 5px; }
 .bill-report-footer svg { flex-shrink: 0; color: #326dc4; }
@@ -45,4 +60,6 @@
   .bill-report-hero { margin-top: 19px; }
   .bill-report-count { text-align: left; }
   .bill-report-count > span { justify-content: flex-start; }
+  .bill-report-chart { margin-right: -4px; margin-left: -4px; padding-right: 9px; padding-left: 9px; }
+  .bill-report-chart ul { grid-auto-columns: minmax(42px, 1fr); }
 }

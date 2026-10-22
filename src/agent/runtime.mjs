@@ -14,7 +14,9 @@ export async function dispatchParsedIntent(value, dependencies) {
     if (intent.action === 'transfer.create') return await dependencies.transferHandler(intent);
     if (intent.action === 'bill.summary') return await dependencies.billHandler(intent);
     if (intent.action.startsWith('card.')) return dependencies.cardHandler ? await dependencies.cardHandler(intent) : { ok: false, kind: 'unsupported' };
-    if (intent.action.startsWith('wealth.')) return dependencies.wealthHandler ? await dependencies.wealthHandler(intent) : { ok: false, kind: 'unsupported' };
+    if (intent.action.startsWith('wealth.')) return dependencies.wealthHandler ? await dependencies.wealthHandler({ action: intent.action, ...intent.slots }) : { ok: false, kind: 'unsupported' };
+    if (intent.action.startsWith('scenario.')) return dependencies.scenarioHandler ? await dependencies.scenarioHandler({ action: intent.action, ...intent.slots }) : { ok: false, kind: 'unsupported' };
+    if (intent.action === 'orchestrator.goal') return dependencies.goalHandler ? await dependencies.goalHandler(intent) : { ok: false, kind: 'unsupported' };
     return { ok: false, kind: 'unsupported' };
   } catch (error) {
     return { ok: false, kind: 'skill_error', action: intent.action, error: { code: 'SKILL_ERROR', message: error instanceof Error && error.message.trim() ? error.message : 'Skill 处理失败，请稍后重试。' } };
@@ -23,18 +25,62 @@ export async function dispatchParsedIntent(value, dependencies) {
 
 export async function handleBillSummary(intent, repository) {
   const month = intent.slots.month;
-  if (!month) throw new Error('bill.summary requires month before dispatch');
-  const transactions = await repository.getTransactions({ month });
-  const summary = transactions.reduce((result, transaction) => {
+  const period = intent.slots.period;
+  if (!month && !period) throw new Error('bill.summary requires a resolved time period before dispatch');
+  const localDate = occurredAt => {
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(occurredAt));
+    const value = type => parts.find(item => item.type === type)?.value ?? '';
+    return `${value('year')}-${value('month')}-${value('day')}`;
+  };
+  const summarize = items => items.reduce((result, transaction) => {
     if (transaction.type === 'income') result.totalIncomeFen += transaction.amountFen;
     if (transaction.type === 'expense') {
       result.totalExpenseFen += transaction.amountFen;
       result.categoryTotals[transaction.category] = (result.categoryTotals[transaction.category] ?? 0) + transaction.amountFen;
     }
     return result;
-  }, { totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: transactions.length, categoryTotals: {} });
+  }, { totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: items.length, categoryTotals: {} });
+  const transactions = month
+    ? await repository.getTransactions({ month })
+    : (await repository.getTransactions()).filter(transaction => {
+        const value = localDate(transaction.occurredAt);
+        return value >= period.start_date && value <= period.end_date;
+      });
+  const summary = summarize(transactions);
   const context = await repository.getContextInfo();
-  return { ok: true, kind: 'bill_result', action: 'bill.summary', data: summary, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: transactions.map(transaction => transaction.id) }] };
+  const asOfDate = localDate(context.asOf);
+  const startMonth = month ?? period.start_date.slice(0, 7);
+  const endMonth = month ?? period.end_date.slice(0, 7);
+  const months = [];
+  let cursor = new Date(`${startMonth}-01T00:00:00Z`);
+  while (months.length < 13) {
+    const value = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`;
+    months.push(value);
+    if (value === endMonth) break;
+    cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
+  }
+  const monthlyBreakdown = months.map(value => ({
+    month: value,
+    status: (() => {
+      const [year, oneBasedMonth] = value.split('-').map(Number);
+      const monthStart = `${value}-01`;
+      const monthEnd = new Date(Date.UTC(year, oneBasedMonth, 0)).toISOString().slice(0, 10);
+      const isPartialSelection = !!period && (period.start_date > monthStart || period.end_date < monthEnd);
+      return monthStart > asOfDate ? 'future' : monthEnd >= asOfDate || isPartialSelection ? 'partial' : 'complete';
+    })(),
+    ...summarize(transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(value))),
+  }));
+  return {
+    ok: true,
+    kind: 'bill_result',
+    action: 'bill.summary',
+    data: {
+      ...summary,
+      ...(month ? { month } : { period: { startDate: period.start_date, endDate: period.end_date, timezone: period.timezone, label: period.label } }),
+      ...(!month ? { monthlyBreakdown } : {}),
+    },
+    evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: transactions.map(transaction => transaction.id) }],
+  };
 }
 
 function transferRepository(repository, selections = {}) {
@@ -97,6 +143,22 @@ export async function handleTransfer(intent, repository) {
   const resolved = await resolveTransferIntent(repository, intent.slots);
   if (resolved.state === 'needs_clarification') return { ok: false, kind: 'needs_clarification', action: 'transfer.create', source: 'resolver', question: resolved.clarification.question, slot: resolved.clarification.slot, reason: resolved.clarification.reason, ...(resolved.clarification.candidates ? { candidates: resolved.clarification.candidates } : {}) };
   return { ok: true, kind: 'transfer_resolution', action: 'transfer.create', data: resolved };
+}
+
+export async function handleGoal(intent, repository) {
+  const [context, accounts, subscriptions, cards, products] = await Promise.all([
+    repository.getContextInfo(), repository.getAccounts(), repository.getSubscriptions(), repository.getCards(), repository.getInvestmentProducts(),
+  ]);
+  const activeSubscriptions = subscriptions.filter(item => item.status === 'active');
+  const potentiallyUnused = activeSubscriptions.filter(item => item.isPotentiallyUnused);
+  const availableBalanceFen = accounts.filter(item => item.status === 'active').reduce((sum, item) => sum + item.availableBalanceFen, 0);
+  const steps = [
+    { action: 'bill.analyze', origin: 'agent_suggested', reason: '先核对目标期间的收入、支出和异常交易。', requires_confirmation: false },
+    ...(potentiallyUnused.length ? [{ action: 'subscription.list', origin: 'agent_suggested', reason: `发现 ${potentiallyUnused.length} 项可能闲置订阅，建议先核实；不会自动取消。`, requires_confirmation: false }] : []),
+    ...(cards.length ? [{ action: 'card.get', origin: 'agent_suggested', reason: '查看现有卡片预算和消费情况；不会自动调整预算。', requires_confirmation: false }] : []),
+    ...(products.length && availableBalanceFen > 0 ? [{ action: 'wealth.recommend', origin: 'agent_suggested', reason: '如有明确风险、期限和流动性约束，可进行只读产品筛选。', requires_confirmation: false }] : []),
+  ];
+  return { ok: true, kind: 'goal_plan', action: 'orchestrator.goal', data: { goal_text: intent.slots.goal_text, horizon: intent.slots.horizon ?? null, constraints: intent.slots.constraints ?? null, steps, snapshot: { available_balance_minor: availableBalanceFen, active_subscription_count: activeSubscriptions.length, potentially_unused_subscription_count: potentiallyUnused.length, card_count: cards.length }, execution_allowed: false }, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: [...accounts.map(item => item.id), ...activeSubscriptions.map(item => item.id), ...cards.map(item => item.id), ...products.map(item => item.id)] }] };
 }
 
 function orchestratorError(error) {

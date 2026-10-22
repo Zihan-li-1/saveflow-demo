@@ -3,8 +3,8 @@ import { getConfiguredBankingCore } from '../src/banking-core/postgres-store.mjs
 import { BankingIntentParserError, parseBankingIntent as defaultParseBankingIntent } from './banking-intent-parser.mjs';
 import { ParsedIntentValidationError } from '../src/agent/validate-parsed-intent.mjs';
 import { runBankingConversation, statusFor } from './banking-orchestrator.mjs';
-import { getTrueforgeBillAdapter, isTrueforgeContinuation, isTrueforgeTaskSwitch, shouldRouteTrueforgeBill } from './trueforge-bill-adapter.mjs';
-import { getTrueforgeSkillAdapter, isSkillContinuation, routeTrueforgeSkill } from './trueforge-skill-adapter.mjs';
+import { parseTrueforgeBankingIntent } from './trueforge-banking-runtime.mjs';
+import { bankingReply, validateReplyStyle } from './banking-reply.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const RATE_LIMIT = 10;
@@ -53,8 +53,8 @@ async function readBody(request) {
   catch { throw Object.assign(new Error('请求体必须是有效 JSON'), { code: 'INVALID_REQUEST' }); }
 }
 
-function responseEnvelope(requestId, code, message, data) {
-  return { code, message, requestId, ...(data ? { data } : {}) };
+function responseEnvelope(requestId, code, message, data, style, replyContext) {
+  return { code, message, requestId, reply: bankingReply({ code, message, data, replyContext }, style), ...(data ? { data } : {}) };
 }
 
 function errorData(code, message) {
@@ -67,15 +67,16 @@ export function bankingAuthConfigStatus(env = process.env) {
   return { accessCode: state(env.SAVEFLOW_ACCESS_CODE), continuationSecret: state(env.CONTINUATION_TOKEN_SECRET) };
 }
 
-/** Banking Agent: Parser -> Dispatcher -> Skill -> Core formal preview. */
+/** One configured understanding boundary -> validated intent -> Skill -> Core. */
 export async function handleBankingAgent(
   request,
   options = {},
 ) {
-  const { env = process.env, parseIntent = defaultParseBankingIntent, fetchImpl = fetch, now = Date.now } = options;
+  const { env = process.env, fetchImpl = fetch, now = Date.now } = options;
+  let style = 'concise';
   const requestId = crypto.randomUUID();
-  const reply = (status, code, message, data) => Response.json(
-    responseEnvelope(requestId, code, message, data),
+  const reply = (status, code, message, data, replyContext) => Response.json(
+    responseEnvelope(requestId, code, message, data, style, replyContext),
     { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } },
   );
   const authFailure = (category, status, code, message) => {
@@ -100,31 +101,21 @@ export async function handleBankingAgent(
     // Configuration details are only available after authentication succeeds.
     if (configStatus.continuationSecret !== 'configured') return authFailure(`CONTINUATION_CONFIG_${configStatus.continuationSecret.toUpperCase()}`, 503, 'CONTINUATION_CONFIG_ERROR', '服务暂时不可用，请联系演示维护者。');
 
-    let body = await readBody(request);
-    if (env.SAVEFLOW_TRUEFORGE_BILL_ENABLED === 'true' && isTrueforgeTaskSwitch(body)) {
-      const adapter = options.trueforgeBillAdapter ?? getTrueforgeBillAdapter(env);
-      const scope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
-      body = adapter.discardForTaskSwitch(body, { scope });
-    }
-    if (isSkillContinuation(body?.continuationToken) || (body?.continuationToken === undefined && routeTrueforgeSkill(body?.message, env))) {
-      const adapter = options.trueforgeSkillAdapter ?? getTrueforgeSkillAdapter(env);
-      const scope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
-      const result = await adapter.handle(body, { scope, signal: request.signal });
-      return reply(result.httpStatus, result.code, result.message, result.data);
-    }
-    if (shouldRouteTrueforgeBill(body, env)) {
-      const adapter = options.trueforgeBillAdapter ?? getTrueforgeBillAdapter(env);
-      const scope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
-      const result = await adapter.handle(body, { scope, signal: request.signal });
-      return reply(result.httpStatus, result.code, result.message, result.data);
-    }
-    if (isTrueforgeContinuation(body?.continuationToken)) {
-      return reply(400, 'CONTINUATION_INVALID', '账单试点已关闭，请重新开始查询。', errorData('CONTINUATION_INVALID', '账单试点已关闭，请重新开始查询。'));
-    }
+    const body = await readBody(request);
+    style = validateReplyStyle(body?.replyStyle);
+    const implementation = env.SAVEFLOW_BANKING_RUNTIME || 'trueforge';
+    if (!['trueforge', 'legacy-qwen'].includes(implementation)) throw Object.assign(new Error('Runtime configuration'), { code: 'BANKING_RUNTIME_CONFIG_ERROR', status: 503 });
+    // Dependency injection is for tests/hosts, never supplied by the request.
+    const parseIntent = options.parseIntent ?? (implementation === 'legacy-qwen' ? defaultParseBankingIntent :
+      (message, context) => parseTrueforgeBankingIntent(message, { ...context, signal: request.signal, client: options.trueforgeRuntimeClient }));
+    // Retired MCP pilot tokens cannot silently enter another implementation.
+    if (/^tf[mb]1\./.test(body?.continuationToken || '')) throw Object.assign(new Error('Retired continuation'), { code: 'CONTINUATION_INVALID', status: 400, userMessage: '旧试点会话已失效，请开始新请求。' });
     const core = options.core ?? await getConfiguredBankingCore(env);
     const repository = options.repository ?? core.repository;
-    const result = await runBankingConversation(body, { core, repository, env, now, parseIntent, fetchImpl, requestId });
-    return reply(result.httpStatus, result.code, result.message, result.data);
+    const scenarioScope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
+    const result = await runBankingConversation(body, { core, repository, env, now, parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope, understandContinuation: implementation === 'trueforge' });
+    const data = result.data?.recovery ? { ...result.data, recovery: { ...result.data.recovery, continuationToken: result.data.continuationToken } } : result.data;
+    return reply(result.httpStatus, result.code, result.message, data, result.replyContext);
   } catch (error) {
     const code = typeof error?.code === 'string' ? error.code : error instanceof BankingIntentParserError || error instanceof ParsedIntentValidationError ? 'MODEL_FORMAT_ERROR' : error?.message?.includes('DATABASE_URL') ? 'DATABASE_NOT_CONFIGURED' : 'MODEL_UNAVAILABLE';
     const message = error.userMessage ?? (error instanceof BankingIntentParserError ? error.message : publicMessage(code, '请求未取得可靠结果，请稍后重试。'));

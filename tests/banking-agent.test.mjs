@@ -6,7 +6,7 @@ import { handleBankingAgent } from '../server/banking-agent.mjs';
 // 验证 banking-agent 端点（自然语言 → 意图 → 转账预览）的「会算账」上下文与「权限分级」。
 // 通过注入 mock parseIntent，避免依赖真实大模型，保证测试确定性。
 
-const env = {
+const env = { SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen',
   SAVEFLOW_ACCESS_CODE: 'banking-agent-test-access-1234',
   CONTINUATION_TOKEN_SECRET: 'continuation-test-secret-123456',
 };

@@ -1,66 +1,95 @@
-﻿# Banking Agent 与 IM 合同 v1.1
+# Banking Agent API 与回复合同
 
-边界：理解 → 澄清/选择 → 账单结果或 Core 正式预览。确认、执行、回执等待 B 的共享状态方案；页面没有转账确认按钮，不调用 action.decide / action.execute。
+当前实现：单动作理解 → 服务端校验 → 现有 Skill/Resolver → Banking Core 查询或正式预览。**没有上线多意图计划、依赖图或自动执行。** `/api/agent` 储蓄助手保持独立。
 
-## 入口与切换
+## 唯一入口与服务端配置
 
-POST /api/banking-agent；本地 npm run dev:qwen；生产 netlify/functions/banking-agent.mjs。普通 next dev 或单独上传 out 不提供 POST。
+页面的 Banking 消息、自由文本补充、选项都只调用 `POST /api/banking-agent`。本地通过 `npm run dev:qwen` 提供 API，Netlify 入口为 `netlify/functions/banking-agent.mjs`；静态 `out` 本身不提供 API。
 
-页面默认 Banking Agent。消息、补充回答和选项只调用此接口；明确切换“Qwen 储蓄助手”才使用旧 /api/agent；离线模拟保留。切换清空会话、token、卡片，不双发、不静默回退。
+`SAVEFLOW_BANKING_RUNTIME` 整体选择实现，默认 `trueforge`：
 
-请求头为 Content-Type: application/json 和 X-Saveflow-Access: <演示访问码>。前端使用同源相对路径；服务端拒绝不匹配的 Origin。访问码只存页面内存。服务端需要 SAVEFLOW_ACCESS_CODE 和 CONTINUATION_TOKEN_SECRET（分别至少16字符），所有实例使用相同续接密钥。DASHSCOPE_API_KEY 和续接密钥不得使用 NEXT_PUBLIC_ 前缀或传入浏览器。
+- `trueforge`：TrueForge Agent Runtime 提出一个 ParsedIntent，由服务端验证和编排。需要 `TRUEFORGE_BASE_URL`（不带路径/查询的 HTTP(S) origin）、`TRUEFORGE_MODEL`、按部署需要配置 `TRUEFORGE_TOKEN`。Qwen 可以是该运行时注册的模型名称。
+- `legacy-qwen`：迁移期显式选择旧 Qwen 单意图解析和确定性续聊，仍经过同一服务端编排器和回复合同，需要 `DASHSCOPE_API_KEY` 等旧配置。
+- 其他值为配置错误。没有按句式选择实现、按请求试探多个后端或失败静默回退。旧 `SAVEFLOW_TRUEFORGE_*_ENABLED` 开关不再选择此 API 的路由。
+
+`SAVEFLOW_ACCESS_CODE`、`CONTINUATION_TOKEN_SECRET` 分别至少 16 字符。持久 Core 部署还需配置 `DATABASE_URL` 并迁移；同一部署的实例使用相同续接密钥和一致 Repository。访问码通过 `X-Saveflow-Access` 发送；服务端拒绝不同源 Origin、限流每分钟 10 次、限制 JSON 请求体 16KB。密钥不得使用 `NEXT_PUBLIC_` 前缀。
 
 ## 请求
 
-首次消息：
 ```json
-{"message":"给张三转 500 元","history":[],"consent":true}
-```
-补充回答或修改预览：
-```json
-{"continuationToken":"<上一响应的令牌>","message":"2026年8月"}
-```
-选项点击：
-```json
-{"continuationToken":"<上一响应的令牌>","choice":{"optionId":"opt_<上一响应选项>"}}
+{"message":"给张三转500元","history":[],"consent":true,"replyStyle":"friendly"}
 ```
 
-choice 只能包含 optionId，必须带 token，不能同时带 message。前端不传实体 ID、金额对象、operationId、confirmed 或 riskLevel。首次 message 为1–2000字符，页面限制500字；history 可省略，最多12条，每条为 role（user/assistant）与 content（1–2000字符）。consent 为兼容现有调用方可省略，提供时只能 true；页面强制勾选并提交 true。请求体最多16KB。
+```json
+{"continuationToken":"<上一响应令牌>","message":"从活期账户","replyStyle":"professional"}
+```
 
-token 为5分钟有效的加密认证状态，包含槽位和服务端候选映射，不代表确认。不是一次性消费 token，不提供写入幂等性；重放可能生成另一个预览。不得记录完整 token、访问码、模型密钥。跨进程续接需要相同密钥和一致的 Repository；续接时重新检查选中实体有效性。
+```json
+{"continuationToken":"<上一响应令牌>","choice":{"optionId":"<上一响应选项>"}}
+```
 
-## 响应
+`replyStyle` 可省略，默认 `concise`（简洁）；另有 `friendly`（亲切）、`professional`（专业）。页面可切换，只在当前页面内保留该偏好。风格不进入模型理解上下文，不修改参数、工具、卡片、风险或确认要求。
 
-统一 envelope：`{code,message,requestId,data?}`。requestId 由服务端生成；Cache-Control: no-store。HTTP 200 不等于业务成功。
+首次 message 为 1–2000 字符（页面限制 500）；history 最多 12 条，每条 role 为 user/assistant、content 为 1–2000 字符。history 是不可信文本，不能授权实体、余额或确认。consent 可省略，提供时只能为 true；页面要求勾选授权。choice 只能含非空 optionId，必须携带 token，不能同时携带 message。请求不接受实体 ID、confirmed、riskLevel、operationId、工具名等额外字段。
 
-| HTTP / code | data | 页面处理 |
+续接令牌为有效期 5 分钟的 AES-GCM 加密认证草稿，包含槽位及服务端候选映射，不是确认授权或写入幂等键。自由文本续聊由同一 TrueForge 理解器接收已认证的 action/slots/pendingSlot；结构化选项由服务端核对映射，无需额外模型调用。实体原始引用变化时删除旧选择。模型丢失已知槽位的结果被拒绝，避免把已知内容当作缺失再次询问。
+
+旧试点 `tfm1`/`tfb1` 令牌返回 CONTINUATION_INVALID，必须重新开始。统一入口不暴露远端 TrueForge session ID。浏览器可恢复有效澄清草稿，但不能从存储恢复 Core 确认/执行按钮的有效状态。
+
+## 响应：文字与卡片分离
+
+```json
+{
+  "code":"NEEDS_CLARIFICATION",
+  "message":"请选择付款账户。",
+  "requestId":"<服务端编号>",
+  "reply":{
+    "text":"好的，收款人「张三」，金额 ¥500.00。请选择付款账户。",
+    "style":"friendly",
+    "safetyNotices":[]
+  },
+  "data":{
+    "kind":"clarification","status":"needs_clarification",
+    "action":"transfer.create","slot":"source_account_ref",
+    "question":"请选择付款账户。",
+    "choices":[{"optionId":"<服务端选项>","label":"模拟活期账户（可用 ¥5000.00）"}],
+    "continuationToken":"<不透明令牌>"
+  }
+}
+```
+
+以上选项与余额仅示意，真实值由 Repository 产生。`message` 保留兼容状态说明；客户端展示 `reply.text` 和逐字安全提示 `reply.safetyNotices`。`data` 保留原有结构化业务合同，卡片只读取它，不能从自然语言解析金额、风险或执行结果。澄清卡片只提供候选按钮及固定选择提示，不再重复 `data.question`；无选项时只显示气泡并允许文字回答。
+
+| HTTP / code | data.status | 含义 |
 | --- | --- | --- |
-| 200 / NEEDS_CLARIFICATION | kind=clarification、status=needs_clarification、action、slot、question、choices、continuationToken，可有 source/message | 显示追问及 {optionId,label}；无选项时文字回答 |
-| 200 / OK | status=bill_result、action=bill.summary、data、evidence | 月份、收入/支出、笔数、来源和截点 |
-| 200 / OK | status=awaiting_confirmation、action=transfer.create、operationId、preview、risk、continuationToken | 显示 Core 正式预览；本轮不能确认 |
-| 200 / UNSUPPORTED | status=unsupported | 提示暂不支持 |
-| 4xx/5xx / 错误码 | 可无 data，或 status=error/core_error、error | 显示 envelope.message，旧预览不恢复 |
+| 200 / NEEDS_CLARIFICATION | needs_clarification | action、slot、question、choices、continuationToken；只问缺失或歧义信息 |
+| 200 / OK | bill_result / card_result / subscription_result / product_result | 现有 Skill/Core 结构化查询数据及 evidence |
+| 200 / OK | awaiting_confirmation | Core 正式预览、operationId、preview、risk、continuationToken；尚未执行 |
+| 200 / OK | cancelled | 取消当前对话草稿，未执行资金/卡片操作；不代表撤销另一条已准备的 Core operation |
+| 200 / UNSUPPORTED | unsupported | 不支持该动作，未准备执行 |
+| 400 / INSUFFICIENT_BALANCE | core_error | error 及可选 recovery 澄清，保留收款人与金额，账户余额由 Repository 提供 |
+| 4xx / 5xx | error / core_error / card_error 或无 data | 明确失败，不回退、不自动重试 |
 
-账单 data：month、totalIncomeFen、totalExpenseFen、transactionCount、categoryTotals；evidence 为 {source,asOf,entityIds} 数组。金额整数分，展示时除100。统计由 Repository 计算，不由模型生成。
+成功查询支持账单月汇总、卡片信息、订阅列表、产品列表；资金/卡片动作支持转账、月预算设置、冻结、解冻的既有 Core 预览。订阅取消、产品申购和多个动作请求不支持。多动作应拆开提交；有歧义时澄清，不挑选其中一个动作执行。
 
-preview 使用 B 的 camelCase 合同：planId、stepIds、summary、previewHash、exactEffects、riskLevel、warnings、expiresAt、contextSnapshotId。effect 包含账户名、收款人名、脱敏账号、整数分金额、手续费与预期余额。operationId/hash 只由 Core 生成。此入口不同于 /api/banking 的 snake_case wire 合同。
+金额使用整数分。实体及余额来自 Repository，预览编号/哈希/风险等级/确认步骤来自 Core。此接口使用 camelCase 结构，不改变 `/api/banking` 的既有 wire 合同。页面确认后仍走既有 Core `action.decide` / `action.execute` 与验证流程；模型没有这些工具。文字“确认执行”不能替代页面确认。
 
-完整固定响应见 [fixtures](../tests/fixtures/banking-agent)。样例 token 为占位符，不能重放；实际续接必须使用上一响应的 token/optionId。
+关键预览安全提示不受风格影响：
 
-常见错误：401 UNAUTHORIZED；403 FORBIDDEN；400 INVALID_REQUEST / INVALID_CHOICE / CONTINUATION_INVALID；429 RATE_LIMIT（每分钟10次）；503 ACCESS_NOT_CONFIGURED / CONTINUATION_CONFIG_ERROR；MODEL_*；Core INSUFFICIENT_BALANCE 等。错误可能没有 data。令牌过期需重新开始；网络错误不自动重试。
+> 资金和卡片状态尚未改变。只有在页面核对预览并完成所需确认与验证后，操作才可执行。
 
-## 修改与失效
+Core risk/preview warnings 原文进入 safetyNotices，不交给模型润色。错误、安全要求也不做风格变换。余额不足恢复以澄清而非成功卡片展示。
 
-每次消息或点选先撤下旧预览、停用旧选项，再发送请求；失败也不恢复旧预览。只保留最近 token；重置和切换来源清空。请求代次丢弃过期响应，同步状态门禁防双击。
+常见错误包括 UNAUTHORIZED、FORBIDDEN、INVALID_REQUEST、INVALID_CHOICE、CONTINUATION_INVALID、CONFIRMATION_REQUIRED、RATE_LIMIT、TRUEFORGE_CONFIG_ERROR、TRUEFORGE_UNAVAILABLE、TRUEFORGE_TIMEOUT、TRUEFORGE_AGENT_POLICY_ERROR、TRUEFORGE_FORMAT_ERROR。错误响应不泄露供应商异常或凭据。所有响应含 requestId，并使用 Cache-Control: no-store。
 
-支持“改成 600 元”“改给王先生”“收款人改成李四”“改选收款人”“改选账户”。修改实体槽位同时删除旧实体选择，重新消歧；金额保留，生成新的 operationId/hash。选择账户/收款人不代表确认；输入“确认”不会执行转账。
+## 当前限制与 SDK 证据
 
-本轮撤卡是 UI 失效，不宣称跨实例撤销旧 Core operation。B 开放确认前需在共享存储实现预览替代/失效校验，不能仅依靠隐藏卡片。
+依赖锁定 `@truefoundry/trueforge-sdk@0.2.1`。本地声明 `AgentSpec.d.ts` 提供 inline spec、responseFormat、mcpServers、skills、RuntimeConfig；`TurnStateDone.d.ts` 提供 requiredActions 和最终 model.message；`ModelMessageEvent.d.ts` 提供 toolCalls、finishReason、threadId。这些能力足以实现无工具理解边界。
 
-## 验证
+当前采用 JSON object 输出并在服务端严格验证 ParsedIntent、字段、槽位来源；没有把 SDK 的 JSON 输出格式当作业务授权。创建和每次使用会话前校验私有会话、模型、指令、空工具/Skill、禁用搜索/沙盒/子 Agent 等配置；拒绝工具请求、待审批状态、未完成终态和与消息事件不一致的输出。25 秒超时或中断后尝试取消，不重试或切换模型。
 
-Node >=22.12。运行 npm test、npm run typecheck、npm run lint、npm run build。
+回复由集中式 `server/banking-reply.mjs` 使用已校验槽位和结果生成。SDK 没有在本项目中经过验证的、能够独立约束文案且同时保持业务授权不变的回复通道，因此本次未额外调用模型生成文案。这是当前实现选择，不声称 SDK 不能生成文字。
 
-banking-agent-integration.test.cjs 通过真实 HTTP 将两轮发送到不同 PID，分别验证本地处理器、Netlify Function 导出入口。覆盖账户选择、收款人消歧、账单月份、修改、伪造选项、访问码、Origin、资金不变。供应商使用测试桩，Core/Repository 为真实实现；不等于线上部署或真实 Qwen 验收。
+来源核验目前支持原文实体称谓、阿拉伯数字元金额（最多两位小数）、明确年月及保留的部分年月；中文数字金额、相对月份等尚未完整支持，不会猜测。多动作防护包含提示约束、单动作 schema 和保守连接词检查，不代表通用计划识别或多意图支持。实体解析仍由现有 Resolver 处理。要求清空某个已知槽位的自由文本尚不作为独立编辑协议，无法可靠保留的草稿会失败，可重新开始请求。
 
-线上部署需配置相同 Functions 运行时续接密钥，重跑三条链路，并用平台日志核对请求编号和实例。实际验收范围见 [联调记录](Banking-Agent-Integration.md)。
+未完成真实 TrueForge 服务/供应商部署验证；某些服务端默认配置规范化可能导致严格会话检查拒绝，需在目标服务上验收，不会为兼容性放宽权限验证。当前专项测试通过 SDK 协议桩验证调用和拒绝行为，不等于真实服务验收。检查记录见 [联调与验证](Banking-Agent-Integration.md)。

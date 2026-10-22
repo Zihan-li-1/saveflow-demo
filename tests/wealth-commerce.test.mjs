@@ -6,7 +6,7 @@ import {
   handleRoundUpInvestment,
   planCheckoutLiquidity,
   planLargePurchase,
-} from '../src/skills/wealth/wealth-skill.mjs';
+} from '../src/skills/wealth/wealth-action-skill.mjs';
 import { createTestWealthActionPort } from './fixtures/wealth-test-port.mjs';
 
 const json = path => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));

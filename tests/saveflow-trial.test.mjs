@@ -29,7 +29,7 @@ const callTool = async (client, name, args = {}) => {
   const result = await client.callTool({ name, arguments: args });
   return result.structuredContent ?? { ok: false, error: { code: 'SCHEMA_ERROR', message: result.content[0].text } };
 };
-const env = { SAVEFLOW_ACCESS_CODE: 'trial-test-access-1234', CONTINUATION_TOKEN_SECRET: 'trial-test-continuation-secret' };
+const env = { SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen', SAVEFLOW_ACCESS_CODE: 'trial-test-access-1234', CONTINUATION_TOKEN_SECRET: 'trial-test-continuation-secret' };
 
 async function withCoreClient(verify, { source = seed, now = () => 1000 } = {}) {
   const core = createBankingCore({ source, now });

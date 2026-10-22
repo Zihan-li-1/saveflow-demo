@@ -38,7 +38,7 @@ function cardFromRow(row) {
   return { id: row.card_id, name: row.name, accountId: row.account_id, status: row.status, monthlyBudgetFen: Number(row.monthly_budget_fen), monthlySpentFen: Number(row.monthly_spent_fen), version: Number(row.version), previewGeneration: Number(row.preview_generation) };
 }
 
-/** Creates an async Postgres adapter; migrations 001–003 must be applied first. */
+/** Creates an async Postgres adapter; migrations 001 through 003 must be applied first. */
 export async function createPostgresBankingCore({ connectionString, source = seed } = {}) {
   if (typeof connectionString !== 'string' || !connectionString.trim()) throw new Error('DATABASE_URL is required');
   const { default: postgres } = await import('postgres');
@@ -147,6 +147,46 @@ export async function createPostgresBankingCore({ connectionString, source = see
            ON CONFLICT (owner_id, operation_id) DO UPDATE SET action = EXCLUDED.action, fingerprint = EXCLUDED.fingerprint, state = EXCLUDED.state, record = EXCLUDED.record, updated_at = now()`,
           [owner, record.operationId, record.action, record.fingerprint, record.state, tx.json(record)],
         );
+      });
+    },
+    async getScenarioRule(owner, ruleId) {
+      assertId(owner); assertId(ruleId);
+      const [row] = await sql.unsafe('SELECT record, preview_generation FROM banking_scenario_rules WHERE owner_id = $1 AND rule_id = $2', [owner, ruleId]);
+      const rule = fromRecord(row?.record);
+      return rule ? { ...rule, previewGeneration: Number(row.preview_generation) } : undefined;
+    },
+    async reserveScenarioPreview(owner, ruleId) {
+      assertId(owner); assertId(ruleId);
+      const [row] = await sql.unsafe('UPDATE banking_scenario_rules SET preview_generation = preview_generation + 1, updated_at = now() WHERE owner_id = $1 AND rule_id = $2 RETURNING preview_generation', [owner, ruleId]);
+      if (!row) throw new BankingError('OPERATION_NOT_FOUND', '找不到可访问的场景规则');
+      return Number(row.preview_generation);
+    },
+    async commitScenario(owner, record, effect, makeReceipt) {
+      return sql.begin(async tx => {
+        const [operationRow] = await tx.unsafe('SELECT record FROM banking_operations WHERE owner_id = $1 AND operation_id = $2 FOR UPDATE', [owner, record.operationId]);
+        const persisted = fromRecord(operationRow?.record);
+        if (!persisted) throw new BankingError('OPERATION_NOT_FOUND', '未取得此操作的记录', true);
+        if (persisted.receipt) return structuredClone(persisted.receipt);
+        if (persisted.action !== effect.action || persisted.state !== 'executing' || persisted.decision?.decision !== 'confirm' || persisted.preview?.previewHash !== record.preview?.previewHash) throw new BankingError('INVALID_STATE', '场景规则操作未处于已确认的执行状态', true);
+        const [row] = await tx.unsafe('SELECT record, version, preview_generation FROM banking_scenario_rules WHERE owner_id = $1 AND rule_id = $2 FOR UPDATE', [owner, effect.ruleId]);
+        if (effect.action === 'scenario.create_rule') {
+          if (row) throw new BankingError('PREVIEW_STALE', '规则编号已存在，请重新预览');
+          await tx.unsafe(
+            `INSERT INTO banking_scenario_rules (owner_id, rule_id, status, version, preview_generation, record, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)`,
+            [owner, effect.ruleId, effect.after.status, effect.after.version, effect.after.previewGeneration, tx.json(effect.after), effect.after.created_at, effect.after.updated_at],
+          );
+        } else {
+          if (!row || Number(row.version) !== effect.ruleVersion || Number(row.preview_generation) !== effect.previewGeneration) throw new BankingError('PREVIEW_STALE', '规则已变化，请重新预览并确认');
+          await tx.unsafe(
+            `UPDATE banking_scenario_rules SET status = $3, version = $4, preview_generation = $5, record = $6::jsonb, updated_at = $7
+             WHERE owner_id = $1 AND rule_id = $2`,
+            [owner, effect.ruleId, effect.after.status, effect.after.version, effect.after.previewGeneration, tx.json(effect.after), effect.after.updated_at],
+          );
+        }
+        const receipt = makeReceipt(); persisted.receipt = receipt; persisted.state = 'succeeded';
+        await tx.unsafe('UPDATE banking_operations SET state = $3, record = $4::jsonb, updated_at = now() WHERE owner_id = $1 AND operation_id = $2', [owner, record.operationId, persisted.state, tx.json(persisted)]);
+        return structuredClone(receipt);
       });
     },
     async reserveCardPreview(owner, cardId) {

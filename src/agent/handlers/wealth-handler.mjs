@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { runResolvedWealthIntent, validateWealthIntent } from '../../skills/wealth/wealth-skill.mjs';
+import { runResolvedWealthIntent, validateWealthIntent } from '../../skills/wealth/wealth-action-skill.mjs';
 
 function match(ref, items, label) {
   const raw = ref.trim().replace(/^模拟/, '');

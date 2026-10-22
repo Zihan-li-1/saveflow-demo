@@ -1,3 +1,5 @@
+> 历史 MCP 试点/专项记录：文中的句式路由、SAVEFLOW_TRUEFORGE_* 开关、tfm1/tfb1 续接和部署结果不适用于当前 `/api/banking-agent`。独立适配器及执行桥按原合同保留；当前统一入口与限制以 [Banking Agent API](Banking-Agent-API.md) 为准。
+
 # TrueForge 多轮转账与网页交互排查
 
 2026-10-17，本地 `spike/trueforge-harness`。保留已有未提交改动，未提交 Git、创建 PR、修改 main 或部署。先用真实 Chrome/HTTP/TrueForge/MCP 复现，再修复。未重写 Agent、Dispatcher、Skill 或 Banking Core。

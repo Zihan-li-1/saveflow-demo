@@ -7,16 +7,21 @@ const required = {
   'card.set_budget': ['card_ref', 'amount'],
   'card.freeze': ['card_ref'],
   'card.unfreeze': ['card_ref'],
-  'wealth.recommend': ['goal'],
+  'wealth.recommend': ['goal', 'max_risk_level', 'horizon_days', 'liquidity_requirement'],
   'wealth.compare': ['product_refs'],
-  'wealth.assess_risk': ['assessment_scope'],
   'wealth.subscribe': ['product_ref', 'amount', 'source_account_ref'],
   'wealth.redeem': ['holding_ref', 'quantity_or_amount'],
+  'wealth.assess_risk': ['assessment_scope'],
+  'scenario.create_rule': ['trigger', 'conditions', 'proposed_steps', 'authorization_scope'],
+  'scenario.update_rule': ['rule_ref', 'changes'],
+  'scenario.disable_rule': ['rule_ref'],
+  'scenario.review_event': ['event_ref'],
+  'orchestrator.goal': ['goal_text'],
 };
 
 export function buildParsedIntent(action, slots) {
   const needed = required[action] ?? [];
-  const missingSlots = needed.filter(slot => slots[slot] === undefined || slots[slot] === null || slots[slot] === '');
+  const missingSlots = action === 'bill.summary' && (slots.month !== undefined || slots.period !== undefined) ? [] : needed.filter(slot => slots[slot] === undefined || slots[slot] === null || slots[slot] === '');
   const candidate = {
     schemaVersion: '1.0.0', action, slots, missingSlots,
     status: missingSlots.length ? 'needs_clarification' : 'ready_for_resolution',

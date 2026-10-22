@@ -1,4 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+// Retired MCP pilot adapter: retained for standalone MCP/bridge verification.
+// /api/banking-agent never routes here; use trueforge-banking-runtime instead.
 import { canonical } from '../src/banking-core/errors.mjs';
 import { parseClarificationAnswer } from './banking-clarification-parser.mjs';
 import { createTrueforgeClient, trueforgeError } from './trueforge-client.mjs';
