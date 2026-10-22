@@ -1,5 +1,6 @@
 import { ApiError } from './api/contracts';
 import { isTrialOperationId } from './trial-preview.mjs';
+import type { ActionReceipt } from '../banking-core/contracts';
 
 export type BankingChoice = { optionId: string; label: string };
 export type BankingAgentData = {
@@ -21,6 +22,8 @@ export type BankingAgentData = {
   previewOnly?: boolean;
   executionAllowed?: boolean;
   previewCurrent?: boolean;
+  /** 预览已执行：界面只读，不再提供确认/取消入口。 */
+  executed?: boolean;
   error?: { code?: string; message?: string };
   recovery?: BankingAgentData;
 };
@@ -119,4 +122,35 @@ export async function askBankingAgent(
   );
   if (!valid) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 返回格式异常。');
   return { ...data, requestId: payload.requestId };
+}
+
+/** 经服务端「执行桥」把一座试点转账预览真正执行（扣款）并取回回执。仅接受 tfpreview: 编号 + 预览哈希。 */
+export async function executeTrialTransfer(
+  trialOperationId: string,
+  previewHash: string,
+  accessCode: string,
+  signal: AbortSignal,
+): Promise<ActionReceipt> {
+  let response: Response;
+  try {
+    response = await fetch('/api/execute-trial', {
+      method: 'POST',
+      signal: AbortSignal.any([signal, AbortSignal.timeout(30000)]),
+      headers: { 'Content-Type': 'application/json', 'X-Saveflow-Access': accessCode },
+      body: JSON.stringify({ trialOperationId, previewHash }),
+    });
+  } catch {
+    throw new ApiError('BANKING_AGENT_NETWORK_ERROR', '执行桥连接失败，请稍后重试。');
+  }
+  let payload: { code?: string; message?: string; requestId?: string; data?: unknown };
+  try { payload = await response.json(); } catch { throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', '执行桥返回格式异常。'); }
+  if (response.status === 401) throw new ApiError('UNAUTHORIZED', '访问验证失败，请检查演示访问码后重试。');
+  if (response.status === 503 && ['ACCESS_NOT_CONFIGURED', 'DATABASE_NOT_CONFIGURED'].includes(payload?.code || '')) throw new ApiError('SERVICE_UNAVAILABLE', '执行服务未配置，请联系演示维护者。');
+  if (!payload || !response.ok || payload.code !== 'OK') throw new ApiError(String(payload?.code || 'EXECUTE_TRIAL_ERROR'), payload?.message || '试点转账执行失败');
+  const receipt = payload.data;
+  if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt) ||
+    typeof (receipt as ActionReceipt).operationId !== 'string' ||
+    !['succeeded', 'failed', 'cancelled'].includes(String((receipt as ActionReceipt).status)) ||
+    !Array.isArray((receipt as ActionReceipt).effects)) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', '执行桥回执格式异常。');
+  return receipt as ActionReceipt;
 }

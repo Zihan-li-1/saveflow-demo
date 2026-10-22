@@ -12,6 +12,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { BankingCardPreview } = require('../src/app/BankingCardCards.tsx');
 const { askBankingAgent, BankingAgentError, hasBankingChoices } = require('../src/lib/banking-agent-client.ts');
 const { BankingTransferPreview } = require('../src/app/BankingTransferPreview.tsx');
+const { BankingTransferReceipt } = require('../src/app/BankingTransferReceipt.tsx');
 const { saveBankingChat, restoreBankingChat } = require('../src/lib/banking-chat-storage.ts');
 const { updateBankingFlows, transferFlow } = require('../src/lib/banking-flow-state.ts');
 const { bankingTaskBoundary } = require('../src/lib/trueforge-routing.mjs');
@@ -68,14 +69,18 @@ test('per-operation state survives card/bill focus and refresh, rotates only the
   const expired = restoreBankingChat(saveBankingChat(messages, null, 0, 1300, { flows: restored.flows, focusedFlowId: null }), 301000);
   assert.equal(Object.keys(expired.flows).length, 0);
 });
-test('transfer controls permit edits/cancel only on the current preview; confirmation always disabled', () => {
+test('transfer controls: trial preview offers confirm via bridge; non-trial keeps legacy controls', () => {
   const render = (active, busy = false, trial = true) => renderToStaticMarkup(React.createElement(BankingTransferPreview, { data: { previewOnly: trial, source: trial ? 'trueforge-mcp' : undefined, preview: { exactEffects: [{ amountFen: 40000, accountName: '模拟活期账户', payeeName: '房东王先生' }] } }, active, busy, onEdit: () => assert.fail('render cannot issue operations') }));
   const current = render(true);
-  for (const text of ['修改金额', '修改收款人', '取消', '确认转账（未开放）', '¥400.00', '房东王先生']) assert.ok(current.includes(text));
-  assert.equal((current.match(/disabled=""/g) || []).length, 1);
+  for (const text of ['修改金额', '修改收款人', '取消', '确认转账', '¥400.00', '房东王先生']) assert.ok(current.includes(text), current);
+  assert.ok(!current.includes('确认转账（未开放）'), current);
+  assert.equal((current.match(/disabled=""/g) || []).length, 0);
   assert.equal((render(false).match(/disabled=""/g) || []).length, 4);
   assert.equal((render(true, true).match(/disabled=""/g) || []).length, 4);
-  assert.ok(!render(true, false, false).includes('<button'));
+  const direct = render(true, false, false);
+  for (const text of ['确认转账', '取消本次转账', '查询转账状态']) assert.ok(direct.includes(text), direct);
+  for (const text of ['修改金额', '修改收款人', '确认转账（未开放）']) assert.ok(!direct.includes(text), direct);
+  assert.equal((direct.match(/disabled=""/g) || []).length, 0);
 });
 test('refresh restores bounded synthetic history and unexpired opaque continuation, never original Core authority', () => {
   const token = `tfm1.${'a'.repeat(43)}.${'b'.repeat(43)}`;
@@ -107,4 +112,17 @@ test('browser validator rejects trial IDs stripped of their preview-only metadat
     global.fetch = async () => Response.json({ code: 'OK', requestId: 'r1', data: { status: 'cancelled', source: 'trueforge-mcp', previewOnly: true, executionAllowed: true, operationId: 'tfpreview:op_actual' } });
     await assert.rejects(askBankingAgent({ message: '取消' }, 'local-test-access-code', new AbortController().signal), { code: 'BANKING_AGENT_RESPONSE_ERROR' });
   } finally { global.fetch = original; }
+});
+test('executed transfer preview is read-only (no confirm/cancel) and renders a receipt card', () => {
+  const data = { status: 'succeeded', action: 'transfer.create', operationId: 'tfpreview:op_done', source: 'trueforge-mcp', previewOnly: true, executed: true,
+    preview: { summary: '已执行', exactEffects: [{ amountFen: 40000, accountName: '模拟活期账户', payeeName: '房东王先生' }] } };
+  const done = renderToStaticMarkup(React.createElement(BankingTransferPreview, { data, active: true, busy: false, onEdit: () => {}, onConfirm: () => {}, onReject: () => {}, onCheck: () => {} }));
+  assert.ok(done.includes('已完成'), done);
+  assert.ok(!done.includes('<button'), done);
+  assert.ok(!done.includes('确认转账') && !done.includes('取消本次转账'), done);
+  const receipt = { receiptId: 'rcpt_1', operationId: 'op_done', action: 'transfer_money', planId: 'plan_1', stepId: 'step_1', status: 'succeeded', message: '模拟转账成功', executedAt: '2026-10-21T00:00:00.000Z', dataSource: 'synthetic_demo_only', transactionIds: ['txn_op_done'],
+    effects: [{ kind: 'transfer_out', fromAccountId: 'ACC-CHECKING', accountName: '模拟活期账户', payeeId: 'payee_001', payeeName: '房东王先生', accountNoMasked: '**** 1234', amountFen: 40000, feeFen: 0, currency: 'CNY', balanceBeforeFen: 540000, balanceAfterFen: 500000, availableBalanceAfterFen: 500000, accountVersion: 2, memo: '', arrival: 'mock_immediate' }] };
+  const verification = { availableBalanceFen: 500000, transactionId: 'txn_op_done', occurredAt: '2026-10-21T00:00:00.000Z', amountFen: 40000, status: 'posted' };
+  const card = renderToStaticMarkup(React.createElement(BankingTransferReceipt, { receipt, verification }));
+  for (const text of ['转账回执', '已完成', '收款人', '房东王先生', '¥400.00', '实际状态', '已成功（succeeded）', '交易编号', 'txn_op_done', 'rcpt_1', '2026-10-21T00:00:00.000Z', '后端交易记录', '已记账（posted）', '后端查询余额']) assert.ok(card.includes(text), card);
 });
