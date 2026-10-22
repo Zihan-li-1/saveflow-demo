@@ -1,3 +1,5 @@
+import { validateWealthIntent } from '../skills/wealth/wealth-action-skill.mjs';
+
 export const PARSED_INTENT_SCHEMA_VERSION = '1.0.0';
 export const PARSED_INTENT_ACTIONS = Object.freeze([
   'transfer.create',
@@ -11,6 +13,8 @@ export const PARSED_INTENT_ACTIONS = Object.freeze([
   'wealth.recommend',
   'wealth.compare',
   'wealth.assess_risk',
+  'wealth.subscribe',
+  'wealth.redeem',
   'scenario.create_rule',
   'scenario.update_rule',
   'scenario.disable_rule',
@@ -24,6 +28,13 @@ const TOP_LEVEL_KEYS = ['schemaVersion', 'action', 'slots', 'missingSlots', 'sta
 const TRANSFER_SLOT_KEYS = ['payee_ref', 'amount', 'source_account_ref'];
 const BILL_SLOT_KEYS = ['month', 'period', 'year', 'monthNumber'];
 const CARD_SLOT_KEYS = ['card_ref', 'amount'];
+const WEALTH_SLOTS = {
+  'wealth.recommend': ['goal', 'constraints'],
+  'wealth.compare': ['product_refs'],
+  'wealth.assess_risk': ['assessment_scope'],
+  'wealth.subscribe': ['product_ref', 'amount', 'source_account_ref'],
+  'wealth.redeem': ['holding_ref', 'quantity_or_amount'],
+};
 const WEALTH_RECOMMEND_SLOT_KEYS = ['goal', 'max_risk_level', 'horizon_days', 'liquidity_requirement', 'amount'];
 const SCENARIO_CREATE_SLOT_KEYS = ['trigger', 'conditions', 'proposed_steps', 'authorization_scope'];
 
@@ -71,6 +82,9 @@ function requireRawReference(value, path) {
   if (path === 'slots.card_ref' && /^card[_-][a-z0-9_-]+$/i.test(reference.trim())) {
     fail(`${path} must be a raw user reference, not a card entity ID`);
   }
+  if (path === 'slots.product_ref' && /^product[_-][a-z0-9_-]+$/i.test(reference.trim())) fail(`${path} must be a raw user reference`);
+  if (path === 'slots.holding_ref' && /^holding[_-][a-z0-9_-]+$/i.test(reference.trim())) fail(`${path} must be a raw user reference`);
+  if (path === 'slots.product_refs' && /^product[_-][a-z0-9_-]+$/i.test(reference.trim())) fail(`${path} must be a raw user reference`);
   return reference;
 }
 
@@ -238,6 +252,31 @@ function validateGoal(input, slots) {
   if ('goal_text' in slots) requireNonEmptyString(slots.goal_text, 'slots.goal_text');
   const missing = 'goal_text' in slots ? [] : ['goal_text'];
   requireMissingSlots(input.missingSlots, missing); requireStatus(input.status, missing.length ? 'needs_clarification' : 'ready_for_resolution');
+
+}
+
+function validateWealthExtended(input, slots) {
+  const action = input.action;
+  const allowed = WEALTH_SLOTS[action];
+  rejectUnknownKeys(slots, allowed, 'slots');
+  // Use the Skill's strict validator only when all required slots are present.
+  // This preserves the existing multi-turn parser contract for incomplete requests.
+  const required = action === 'wealth.recommend' ? ['goal'] : action === 'wealth.compare' ? ['product_refs'] : allowed;
+  const missing = required.filter(slot => !(slot in slots));
+  requireMissingSlots(input.missingSlots, missing);
+  requireStatus(input.status, missing.length ? 'needs_clarification' : 'ready_for_resolution');
+  for (const [key, value] of Object.entries(slots)) {
+    if (['product_ref', 'holding_ref', 'source_account_ref'].includes(key)) requireRawReference(value, `slots.${key}`);
+    if (key === 'product_refs') {
+      if (!Array.isArray(value) || value.length < 2 || value.length > 5 || new Set(value).size !== value.length) fail('slots.product_refs requires 2–5 unique references');
+      value.forEach(item => requireRawReference(item, 'slots.product_refs'));
+    }
+    if (key === 'amount') validateAmount(value, { maximum: 1_000_000_000 });
+  }
+  if (!missing.length) {
+    try { validateWealthIntent({ action, slots }); }
+    catch (error) { fail(error instanceof Error ? error.message : 'invalid Wealth intent'); }
+  }
 }
 
 export function validateParsedIntent(value) {
@@ -267,7 +306,12 @@ export function validateParsedIntent(value) {
     case 'wealth.recommend':
     case 'wealth.compare':
     case 'wealth.assess_risk':
-      validateWealth(input, slots);
+      if ((input.action === 'wealth.recommend' && typeof slots.goal === 'object') || (input.action === 'wealth.assess_risk' && ['investment', 'portfolio'].includes(slots.assessment_scope))) validateWealthExtended(input, slots);
+      else validateWealth(input, slots);
+      break;
+    case 'wealth.subscribe':
+    case 'wealth.redeem':
+      validateWealthExtended(input, slots);
       break;
     case 'scenario.create_rule':
     case 'scenario.update_rule':

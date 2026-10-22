@@ -60,6 +60,9 @@ export async function dispatchParsedIntent(
       case "wealth.compare":
       case "wealth.assess_risk":
         return dependencies.wealthHandler ? await dependencies.wealthHandler(intent) : { ok: false, kind: "unsupported" };
+      case "wealth.subscribe":
+      case "wealth.redeem":
+        return dependencies.wealthHandler ? await dependencies.wealthHandler(intent) : { ok: false, kind: "unsupported" };
       case "scenario.create_rule":
       case "scenario.update_rule":
       case "scenario.disable_rule":
