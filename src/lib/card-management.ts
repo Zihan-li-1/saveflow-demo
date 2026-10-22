@@ -9,6 +9,8 @@ export type ManagedCard = {
   onlinePaymentsEnabled: boolean;
   blockedCategories: readonly string[];
   alertThresholdFen: number | null;
+  balanceReminderAmountFen: number | null;
+  balanceReminderPercent: number | null;
   version: number;
 };
 
@@ -24,4 +26,12 @@ export function synchronizeManagedCards(initialCards: readonly ManagedCard[], me
     if (card?.id && cards.has(card.id)) cards.set(card.id, { ...card, blockedCategories: [...(card.blockedCategories || [])] });
   }
   return [...cards.values()];
+}
+
+export function budgetBalanceAlert(card: Pick<ManagedCard, "monthlyBudgetFen" | "monthlySpentFen" | "balanceReminderAmountFen" | "balanceReminderPercent">): string | null {
+  const remaining = Math.max(0, card.monthlyBudgetFen - card.monthlySpentFen);
+  if (remaining === 0) return "预算余额已用完，请留意后续消费。";
+  const threshold = card.balanceReminderAmountFen ?? (card.balanceReminderPercent == null ? null : Math.floor(card.monthlyBudgetFen * card.balanceReminderPercent / 100));
+  if (threshold != null && remaining <= threshold) return `预算余额已到达提醒临界点，当前还剩 ¥${(remaining / 100).toFixed(2)}。`;
+  return null;
 }

@@ -213,6 +213,7 @@ export function useSaveflow() {
     if (card.status !== effect.after.status || card.monthlyBudgetFen !== effect.after.monthlyBudgetFen || card.version < effect.cardVersion + 1) throw new ApiError("INVALID_RESPONSE", "回执与重新查询的卡片状态不一致，请查询原操作");
     addMessage({ role: "agent", text: `${receipt.message}；已重新查询卡片。` });
     addMessage({ role: "agent", kind: "banking_card", text: "卡片当前状态", banking: { status: "card_result", action: "card.get", data: { card }, evidence: data.evidence } });
+    if (data.action === "card.set_budget") addMessage({ role: "agent", text: "月预算已设置。要不要再设置预算余额提醒？例如：余额剩 200 元时提醒我，或预算只剩 20% 时提醒我。余额用完时也会提醒。" });
     setActiveCardOperationId(current => current === data.operationId ? null : current);
   };
   const checkCardOperation = async (data: BankingAgentData) => {

@@ -9,11 +9,11 @@ require.extensions['.ts'] = (module, filename) => {
 };
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { synchronizeManagedCards } = require('../src/lib/card-management.ts');
+const { budgetBalanceAlert, synchronizeManagedCards } = require('../src/lib/card-management.ts');
 
 const cards = [
-  { id: 'CARD-MAIN', name: '日常虚拟卡', status: 'active', monthlyBudgetFen: 500000, monthlySpentFen: 0, onlinePaymentsEnabled: true, blockedCategories: [], alertThresholdFen: null, version: 1 },
-  { id: 'CARD-ENT', name: '娱乐虚拟卡', status: 'active', monthlyBudgetFen: 80000, monthlySpentFen: 76000, onlinePaymentsEnabled: true, blockedCategories: [], alertThresholdFen: null, version: 1 },
+  { id: 'CARD-MAIN', name: '日常虚拟卡', status: 'active', monthlyBudgetFen: 500000, monthlySpentFen: 0, onlinePaymentsEnabled: true, blockedCategories: [], alertThresholdFen: null, balanceReminderAmountFen: null, balanceReminderPercent: null, version: 1 },
+  { id: 'CARD-ENT', name: '娱乐虚拟卡', status: 'active', monthlyBudgetFen: 80000, monthlySpentFen: 76000, onlinePaymentsEnabled: true, blockedCategories: [], alertThresholdFen: null, balanceReminderAmountFen: null, balanceReminderPercent: null, version: 1 },
 ];
 
 test('card management initializes two cards and syncs only verified operation results', () => {
@@ -27,6 +27,13 @@ test('card management initializes two cards and syncs only verified operation re
   assert.equal(result[0].version, 1);
   assert.equal(result[1].status, 'frozen');
   assert.equal(result[1].version, 2);
+});
+
+test('budget balance alerts fire at amount, percentage and exhaustion thresholds', () => {
+  assert.match(budgetBalanceAlert({ monthlyBudgetFen: 80000, monthlySpentFen: 76000, balanceReminderAmountFen: 5000, balanceReminderPercent: null }), /临界点/);
+  assert.match(budgetBalanceAlert({ monthlyBudgetFen: 80000, monthlySpentFen: 65000, balanceReminderAmountFen: null, balanceReminderPercent: 20 }), /临界点/);
+  assert.match(budgetBalanceAlert({ monthlyBudgetFen: 80000, monthlySpentFen: 80000, balanceReminderAmountFen: null, balanceReminderPercent: null }), /已用完/);
+  assert.equal(budgetBalanceAlert({ monthlyBudgetFen: 80000, monthlySpentFen: 10000, balanceReminderAmountFen: 5000, balanceReminderPercent: null }), null);
 });
 
 test('card management ignores unknown cards and does not mutate initialization data', () => {

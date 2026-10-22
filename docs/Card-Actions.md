@@ -1,6 +1,6 @@
 # 虚拟卡查询与安全管理
 
-Banking Agent 注册 `card.get`、`card.set_budget`、`card.set_controls`、`card.security_review`、`card.freeze`、`card.unfreeze`。`card.set_budget` 设置可超出的月消费预算，不是消费硬限额。`card.set_controls` 管理线上支付、禁用消费类别和单笔提醒，必须经过预览与用户确认。`card.security_review` 只给出卡片信息泄露、异常交易或设备丢失的处置建议；即使建议冻结，也不会替用户执行。虚拟卡注销或换号依赖发卡银行能力，本模块不伪装成传统挂失补卡。
+Banking Agent 注册 `card.get`、`card.set_budget`、`card.set_controls`、`card.security_review`、`card.freeze`、`card.unfreeze`。`card.set_budget` 设置可超出的月消费预算，不是消费硬限额。预算设置成功后，界面会提示用户继续设置余额提醒；`card.set_controls` 支持固定剩余金额或预算剩余百分比两种余额阈值（两者互斥），也管理线上支付、禁用消费类别和单笔提醒，所有修改都必须经过预览与用户确认。达到阈值时显示余额提醒；即使未设置阈值，预算余额用完时也会提醒。`card.security_review` 只给出卡片信息泄露、异常交易或设备丢失的处置建议；即使建议冻结，也不会替用户执行。虚拟卡注销或换号依赖发卡银行能力，本模块不伪装成传统挂失补卡。
 
 | 动作 | 模型可提供的槽位 | Skill 写请求 | Core 效果 |
 | --- | --- | --- | --- |

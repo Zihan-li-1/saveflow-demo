@@ -52,15 +52,18 @@ const INCIDENT_TYPES = new Set(['card_details_exposed', 'unauthorized_transactio
 /** @param {Record<string, any>} slots @param {boolean} [resolved] */
 function validateControls(slots, resolved = false) {
   const cardKey = resolved ? 'card_id' : 'card_ref';
-  const allowed = [cardKey, 'online_payments_enabled', 'blocked_categories', 'alert_amount'];
+  const allowed = [cardKey, 'online_payments_enabled', 'blocked_categories', 'alert_amount', 'balance_reminder_amount', 'balance_reminder_percentage'];
   if (Object.keys(slots).some(key => !allowed.includes(key)) || !Object.hasOwn(slots, cardKey)) throw new CardSkillError('VALIDATION_ERROR', '安全设置字段无效');
-  if (!['online_payments_enabled', 'blocked_categories', 'alert_amount'].some(key => Object.hasOwn(slots, key))) throw new CardSkillError('VALIDATION_ERROR', '至少说明一项要修改的安全设置');
+  if (!['online_payments_enabled', 'blocked_categories', 'alert_amount', 'balance_reminder_amount', 'balance_reminder_percentage'].some(key => Object.hasOwn(slots, key))) throw new CardSkillError('VALIDATION_ERROR', '至少说明一项要修改的卡片设置');
   if ('online_payments_enabled' in slots && typeof slots.online_payments_enabled !== 'boolean') throw new CardSkillError('VALIDATION_ERROR', '线上支付开关必须是布尔值');
   if ('blocked_categories' in slots && (!Array.isArray(slots.blocked_categories) || slots.blocked_categories.length > 10 || slots.blocked_categories.some((value) => typeof value !== 'string' || !value.trim() || value.length > 32) || new Set(slots.blocked_categories).size !== slots.blocked_categories.length)) throw new CardSkillError('VALIDATION_ERROR', '禁用交易类别格式无效');
   if ('alert_amount' in slots && slots.alert_amount !== null) {
     validateAmount(slots.alert_amount);
     if (slots.alert_amount.amount_minor < 1) throw new CardSkillError('VALIDATION_ERROR', '单笔提醒金额必须大于 0 分');
   }
+  if ('balance_reminder_amount' in slots && slots.balance_reminder_amount !== null) validateAmount(slots.balance_reminder_amount);
+  if ('balance_reminder_percentage' in slots && slots.balance_reminder_percentage !== null && (!Number.isSafeInteger(slots.balance_reminder_percentage) || slots.balance_reminder_percentage < 1 || slots.balance_reminder_percentage > 100)) throw new CardSkillError('VALIDATION_ERROR', '余额提醒比例必须是 1 到 100 的整数');
+  if (slots.balance_reminder_amount != null && slots.balance_reminder_percentage != null) throw new CardSkillError('VALIDATION_ERROR', '余额提醒只能选择固定金额或预算百分比中的一种');
 }
 
 /**
@@ -222,7 +225,7 @@ export async function runResolvedCardIntent(repository, value) {
 
 
     if (intent.action === 'card.set_controls') {
-      return { ok: true, data: { kind: 'action_request', request: { action: 'card.set_controls', input: { cardId: card.id, ...('online_payments_enabled' in slots ? { onlinePaymentsEnabled: slots.online_payments_enabled } : {}), ...('blocked_categories' in slots ? { blockedCategories: slots.blocked_categories } : {}), ...('alert_amount' in slots ? { alertThresholdFen: slots.alert_amount === null ? null : slots.alert_amount.amount_minor } : {}) } }, requirements: { minimumRiskLevel: 'L2', explicitUserConfirmation: true, executionOwner: 'banking_core' } } };
+      return { ok: true, data: { kind: 'action_request', request: { action: 'card.set_controls', input: { cardId: card.id, ...('online_payments_enabled' in slots ? { onlinePaymentsEnabled: slots.online_payments_enabled } : {}), ...('blocked_categories' in slots ? { blockedCategories: slots.blocked_categories } : {}), ...('alert_amount' in slots ? { alertThresholdFen: slots.alert_amount === null ? null : slots.alert_amount.amount_minor } : {}), ...('balance_reminder_amount' in slots ? { balanceReminderAmountFen: slots.balance_reminder_amount === null ? null : slots.balance_reminder_amount.amount_minor } : {}), ...('balance_reminder_percentage' in slots ? { balanceReminderPercent: slots.balance_reminder_percentage } : {}) } }, requirements: { minimumRiskLevel: 'L2', explicitUserConfirmation: true, executionOwner: 'banking_core' } } };
     }
 
     if (intent.action === 'card.freeze' && card.status !== 'active') {

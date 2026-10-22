@@ -29,6 +29,8 @@ export const saveflowMock = {
     onlinePaymentsEnabled: card.onlinePaymentsEnabled,
     blockedCategories: card.blockedCategories,
     alertThresholdFen: card.alertThresholdFen,
+    balanceReminderAmountFen: card.balanceReminderAmountFen,
+    balanceReminderPercent: card.balanceReminderPercent,
     version: card.version,
   })),
 } as const;
