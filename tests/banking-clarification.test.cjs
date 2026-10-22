@@ -32,6 +32,30 @@ function parseIntent(message) {
 
 async function json(response) { return response.json(); }
 
+test('理财澄清使用普通用户语言，并能理解风险、月份和取用时间', async () => {
+  const { parseClarificationAnswer } = await import('../server/banking-clarification-parser.mjs');
+  assert.deepEqual(parseClarificationAnswer('能接受小幅波动，短期少量亏损可以', { action: 'wealth.recommend', slot: 'max_risk_level', slots: {} }), { kind: 'slot', updates: { max_risk_level: 'R2' } });
+  assert.deepEqual(parseClarificationAnswer('半年', { action: 'wealth.recommend', slot: 'horizon_days', slots: {} }), { kind: 'slot', updates: { horizon_days: 180 } });
+  assert.deepEqual(parseClarificationAnswer('可以等到下一个工作日', { action: 'wealth.recommend', slot: 'liquidity_requirement', slots: {} }), { kind: 'slot', updates: { liquidity_requirement: 'T+1' } });
+  assert.deepEqual(parseClarificationAnswer('计划结束前都不需要取', { action: 'wealth.recommend', slot: 'liquidity_requirement', slots: {} }), { kind: 'slot', updates: { liquidity_requirement: 'AT_MATURITY' } });
+});
+
+test('统一 Agent 续接时只回复 R2 也会被直接识别，不要求复述完整句子', async () => {
+  const core = createBankingCore();
+  let modelCalls = 0;
+  const parseWealth = async () => {
+    modelCalls++;
+    return { schemaVersion: '1.0.0', action: 'wealth.recommend', slots: { goal: '准备应急金' }, missingSlots: ['max_risk_level', 'horizon_days', 'liquidity_requirement'], status: 'needs_clarification' };
+  };
+  const first = await json(await handleBankingAgent(request({ message: '推荐理财产品' }), { env, core, parseIntent: parseWealth, now: () => 6000 }));
+  assert.equal(first.data.slot, 'max_risk_level');
+  assert.match(first.data.question, /只回复 R1、R2、R3/);
+  const second = await json(await handleBankingAgent(request({ continuationToken: first.data.continuationToken, message: 'R2' }), { env, core, parseIntent: parseWealth, now: () => 6000 }));
+  assert.equal(second.data.slot, 'horizon_days');
+  assert.match(second.data.question, /按月回答/);
+  assert.equal(modelCalls, 1);
+});
+
 test('缺账户先展示真实账户选项，选择后返回 Core 正式预览', async () => {
   const core = createBankingCore();
   let prepares = 0;
