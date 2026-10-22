@@ -69,6 +69,13 @@ test('accepts bill.summary for a valid month without requiring an account', () =
   assert.equal(validateParsedIntent(intent), intent);
 });
 
+test('subscription.list is a ready read-only intent with no model slots', () => {
+  const intent = base('subscription.list', {}, [], 'ready_for_resolution');
+  assert.equal(validateParsedIntent(intent), intent);
+  assert.throws(() => validateParsedIntent(base('subscription.list', { subscription_ref: '视频会员' }, [], 'ready_for_resolution')), ParsedIntentValidationError);
+  assert.throws(() => validateParsedIntent(base('subscription.list', {}, ['subscription_ref'], 'needs_clarification')), ParsedIntentValidationError);
+});
+
 test('accepts an exact bill period and rejects conflicting or oversized periods', () => {
   const period = { start_date: '2026-07-01', end_date: '2026-12-31', timezone: 'Asia/Shanghai', label: '2026年下半年' };
   assert.doesNotThrow(() => validateParsedIntent(base('bill.summary', { period }, [], 'ready_for_resolution')));

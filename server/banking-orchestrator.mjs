@@ -1,4 +1,4 @@
-import { dispatchParsedIntent, handleBillSummary, handleCard, handleGoal, handleTransfer, prepareTransferPreview, transferRepository } from '../src/agent/runtime.mjs';
+import { dispatchParsedIntent, handleBillSummary, handleCard, handleGoal, handleSubscriptionList, handleTransfer, prepareTransferPreview, transferRepository } from '../src/agent/runtime.mjs';
 import { issueContinuationToken, verifyContinuationToken } from '../src/agent/clarification/continuation-token.mjs';
 import { resolveChoice } from '../src/agent/clarification/choice-resolver.mjs';
 import { buildParsedIntent, mergeSlots } from '../src/agent/clarification/merge-intent.mjs';
@@ -242,13 +242,16 @@ export async function runBankingConversation(body, {
   parsed = validateParsedIntent(parsed);
   replyContext = { slots: parsed.slots };
   if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'VALIDATION_ERROR', status: 400 });
-  if (['subscription.list', 'product.list'].includes(parsed.action)) {
+  if (parsed.action === 'subscription.list') {
+    const result = await handleSubscriptionList(parsed, repository);
+    return reply(200, 'OK', '订阅分析已生成。', { status: 'subscription_result', action: result.action, data: result.data, evidence: result.evidence });
+  }
+  if (parsed.action === 'product.list') {
     const result = await dispatchBanking(parsed.action, {}, { repository });
     if (!result.ok) return reply(502, 'SKILL_ERROR', '只读查询失败，请稍后重试。', errorData('SKILL_ERROR', '只读查询失败，请稍后重试。'));
     const context = await repository.getContextInfo();
-    const isSubscription = parsed.action === 'subscription.list';
-    return reply(200, 'OK', '只读查询完成。', { status: isSubscription ? 'subscription_result' : 'product_result', action: parsed.action,
-      data: { [isSubscription ? 'subscriptions' : 'products']: result.data, context },
+    return reply(200, 'OK', '只读查询完成。', { status: 'product_result', action: parsed.action,
+      data: { products: result.data, context },
       evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: result.data.map(item => item.id) }] });
   }
   const dependencies = {
@@ -258,6 +261,7 @@ export async function runBankingConversation(body, {
     wealthHandler,
     scenarioHandler: activeScenarioHandler,
     goalHandler: intent => handleGoal(intent, repository),
+    subscriptionHandler: intent => handleSubscriptionList(intent, repository),
   };
   const dispatched = await dispatchParsedIntent(parsed, dependencies);
   const prepareTransfer = typeof core.prepare === 'function'
@@ -266,6 +270,7 @@ export async function runBankingConversation(body, {
   const result = await prepareTransferPreview(dispatched, prepareTransfer);
 
   if (result.ok && result.kind === 'bill_result') return reply(200, 'OK', '账单统计已生成', { status: 'bill_result', action: result.action, data: result.data, evidence: result.evidence });
+  if (result.ok && result.kind === 'subscription_result') return reply(200, 'OK', '订阅分析已生成', { status: 'subscription_result', action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && result.kind === 'card_result') return reply(200, 'OK', '卡片信息已查询', { status: 'card_result', action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && ['wealth_recommendation', 'wealth_comparison', 'risk_assessment_required'].includes(result.kind)) return reply(200, 'OK', result.kind === 'wealth_comparison' ? '理财产品对比已生成' : result.kind === 'wealth_recommendation' ? '理财条件筛选已生成' : '需要完成风险测评', { status: result.kind, action: result.action, data: result.kind === 'wealth_comparison' ? { ...result.data, kind: 'comparison' } : result.data, evidence: result.evidence });
   if (result.ok && result.kind === 'wealth_result') return reply(200, 'OK', '模拟理财结果已生成', { status: 'wealth_result', action: result.action, data: result.data, evidence: result.data.evidence });

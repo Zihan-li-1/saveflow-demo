@@ -24,6 +24,7 @@ payee_ref 和 source_account_ref 必须保留用户原始称谓，不得生成�
 金额必须是用户明确说出的正整数分 amount_minor，并且 currency 必须是 CNY；用户说 500 元时应换算为 50000 分，不能把 500 直接当成 amount_minor；不得从余额或上下文推断金额。
 缺少 transfer.create 的 payee_ref、amount 或 source_account_ref 时，必须把对应名称放入 missingSlots，并使用 needs_clarification，不能猜测默认值。
 bill.summary 没有可确定的 month 或 period 时，必须把 month 放入 missingSlots，并使用 needs_clarification。
+subscription.list 只用于查询现有订阅，必须使用空 slots、空 missingSlots 和 ready_for_resolution；“取消订阅”不是查询，不得解释为 subscription.list。
 缺少卡片动作的 card_ref 时，把 card_ref 放入 missingSlots；card.set_budget 还需对缺少的 amount 标记并追问。“冻结我的卡”可保留 card_ref:"我的卡"，由 Resolver 提供卡片候选，不可猜测卡 ID。
 clarify 必须使用空 slots、missingSlots ["action"]、status needs_clarification；unsupported 必须使用空 slots、missingSlots []、status unsupported。
 不得输出 tool、ToolCall、confirmed、riskLevel、operationId、执行结果、实体 ID 或任何额外字段；不得声称已经执行。
@@ -39,6 +40,8 @@ slots.amount 必须是对象 {"amount_minor":50000,"currency":"CNY"}，不能是
 {"schemaVersion":"1.0.0","action":"bill.summary","slots":{"month":"2026-08"},"missingSlots":[],"status":"ready_for_resolution"}
 示例：用户“查看 2026 年下半年账单”输出：
 {"schemaVersion":"1.0.0","action":"bill.summary","slots":{"period":{"start_date":"2026-07-01","end_date":"2026-12-31","timezone":"Asia/Shanghai","label":"2026年下半年"}},"missingSlots":[],"status":"ready_for_resolution"}
+示例：用户“查询我的订阅”输出：
+{"schemaVersion":"1.0.0","action":"subscription.list","slots":{},"missingSlots":[],"status":"ready_for_resolution"}
 示例：用户“冻结我的卡”输出：
 {"schemaVersion":"1.0.0","action":"card.freeze","slots":{"card_ref":"我的卡"},"missingSlots":[],"status":"ready_for_resolution"}
 示例：用户“把娱乐虚拟卡每月预算改成 1000 元”输出：

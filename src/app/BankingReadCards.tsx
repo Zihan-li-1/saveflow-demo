@@ -1,10 +1,12 @@
 import type { BankingAgentData } from "@/lib/banking-agent-client";
-import type { Subscription, InvestmentProduct } from "@/banking-core/contracts";
+import type { InvestmentProduct } from "@/banking-core/contracts";
 import "./banking-trial-cards.css";
 
 const money = (fen: number) => `¥${(fen / 100).toFixed(2)}`;
+type SubscriptionView = { id: string; name: string; monthlyFeeFen: number; status: "active" | "cancelled"; lastUsedDate: string; isPotentiallyUnused: boolean; inactivityDays?: number; unusedReason?: string };
 export function BankingReadCard({ data }: { data?: BankingAgentData }) {
-  const subscriptions = data?.data?.subscriptions as Subscription[] | undefined;
+  const subscriptions = data?.data?.subscriptions as SubscriptionView[] | undefined;
+  const subscriptionSummary = data?.data?.summary as { activeCount?: number; activeMonthlyFeeFen?: number; potentiallyUnusedCount?: number; potentiallyUnusedMonthlyFeeFen?: number; potentialAnnualSavingsFen?: number } | undefined;
   const products = data?.data?.products as InvestmentProduct[] | undefined;
   const wealthProducts = data?.data?.products as Array<{ product_ref: string; name: string; risk_level: string; expected_yield_bps: number; minimum_amount_minor: number; liquidity: string; duration_days: number }> | undefined;
   const steps = data?.data?.steps as Array<{ action: string; reason: string }> | undefined;
@@ -15,6 +17,7 @@ export function BankingReadCard({ data }: { data?: BankingAgentData }) {
   return <section className="financial-read-card" aria-label={title}>
     <header><b>{title}</b><span>{data?.status === "scenario_rule" ? "模拟规则 · 已保存" : "模拟数据 · 只读或建议"}</span></header>
     <p className="financial-source">来源 {String(evidence?.source || "synthetic_demo_only")} · 截至 {String(evidence?.asOf || evidence?.as_of || "未知")}</p>
+    {subscriptions && subscriptionSummary && <div className="subscription-summary" aria-label="订阅费用汇总"><p><span>每月订阅总额</span><strong>{money(subscriptionSummary.activeMonthlyFeeFen ?? 0)}</strong></p><p><span>可能闲置月费</span><strong>{money(subscriptionSummary.potentiallyUnusedMonthlyFeeFen ?? 0)}</strong></p><p><span>预计每年可节省</span><strong>{money(subscriptionSummary.potentialAnnualSavingsFen ?? 0)}</strong></p></div>}
     {subscriptions?.map(s => <article key={s.id}>
       <h3>{s.name}</h3><div className="financial-data-grid">
         <p><span>每月费用</span><strong>{money(s.monthlyFeeFen)}</strong></p>
@@ -22,6 +25,7 @@ export function BankingReadCard({ data }: { data?: BankingAgentData }) {
         <p><span>最近使用</span><strong>{s.lastUsedDate}</strong></p>
         <p><span>闲置提示</span><strong>{s.isPotentiallyUnused ? "可能闲置，待核实" : "暂无闲置标记"}</strong></p>
       </div>
+      {s.unusedReason && <p className="subscription-reason">{s.unusedReason}</p>}
     </article>)}
     {!isWealth && products?.map(p => <article key={p.id}>
       <h3>{p.name}</h3><div className="financial-data-grid">
@@ -42,6 +46,6 @@ export function BankingReadCard({ data }: { data?: BankingAgentData }) {
     {steps?.map((step, index) => <article key={`${step.action}-${index}`}><h3>{index + 1}. {step.action}</h3><p>{step.reason}</p></article>)}
     {rule && <article><h3>{rule.id ? `规则 ${rule.id}` : "规则变更预览"}</h3><div className="financial-data-grid"><p><span>状态</span><strong>{rule.status || "待确认"}</strong></p><p><span>触发</span><strong>{rule.trigger?.value || "—"}</strong></p><p><span>建议步骤</span><strong>{rule.proposed_steps?.map(step => step.action).join("、") || "—"}</strong></p></div></article>}
     {(subscriptions?.length === 0 || products?.length === 0 || (isWealth && wealthProducts?.length === 0)) && <p>当前没有符合条件的项目。</p>}
-    <footer>{isWealth ? "仅按用户声明条件筛选；未完成正式风险测评，不构成个性化投资建议。" : data?.status?.startsWith("scenario_") ? "规则只生成建议；资金或控制变更仍需重新预览并确认。" : products ? "合成产品数据，示例收益率不构成收益保证。" : subscriptions ? "仅展示已有订阅记录，没有取消订阅操作。" : "本结果不会自动执行任何资金或控制变更。"}</footer>
+    <footer>{isWealth ? "仅按用户声明条件筛选；未完成正式风险测评，不构成个性化投资建议。" : data?.status?.startsWith("scenario_") ? "规则只生成建议；资金或控制变更仍需重新预览并确认。" : products ? "合成产品数据，示例收益率不构成收益保证。" : subscriptions ? "节省金额按可能闲置订阅月费 × 12 估算；请核实后自行决定，本结果不会取消订阅。" : "本结果不会自动执行任何资金或控制变更。"}</footer>
   </section>;
 }

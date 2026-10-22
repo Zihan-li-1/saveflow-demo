@@ -4,11 +4,11 @@ export const PARSED_INTENT_SCHEMA_VERSION = '1.0.0';
 export const PARSED_INTENT_ACTIONS = Object.freeze([
   'transfer.create',
   'bill.summary',
+  'subscription.list',
   'card.get',
   'card.set_budget',
   'card.freeze',
   'card.unfreeze',
-  'subscription.list',
   'product.list',
   'wealth.recommend',
   'wealth.compare',

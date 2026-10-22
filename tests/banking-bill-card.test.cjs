@@ -70,8 +70,8 @@ test('range longer than two months renders a monthly expense bar chart', () => {
       month: undefined,
       period: { startDate: '2026-07-01', endDate: '2026-12-31', timezone: 'Asia/Shanghai', label: '2026年下半年' },
       monthlyBreakdown: [
-        { month: '2026-07', status: 'complete', totalExpenseFen: 320000, totalIncomeFen: 0, transactionCount: 2 },
-        { month: '2026-08', status: 'complete', totalExpenseFen: 846000, totalIncomeFen: 1200000, transactionCount: 12 },
+        { month: '2026-07', status: 'complete', totalExpenseFen: 320000, totalIncomeFen: 0, transactionCount: 2, categoryTotals: { '房租': 300000, '餐饮': 20000 } },
+        { month: '2026-08', status: 'complete', totalExpenseFen: 846000, totalIncomeFen: 1200000, transactionCount: 12, categoryTotals: fixture.data.categoryTotals },
         { month: '2026-09', status: 'partial', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
         { month: '2026-10', status: 'future', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
         { month: '2026-11', status: 'future', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
@@ -81,7 +81,7 @@ test('range longer than two months renders a monthly expense bar chart', () => {
   };
   const html = render(range);
   const value = text(html);
-  for (const expected of ['2026年下半年', '2026年7月1日—2026年12月31日', '期间收支概览', '期间总支出', '每月支出对比', '最高：8月', '月均', '截至目前', '未到', '房租', '35.5%']) assert.ok(value.includes(expected), expected);
+  for (const expected of ['2026年下半年', '2026年7月1日—2026年12月31日', '期间收支概览', '期间总支出', '每月支出对比', '最高：8月', '月均', '主要变化', '8月较7月', '餐饮', '增加', '仅比较最近两个完整月份', '截至目前', '未到', '房租', '35.5%']) assert.ok(value.includes(expected), expected);
   assert.equal((html.match(/bill-report-bar-track/g) || []).length, 6);
 });
 

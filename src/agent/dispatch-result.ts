@@ -14,6 +14,13 @@ export type DispatchResult =
     }
   | {
       ok: true;
+      kind: "subscription_result";
+      action: "subscription.list";
+      data: unknown;
+      evidence: DispatchEvidence[];
+    }
+  | {
+      ok: true;
       kind: "transfer_resolution";
       action: "transfer.create";
       data: unknown;

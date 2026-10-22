@@ -13,6 +13,7 @@ export async function dispatchParsedIntent(value, dependencies) {
   try {
     if (intent.action === 'transfer.create') return await dependencies.transferHandler(intent);
     if (intent.action === 'bill.summary') return await dependencies.billHandler(intent);
+    if (intent.action === 'subscription.list') return dependencies.subscriptionHandler ? await dependencies.subscriptionHandler(intent) : { ok: false, kind: 'unsupported' };
     if (intent.action.startsWith('card.')) return dependencies.cardHandler ? await dependencies.cardHandler(intent) : { ok: false, kind: 'unsupported' };
     if (intent.action.startsWith('wealth.')) return dependencies.wealthHandler ? await dependencies.wealthHandler({ action: intent.action, ...intent.slots }) : { ok: false, kind: 'unsupported' };
     if (intent.action.startsWith('scenario.')) return dependencies.scenarioHandler ? await dependencies.scenarioHandler({ action: intent.action, ...intent.slots }) : { ok: false, kind: 'unsupported' };
@@ -21,6 +22,34 @@ export async function dispatchParsedIntent(value, dependencies) {
   } catch (error) {
     return { ok: false, kind: 'skill_error', action: intent.action, error: { code: 'SKILL_ERROR', message: error instanceof Error && error.message.trim() ? error.message : 'Skill 处理失败，请稍后重试。' } };
   }
+}
+
+export async function handleSubscriptionList(_intent, repository) {
+  const [subscriptions, context] = await Promise.all([repository.getSubscriptions(), repository.getContextInfo()]);
+  const asOfDate = context.asOf.slice(0, 10);
+  const daysSince = value => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !/^\d{4}-\d{2}-\d{2}$/.test(asOfDate)) return undefined;
+    const start = Date.parse(`${value}T00:00:00Z`); const end = Date.parse(`${asOfDate}T00:00:00Z`);
+    return Number.isFinite(start) && Number.isFinite(end) && end >= start ? Math.floor((end - start) / 86_400_000) : undefined;
+  };
+  const enriched = subscriptions.map(subscription => {
+    const inactivityDays = daysSince(subscription.lastUsedDate);
+    const unusedReason = subscription.status === 'cancelled'
+      ? '订阅已取消，不计入当前每月订阅支出。'
+      : subscription.isPotentiallyUnused
+        ? `数据标记为可能闲置：已${inactivityDays === undefined ? '较长时间' : `连续 ${inactivityDays} 天`}未使用，但仍每月扣费；取消前请核实实际使用情况。`
+        : inactivityDays === undefined ? '当前没有潜在闲置标记。' : `最近使用距统计日 ${inactivityDays} 天，当前没有潜在闲置标记。`;
+    return { ...subscription, ...(inactivityDays === undefined ? {} : { inactivityDays }), unusedReason };
+  });
+  const active = subscriptions.filter(item => item.status === 'active');
+  const potentiallyUnused = active.filter(item => item.isPotentiallyUnused);
+  const activeMonthlyFeeFen = active.reduce((sum, item) => sum + item.monthlyFeeFen, 0);
+  const potentiallyUnusedMonthlyFeeFen = potentiallyUnused.reduce((sum, item) => sum + item.monthlyFeeFen, 0);
+  return { ok: true, kind: 'subscription_result', action: 'subscription.list', data: {
+    subscriptions: enriched,
+    summary: { activeCount: active.length, activeMonthlyFeeFen, potentiallyUnusedCount: potentiallyUnused.length, potentiallyUnusedMonthlyFeeFen, potentialAnnualSavingsFen: potentiallyUnusedMonthlyFeeFen * 12 },
+    methodology: { usesRepositoryFlag: true, historicalSubscriptionState: false, savingsEstimateMonths: 12 },
+  }, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: subscriptions.map(item => item.id) }] };
 }
 
 export async function handleBillSummary(intent, repository) {
