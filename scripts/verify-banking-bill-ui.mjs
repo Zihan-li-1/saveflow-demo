@@ -79,25 +79,27 @@ try {
     await setup();
     const zero = await send('查询 2026 年 1 月账单');
     assert.equal(zero.data.data.transactionCount, 0);
-    await page.locator('.banking-result-card').getByText('0 笔', { exact: true }).waitFor();
+    await page.locator('.banking-result-card').getByText('本月缺数据', { exact: true }).waitFor();
     const zeroText = await page.locator('.banking-result-card').innerText();
     assert.ok(!/NaN|Infinity/.test(zeroText));
+    assert.ok(zeroText.includes('不能视为零消费'));
+    assert.equal(zeroText.includes('¥0.00'), false);
     assert.equal(await page.locator('.bill-report-categories').count(), 0);
     await capture('after-zero');
-    report.realHttpChecks.push('Real zero-transaction month');
+    report.realHttpChecks.push('Missing month is labelled honestly without zero-consumption claims');
     // Explicit UI fixtures exercise extremes without changing server data or statistics.
     const fixturePage = await browser.newPage({ viewport: { width: 320, height: 1000 } });
     const long = structuredClone(bill);
     long.data.data.totalIncomeFen = Number.MAX_SAFE_INTEGER;
     long.data.data.totalExpenseFen = Number.MAX_SAFE_INTEGER - 100;
-    delete long.data.data.categoryTotals;
+    long.data.data.categoryTotals = { '合成测试分类': long.data.data.totalExpenseFen };
     await fixturePage.route('**/api/banking-agent', route => route.fulfill({ json: long }));
     await setup(fixturePage, 'ui-fixture-test-access');
     await send('查询 2026 年 8 月账单', fixturePage);
     await fixturePage.locator('.bill-report-hero strong').waitFor();
     await fits(fixturePage); await capture('fixture-long-mobile', fixturePage);
-    assert.equal(await fixturePage.locator('.bill-report-categories').count(), 0);
-    report.fixtureChecks.push('Safe-integer maximum amounts at 320px; absent categories hidden (mock HTTP only)');
+    assert.equal(await fixturePage.locator('.bill-report-categories').count(), 1);
+    report.fixtureChecks.push('Safe-integer maximum amounts and consistent categories at 320px (mock HTTP only)');
     await fixturePage.close();
   }
   report.success = true;

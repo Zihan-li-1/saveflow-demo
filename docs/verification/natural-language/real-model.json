@@ -8,905 +8,140 @@
     {
       "index": 1,
       "passed": true,
-      "message": "给张三转一千二百五十元",
+      "message": "查看今年六到九月的账单",
+      "resultStatus": "bill_result",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "给张三转一千二百五十元",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "payee_ref": "张三",
-              "amount": {
-                "amount_minor": 125000,
-                "currency": "CNY"
-              }
-            },
-            "missingSlots": [
-              "source_account_ref"
-            ],
-            "status": "needs_clarification"
+          "action": "bill.summary",
+          "status": "ready_for_resolution",
+          "time": {
+            "period": {
+              "start_date": "2026-06-01",
+              "end_date": "2026-09-30",
+              "timezone": "Asia/Shanghai",
+              "label": "2026年6月至9月"
+            }
           }
         }
       ],
       "queries": [
         {
-          "month": "2026-08"
-        }
-      ],
-      "prepares": [
-        {
-          "action": "transfer_money",
-          "input": {
-            "fromAccountId": "ACC-CHECKING",
-            "payeeId": "payee_001",
-            "amountFen": 125000,
-            "currency": "CNY"
-          },
-          "origin": "user_requested"
-        }
-      ],
-      "resultStatus": "awaiting_confirmation",
-      "previewEffects": [
-        {
-          "kind": "transfer_out",
-          "fromAccountId": "ACC-CHECKING",
-          "accountName": "模拟活期账户",
-          "payeeId": "payee_001",
-          "payeeName": "张三",
-          "accountNoMasked": "****1001",
-          "amountFen": 125000,
-          "feeFen": 0,
-          "currency": "CNY",
-          "balanceBeforeFen": 5000000,
-          "balanceAfterFen": 4875000,
-          "availableBalanceAfterFen": 4875000,
-          "accountVersion": 0,
-          "memo": "",
-          "arrival": "mock_immediate"
+          "startDate": "2026-06-01",
+          "endDate": "2026-09-30",
+          "timezone": "Asia/Shanghai"
         }
       ]
     },
     {
       "index": 2,
       "passed": true,
-      "message": "给张三转1万",
+      "message": "分析上个月的账单",
+      "resultStatus": "bill_result",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "给张三转1万",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "payee_ref": "张三",
-              "amount": {
-                "amount_minor": 1000000,
-                "currency": "CNY"
-              }
-            },
-            "missingSlots": [
-              "source_account_ref"
-            ],
-            "status": "needs_clarification"
+          "action": "bill.summary",
+          "status": "ready_for_resolution",
+          "time": {
+            "month": "2026-09"
           }
         }
       ],
       "queries": [
         {
-          "month": "2026-08"
-        }
-      ],
-      "prepares": [
-        {
-          "action": "transfer_money",
-          "input": {
-            "fromAccountId": "ACC-CHECKING",
-            "payeeId": "payee_001",
-            "amountFen": 1000000,
-            "currency": "CNY"
-          },
-          "origin": "user_requested"
-        }
-      ],
-      "resultStatus": "awaiting_confirmation",
-      "previewEffects": [
-        {
-          "kind": "transfer_out",
-          "fromAccountId": "ACC-CHECKING",
-          "accountName": "模拟活期账户",
-          "payeeId": "payee_001",
-          "payeeName": "张三",
-          "accountNoMasked": "****1001",
-          "amountFen": 1000000,
-          "feeFen": 0,
-          "currency": "CNY",
-          "balanceBeforeFen": 5000000,
-          "balanceAfterFen": 4000000,
-          "availableBalanceAfterFen": 4000000,
-          "accountVersion": 0,
-          "memo": "",
-          "arrival": "mock_immediate"
+          "month": "2026-09"
         }
       ]
     },
     {
       "index": 3,
       "passed": true,
-      "message": "把月预算改成两千五",
+      "message": "查看今年以来的消费",
+      "resultStatus": "bill_result",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "把月预算改成两千五",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "bill.summary",
+          "status": "ready_for_resolution",
+          "time": {
+            "period": {
+              "start_date": "2026-01-01",
+              "end_date": "2026-10-22",
               "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
+              "label": "今年以来"
             }
-          },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "card.set_budget",
-            "slots": {
-              "amount": {
-                "amount_minor": 250000,
-                "currency": "CNY"
-              }
-            },
-            "missingSlots": [
-              "card_ref"
-            ],
-            "status": "needs_clarification"
           }
         }
       ],
-      "queries": [],
-      "prepares": [
+      "queries": [
         {
-          "action": "card.set_budget",
-          "input": {
-            "cardId": "CARD-ENT",
-            "monthlyBudgetFen": 250000
-          }
-        }
-      ],
-      "resultStatus": "awaiting_confirmation",
-      "previewEffects": [
-        {
-          "kind": "card_change",
-          "action": "card.set_budget",
-          "cardId": "CARD-ENT",
-          "cardName": "娱乐虚拟卡",
-          "cardVersion": 0,
-          "previewGeneration": 1,
-          "before": {
-            "status": "active",
-            "monthlyBudgetFen": 80000
-          },
-          "after": {
-            "status": "active",
-            "monthlyBudgetFen": 250000
-          },
-          "monthlySpentFen": 76000
+          "startDate": "2026-01-01",
+          "endDate": "2026-10-22",
+          "timezone": "Asia/Shanghai"
         }
       ]
     },
     {
       "index": 4,
       "passed": true,
-      "message": "查去年全年的账单",
+      "message": "查询2026年6月到9月的账单",
+      "resultStatus": "bill_result",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "查去年全年的账单",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "bill.summary",
-            "slots": {
-              "period": {
-                "start_date": "2025-01-01",
-                "end_date": "2025-12-31",
-                "timezone": "Asia/Shanghai",
-                "label": "去年全年"
-              }
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
+          "action": "bill.summary",
+          "status": "ready_for_resolution",
+          "time": {
+            "period": {
+              "start_date": "2026-06-01",
+              "end_date": "2026-09-30",
+              "timezone": "Asia/Shanghai",
+              "label": "2026年6月到9月"
+            }
           }
         }
       ],
       "queries": [
         {
-          "startDate": "2025-01-01",
-          "endDate": "2025-12-31",
+          "startDate": "2026-06-01",
+          "endDate": "2026-09-30",
           "timezone": "Asia/Shanghai"
         }
-      ],
-      "prepares": [],
-      "resultStatus": "bill_result",
-      "resultData": {
-        "totalIncomeFen": 0,
-        "totalExpenseFen": 300,
-        "transactionCount": 2,
-        "categoryTotals": {
-          "房租": 300
-        },
-        "coverage": {
-          "status": "unverified",
-          "asOf": "2026-09-01T00:00:00+08:00",
-          "availableMonths": [
-            "2026-06",
-            "2026-07",
-            "2026-08"
-          ],
-          "warning": "仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。"
-        },
-        "period": {
-          "startDate": "2025-01-01",
-          "endDate": "2025-12-31",
-          "timezone": "Asia/Shanghai",
-          "label": "去年全年"
-        },
-        "monthlyBreakdown": [
-          {
-            "month": "2025-01",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 100,
-            "transactionCount": 1,
-            "categoryTotals": {
-              "房租": 100
-            }
-          },
-          {
-            "month": "2025-02",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-03",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-04",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-05",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-06",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-07",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-08",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-09",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-10",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-11",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-12",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 200,
-            "transactionCount": 1,
-            "categoryTotals": {
-              "房租": 200
-            }
-          }
-        ]
-      }
+      ]
     },
     {
       "index": 5,
       "passed": true,
-      "message": "看看今年九月的支出",
-      "modelTurns": [
-        {
-          "input": {
-            "userMessage": "看看今年九月的支出",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
-          },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "bill.summary",
-            "slots": {
-              "month": "2026-09"
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
-          }
-        }
-      ],
-      "queries": [
-        {
-          "month": "2026-09"
-        }
-      ],
-      "prepares": [],
+      "message": "查看2026年8月账单",
       "resultStatus": "bill_result",
-      "resultData": {
-        "totalIncomeFen": 0,
-        "totalExpenseFen": 700,
-        "transactionCount": 2,
-        "categoryTotals": {
-          "房租": 700
-        },
-        "coverage": {
-          "status": "unverified",
-          "asOf": "2026-09-01T00:00:00+08:00",
-          "availableMonths": [
-            "2026-06",
-            "2026-07",
-            "2026-08"
-          ],
-          "warning": "仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。"
-        },
-        "month": "2026-09"
-      }
-    },
-    {
-      "index": 6,
-      "passed": true,
-      "message": "查上个月的账单",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "查上个月的账单",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "bill.summary",
-            "slots": {
-              "month": "2026-09"
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
-          }
-        }
-      ],
-      "queries": [
-        {
-          "month": "2026-09"
-        }
-      ],
-      "prepares": [],
-      "resultStatus": "bill_result",
-      "resultData": {
-        "totalIncomeFen": 0,
-        "totalExpenseFen": 700,
-        "transactionCount": 2,
-        "categoryTotals": {
-          "房租": 700
-        },
-        "coverage": {
-          "status": "unverified",
-          "asOf": "2026-09-01T00:00:00+08:00",
-          "availableMonths": [
-            "2026-06",
-            "2026-07",
-            "2026-08"
-          ],
-          "warning": "仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。"
-        },
-        "month": "2026-09"
-      }
-    },
-    {
-      "index": 7,
-      "passed": true,
-      "message": "今年到现在花了多少",
-      "modelTurns": [
-        {
-          "input": {
-            "userMessage": "今年到现在花了多少",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
-          },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "bill.summary",
-            "slots": {
-              "period": {
-                "start_date": "2026-01-01",
-                "end_date": "2026-10-22",
-                "timezone": "Asia/Shanghai",
-                "label": "今年到现在"
-              }
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
-          }
-        }
-      ],
-      "queries": [
-        {
-          "startDate": "2026-01-01",
-          "endDate": "2026-10-22",
-          "timezone": "Asia/Shanghai"
-        }
-      ],
-      "prepares": [],
-      "resultStatus": "bill_result",
-      "resultData": {
-        "totalIncomeFen": 3600000,
-        "totalExpenseFen": 2233200,
-        "transactionCount": 39,
-        "categoryTotals": {
-          "房租": 901200,
-          "餐饮": 425000,
-          "交通": 118000,
-          "通信": 30000,
-          "日用品": 145000,
-          "娱乐": 207000,
-          "购物": 278000,
-          "订阅": 21000,
-          "其他": 108000
-        },
-        "coverage": {
-          "status": "unverified",
-          "asOf": "2026-09-01T00:00:00+08:00",
-          "availableMonths": [
-            "2026-06",
-            "2026-07",
-            "2026-08"
-          ],
-          "warning": "仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。"
-        },
-        "period": {
-          "startDate": "2026-01-01",
-          "endDate": "2026-10-22",
-          "timezone": "Asia/Shanghai",
-          "label": "今年到现在"
-        },
-        "monthlyBreakdown": [
-          {
-            "month": "2026-01",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2026-02",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2026-03",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2026-04",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2026-05",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2026-06",
-            "status": "complete",
-            "totalIncomeFen": 1200000,
-            "totalExpenseFen": 668000,
-            "transactionCount": 12,
-            "categoryTotals": {
-              "房租": 300000,
-              "餐饮": 135000,
-              "交通": 38000,
-              "通信": 10000,
-              "日用品": 45000,
-              "娱乐": 45000,
-              "购物": 65000,
-              "订阅": 6000,
-              "其他": 24000
-            }
-          },
-          {
-            "month": "2026-07",
-            "status": "complete",
-            "totalIncomeFen": 1200000,
-            "totalExpenseFen": 718000,
-            "transactionCount": 12,
-            "categoryTotals": {
-              "房租": 300000,
-              "餐饮": 145000,
-              "交通": 40000,
-              "通信": 10000,
-              "日用品": 50000,
-              "娱乐": 50000,
-              "购物": 85000,
-              "订阅": 6000,
-              "其他": 32000
-            }
-          },
-          {
-            "month": "2026-08",
-            "status": "complete",
-            "totalIncomeFen": 1200000,
-            "totalExpenseFen": 846000,
-            "transactionCount": 12,
-            "categoryTotals": {
-              "房租": 300000,
-              "餐饮": 145000,
-              "交通": 40000,
-              "通信": 10000,
-              "日用品": 50000,
-              "娱乐": 112000,
-              "购物": 128000,
-              "订阅": 9000,
-              "其他": 52000
-            }
-          },
-          {
-            "month": "2026-09",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 700,
-            "transactionCount": 2,
-            "categoryTotals": {
-              "房租": 700
-            }
-          },
-          {
-            "month": "2026-10",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 500,
-            "transactionCount": 1,
-            "categoryTotals": {
-              "房租": 500
-            }
-          }
-        ]
-      }
-    },
-    {
-      "index": 8,
-      "passed": true,
-      "message": "我要在年底存够一万",
-      "modelTurns": [
-        {
-          "input": {
-            "userMessage": "我要在年底存够一万",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
-          },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "orchestrator.goal",
-            "slots": {
-              "goal_text": "在年底存够一万",
-              "amount": {
-                "amount_minor": 1000000,
-                "currency": "CNY"
-              },
-              "deadline": "2026-12-31"
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
-          }
-        }
-      ],
-      "queries": [],
-      "prepares": [],
-      "resultStatus": "goal_plan",
-      "resultData": {
-        "goal_text": "在年底存够一万",
-        "horizon": null,
-        "targetAmountFen": 1000000,
-        "deadline": "2026-12-31",
-        "constraints": null,
-        "steps": [
-          {
-            "action": "bill.analyze",
-            "origin": "agent_suggested",
-            "reason": "先核对目标期间的收入、支出和异常交易。",
-            "requires_confirmation": false
-          },
-          {
-            "action": "subscription.list",
-            "origin": "agent_suggested",
-            "reason": "发现 1 项可能闲置订阅，建议先核实；不会自动取消。",
-            "requires_confirmation": false
-          },
-          {
-            "action": "card.get",
-            "origin": "agent_suggested",
-            "reason": "查看现有卡片预算和消费情况；不会自动调整预算。",
-            "requires_confirmation": false
-          },
-          {
-            "action": "wealth.recommend",
-            "origin": "agent_suggested",
-            "reason": "如有明确风险、期限和流动性约束，可进行只读产品筛选。",
-            "requires_confirmation": false
-          }
-        ],
-        "snapshot": {
-          "available_balance_minor": 5000000,
-          "active_subscription_count": 2,
-          "potentially_unused_subscription_count": 1,
-          "card_count": 2
-        },
-        "execution_allowed": false
-      }
-    },
-    {
-      "index": 9,
-      "passed": true,
-      "message": "麻烦从活期账户汇给李四壹仟零捌元伍角",
-      "modelTurns": [
-        {
-          "input": {
-            "userMessage": "麻烦从活期账户汇给李四壹仟零捌元伍角",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
-          },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "payee_ref": "李四",
-              "amount": {
-                "amount_minor": 100850,
-                "currency": "CNY"
-              },
-              "source_account_ref": "活期账户"
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
+          "action": "bill.summary",
+          "status": "ready_for_resolution",
+          "time": {
+            "month": "2026-08"
           }
         }
       ],
@@ -914,159 +149,91 @@
         {
           "month": "2026-08"
         }
-      ],
-      "prepares": [
+      ]
+    },
+    {
+      "index": 6,
+      "passed": true,
+      "message": "给张三转一千二百五十元",
+      "resultStatus": "awaiting_confirmation",
+      "modelTurns": [
         {
-          "action": "transfer_money",
-          "input": {
-            "fromAccountId": "ACC-CHECKING",
-            "payeeId": "payee_002",
-            "amountFen": 100850,
-            "currency": "CNY"
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "origin": "user_requested"
+          "action": "transfer.create",
+          "status": "needs_clarification"
         }
       ],
-      "resultStatus": "awaiting_confirmation",
-      "previewEffects": [
+      "queries": [
         {
-          "kind": "transfer_out",
-          "fromAccountId": "ACC-CHECKING",
-          "accountName": "模拟活期账户",
-          "payeeId": "payee_002",
-          "payeeName": "李四",
-          "accountNoMasked": "****1002",
-          "amountFen": 100850,
-          "feeFen": 0,
-          "currency": "CNY",
-          "balanceBeforeFen": 5000000,
-          "balanceAfterFen": 4899150,
-          "availableBalanceAfterFen": 4899150,
-          "accountVersion": 0,
-          "memo": "",
-          "arrival": "mock_immediate"
+          "month": "2026-08"
         }
       ]
     },
     {
-      "index": 10,
+      "index": 7,
       "passed": true,
-      "message": "娱乐虚拟卡每月能花的钱调到2千零六块五毛",
+      "message": "给张三转1万",
+      "resultStatus": "awaiting_confirmation",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "娱乐虚拟卡每月能花的钱调到2千零六块五毛",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "card.set_budget",
-            "slots": {
-              "card_ref": "娱乐虚拟卡",
-              "amount": {
-                "amount_minor": 200650,
-                "currency": "CNY"
-              }
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
-          }
+          "action": "transfer.create",
+          "status": "needs_clarification"
         }
       ],
-      "queries": [],
-      "prepares": [
+      "queries": [
         {
-          "action": "card.set_budget",
-          "input": {
-            "cardId": "CARD-ENT",
-            "monthlyBudgetFen": 200650
-          }
-        }
-      ],
-      "resultStatus": "awaiting_confirmation",
-      "previewEffects": [
-        {
-          "kind": "card_change",
-          "action": "card.set_budget",
-          "cardId": "CARD-ENT",
-          "cardName": "娱乐虚拟卡",
-          "cardVersion": 0,
-          "previewGeneration": 1,
-          "before": {
-            "status": "active",
-            "monthlyBudgetFen": 80000
-          },
-          "after": {
-            "status": "active",
-            "monthlyBudgetFen": 200650
-          },
-          "monthlySpentFen": 76000
+          "month": "2026-08"
         }
       ]
     },
     {
-      "index": 11,
+      "index": 8,
       "passed": true,
-      "message": "帮我合计一下上一自然年度的收支",
+      "message": "把月预算改成两千五",
+      "resultStatus": "awaiting_confirmation",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "帮我合计一下上一自然年度的收支",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "bill.summary",
-            "slots": {
-              "period": {
-                "start_date": "2025-01-01",
-                "end_date": "2025-12-31",
-                "timezone": "Asia/Shanghai",
-                "label": "上一自然年度（2025年）"
-              }
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
+          "action": "card.set_budget",
+          "status": "needs_clarification"
+        }
+      ],
+      "queries": []
+    },
+    {
+      "index": 9,
+      "passed": true,
+      "message": "查去年全年的账单",
+      "resultStatus": "bill_result",
+      "modelTurns": [
+        {
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "bill.summary",
+          "status": "ready_for_resolution",
+          "time": {
+            "period": {
+              "start_date": "2025-01-01",
+              "end_date": "2025-12-31",
+              "timezone": "Asia/Shanghai",
+              "label": "去年全年"
+            }
           }
         }
       ],
@@ -1076,174 +243,196 @@
           "endDate": "2025-12-31",
           "timezone": "Asia/Shanghai"
         }
-      ],
-      "prepares": [],
+      ]
+    },
+    {
+      "index": 10,
+      "passed": true,
+      "message": "看看今年九月的支出",
       "resultStatus": "bill_result",
-      "resultData": {
-        "totalIncomeFen": 0,
-        "totalExpenseFen": 300,
-        "transactionCount": 2,
-        "categoryTotals": {
-          "房租": 300
-        },
-        "coverage": {
-          "status": "unverified",
-          "asOf": "2026-09-01T00:00:00+08:00",
-          "availableMonths": [
-            "2026-06",
-            "2026-07",
-            "2026-08"
-          ],
-          "warning": "仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。"
-        },
-        "period": {
-          "startDate": "2025-01-01",
-          "endDate": "2025-12-31",
-          "timezone": "Asia/Shanghai",
-          "label": "上一自然年度（2025年）"
-        },
-        "monthlyBreakdown": [
-          {
-            "month": "2025-01",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 100,
-            "transactionCount": 1,
-            "categoryTotals": {
-              "房租": 100
-            }
+      "modelTurns": [
+        {
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          {
-            "month": "2025-02",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-03",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-04",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-05",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-06",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-07",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-08",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-09",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-10",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-11",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2025-12",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 200,
-            "transactionCount": 1,
-            "categoryTotals": {
-              "房租": 200
-            }
+          "action": "bill.summary",
+          "status": "ready_for_resolution",
+          "time": {
+            "month": "2026-09"
           }
-        ]
-      }
+        }
+      ],
+      "queries": [
+        {
+          "month": "2026-09"
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "passed": true,
+      "message": "查上个月的账单",
+      "resultStatus": "bill_result",
+      "modelTurns": [
+        {
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "bill.summary",
+          "status": "ready_for_resolution",
+          "time": {
+            "month": "2026-09"
+          }
+        }
+      ],
+      "queries": [
+        {
+          "month": "2026-09"
+        }
+      ]
     },
     {
       "index": 12,
       "passed": true,
-      "message": "查上个月的账单",
+      "message": "今年到现在花了多少",
+      "resultStatus": "bill_result",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "查上个月的账单",
-            "history": [],
-            "calendar": {
-              "currentTime": "2025-12-31T16:10:00.000Z",
-              "currentDate": "2026-01-01",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "bill.summary",
-            "slots": {
-              "month": "2025-12"
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
+          "action": "bill.summary",
+          "status": "ready_for_resolution",
+          "time": {
+            "period": {
+              "start_date": "2026-01-01",
+              "end_date": "2026-10-22",
+              "timezone": "Asia/Shanghai",
+              "label": "2026年年初至今"
+            }
+          }
+        }
+      ],
+      "queries": [
+        {
+          "startDate": "2026-01-01",
+          "endDate": "2026-10-22",
+          "timezone": "Asia/Shanghai"
+        }
+      ]
+    },
+    {
+      "index": 13,
+      "passed": true,
+      "message": "我要在年底存够一万",
+      "resultStatus": "goal_plan",
+      "modelTurns": [
+        {
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "orchestrator.goal",
+          "status": "ready_for_resolution"
+        }
+      ],
+      "queries": []
+    },
+    {
+      "index": 14,
+      "passed": true,
+      "message": "麻烦从活期账户汇给李四壹仟零捌元伍角",
+      "resultStatus": "awaiting_confirmation",
+      "modelTurns": [
+        {
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "transfer.create",
+          "status": "ready_for_resolution"
+        }
+      ],
+      "queries": [
+        {
+          "month": "2026-08"
+        }
+      ]
+    },
+    {
+      "index": 15,
+      "passed": true,
+      "message": "娱乐虚拟卡每月能花的钱调到2千零六块五毛",
+      "resultStatus": "awaiting_confirmation",
+      "modelTurns": [
+        {
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "card.set_budget",
+          "status": "ready_for_resolution"
+        }
+      ],
+      "queries": []
+    },
+    {
+      "index": 16,
+      "passed": true,
+      "message": "帮我合计一下上一自然年度的收支",
+      "resultStatus": "bill_result",
+      "modelTurns": [
+        {
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "bill.summary",
+          "status": "ready_for_resolution",
+          "time": {
+            "period": {
+              "start_date": "2025-01-01",
+              "end_date": "2025-12-31",
+              "timezone": "Asia/Shanghai",
+              "label": "上一自然年度（2025年）"
+            }
+          }
+        }
+      ],
+      "queries": [
+        {
+          "startDate": "2025-01-01",
+          "endDate": "2025-12-31",
+          "timezone": "Asia/Shanghai"
+        }
+      ]
+    },
+    {
+      "index": 17,
+      "passed": true,
+      "message": "查上个月的账单",
+      "resultStatus": "bill_result",
+      "modelTurns": [
+        {
+          "calendar": {
+            "currentDate": "2026-01-01",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "bill.summary",
+          "status": "ready_for_resolution",
+          "time": {
+            "month": "2025-12"
           }
         }
       ],
@@ -1251,72 +440,29 @@
         {
           "month": "2025-12"
         }
-      ],
-      "prepares": [],
-      "resultStatus": "bill_result",
-      "resultData": {
-        "totalIncomeFen": 0,
-        "totalExpenseFen": 200,
-        "transactionCount": 1,
-        "categoryTotals": {
-          "房租": 200
-        },
-        "coverage": {
-          "status": "unverified",
-          "asOf": "2026-09-01T00:00:00+08:00",
-          "availableMonths": [
-            "2026-06",
-            "2026-07",
-            "2026-08"
-          ],
-          "warning": "仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。"
-        },
-        "month": "2025-12"
-      }
+      ]
     },
     {
-      "index": 13,
+      "index": 18,
       "passed": true,
       "message": "今年到现在花了多少",
+      "resultStatus": "bill_result",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "今年到现在花了多少",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-12-31T16:30:00.000Z",
-              "currentDate": "2027-01-01",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2027-01-01",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "bill.summary",
-            "slots": {
-              "period": {
-                "start_date": "2027-01-01",
-                "end_date": "2027-01-01",
-                "timezone": "Asia/Shanghai",
-                "label": "今年到现在"
-              }
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
+          "action": "bill.summary",
+          "status": "ready_for_resolution",
+          "time": {
+            "period": {
+              "start_date": "2027-01-01",
+              "end_date": "2027-01-01",
+              "timezone": "Asia/Shanghai",
+              "label": "今年到现在"
+            }
           }
         }
       ],
@@ -1326,85 +472,29 @@
           "endDate": "2027-01-01",
           "timezone": "Asia/Shanghai"
         }
-      ],
-      "prepares": [],
-      "resultStatus": "bill_result",
-      "resultData": {
-        "totalIncomeFen": 0,
-        "totalExpenseFen": 0,
-        "transactionCount": 0,
-        "categoryTotals": {},
-        "coverage": {
-          "status": "unverified",
-          "asOf": "2026-09-01T00:00:00+08:00",
-          "availableMonths": [
-            "2026-06",
-            "2026-07",
-            "2026-08"
-          ],
-          "warning": "仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。"
-        },
-        "period": {
-          "startDate": "2027-01-01",
-          "endDate": "2027-01-01",
-          "timezone": "Asia/Shanghai",
-          "label": "今年到现在"
-        },
-        "monthlyBreakdown": [
-          {
-            "month": "2027-01",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          }
-        ]
-      }
+      ]
     },
     {
-      "index": 14,
+      "index": 19,
       "passed": true,
       "message": "今年到现在花了多少",
+      "resultStatus": "bill_result",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "今年到现在花了多少",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-12-31T16:30:00.000Z",
-              "currentDate": "2026-12-31",
-              "timezone": "America/New_York",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-12-31",
+            "timezone": "America/New_York",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "bill.summary",
-            "slots": {
-              "period": {
-                "start_date": "2026-01-01",
-                "end_date": "2026-12-31",
-                "timezone": "America/New_York",
-                "label": "今年到现在"
-              }
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
+          "action": "bill.summary",
+          "status": "ready_for_resolution",
+          "time": {
+            "period": {
+              "start_date": "2026-01-01",
+              "end_date": "2026-12-31",
+              "timezone": "America/New_York",
+              "label": "今年至今"
+            }
           }
         }
       ],
@@ -1414,1132 +504,277 @@
           "endDate": "2026-12-31",
           "timezone": "America/New_York"
         }
-      ],
-      "prepares": [],
-      "resultStatus": "bill_result",
-      "resultData": {
-        "totalIncomeFen": 3600000,
-        "totalExpenseFen": 2233800,
-        "transactionCount": 40,
-        "categoryTotals": {
-          "房租": 901800,
-          "餐饮": 425000,
-          "交通": 118000,
-          "通信": 30000,
-          "日用品": 145000,
-          "娱乐": 207000,
-          "购物": 278000,
-          "订阅": 21000,
-          "其他": 108000
-        },
-        "coverage": {
-          "status": "unverified",
-          "asOf": "2026-09-01T00:00:00+08:00",
-          "availableMonths": [
-            "2026-06",
-            "2026-07",
-            "2026-08"
-          ],
-          "warning": "仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。"
-        },
-        "period": {
-          "startDate": "2026-01-01",
-          "endDate": "2026-12-31",
-          "timezone": "America/New_York",
-          "label": "今年到现在"
-        },
-        "monthlyBreakdown": [
-          {
-            "month": "2026-01",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2026-02",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2026-03",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2026-04",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2026-05",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2026-06",
-            "status": "complete",
-            "totalIncomeFen": 1200000,
-            "totalExpenseFen": 668000,
-            "transactionCount": 12,
-            "categoryTotals": {
-              "房租": 300000,
-              "餐饮": 135000,
-              "交通": 38000,
-              "通信": 10000,
-              "日用品": 45000,
-              "娱乐": 45000,
-              "购物": 65000,
-              "订阅": 6000,
-              "其他": 24000
-            }
-          },
-          {
-            "month": "2026-07",
-            "status": "complete",
-            "totalIncomeFen": 1200000,
-            "totalExpenseFen": 718000,
-            "transactionCount": 12,
-            "categoryTotals": {
-              "房租": 300000,
-              "餐饮": 145000,
-              "交通": 40000,
-              "通信": 10000,
-              "日用品": 50000,
-              "娱乐": 50000,
-              "购物": 85000,
-              "订阅": 6000,
-              "其他": 32000
-            }
-          },
-          {
-            "month": "2026-08",
-            "status": "partial",
-            "totalIncomeFen": 1200000,
-            "totalExpenseFen": 846300,
-            "transactionCount": 13,
-            "categoryTotals": {
-              "房租": 300300,
-              "餐饮": 145000,
-              "交通": 40000,
-              "通信": 10000,
-              "日用品": 50000,
-              "娱乐": 112000,
-              "购物": 128000,
-              "订阅": 9000,
-              "其他": 52000
-            }
-          },
-          {
-            "month": "2026-09",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 400,
-            "transactionCount": 1,
-            "categoryTotals": {
-              "房租": 400
-            }
-          },
-          {
-            "month": "2026-10",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 1100,
-            "transactionCount": 2,
-            "categoryTotals": {
-              "房租": 1100
-            }
-          },
-          {
-            "month": "2026-11",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          },
-          {
-            "month": "2026-12",
-            "status": "unavailable",
-            "totalIncomeFen": 0,
-            "totalExpenseFen": 0,
-            "transactionCount": 0,
-            "categoryTotals": {}
-          }
-        ]
-      }
-    },
-    {
-      "index": 15,
-      "passed": true,
-      "message": "从活期账户给张三转一两千",
-      "modelTurns": [
-        {
-          "input": {
-            "userMessage": "从活期账户给张三转一两千",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
-          },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "payee_ref": "张三",
-              "source_account_ref": "活期账户"
-            },
-            "missingSlots": [
-              "amount"
-            ],
-            "status": "needs_clarification"
-          }
-        }
-      ],
-      "queries": [],
-      "prepares": [],
-      "resultStatus": "needs_clarification"
-    },
-    {
-      "index": 16,
-      "passed": true,
-      "message": "从活期账户给张三转几百",
-      "modelTurns": [
-        {
-          "input": {
-            "userMessage": "从活期账户给张三转几百",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
-          },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "payee_ref": "张三",
-              "source_account_ref": "活期账户"
-            },
-            "missingSlots": [
-              "amount"
-            ],
-            "status": "needs_clarification"
-          }
-        }
-      ],
-      "queries": [],
-      "prepares": [],
-      "resultStatus": "needs_clarification"
-    },
-    {
-      "index": 17,
-      "passed": true,
-      "message": "从活期账户给张三转差不多一万",
-      "modelTurns": [
-        {
-          "input": {
-            "userMessage": "从活期账户给张三转差不多一万",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
-          },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "payee_ref": "张三",
-              "source_account_ref": "活期账户"
-            },
-            "missingSlots": [
-              "amount"
-            ],
-            "status": "needs_clarification"
-          }
-        }
-      ],
-      "queries": [],
-      "prepares": [],
-      "resultStatus": "needs_clarification"
-    },
-    {
-      "index": 18,
-      "passed": true,
-      "message": "查2026年2月30日的账单",
-      "modelTurns": [
-        {
-          "input": {
-            "userMessage": "查2026年2月30日的账单",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
-          },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "bill.summary",
-            "slots": {},
-            "missingSlots": [
-              "month"
-            ],
-            "status": "needs_clarification"
-          }
-        }
-      ],
-      "queries": [],
-      "prepares": [],
-      "resultStatus": "needs_clarification"
-    },
-    {
-      "index": 19,
-      "passed": true,
-      "message": "给那个人转一千",
-      "modelTurns": [
-        {
-          "input": {
-            "userMessage": "给那个人转一千",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
-          },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "amount": {
-                "amount_minor": 100000,
-                "currency": "CNY"
-              }
-            },
-            "missingSlots": [
-              "payee_ref",
-              "source_account_ref"
-            ],
-            "status": "needs_clarification"
-          }
-        }
-      ],
-      "queries": [],
-      "prepares": [],
-      "resultStatus": "needs_clarification"
+      ]
     },
     {
       "index": 20,
       "passed": true,
-      "message": "从活期账户给张三转0.001元",
+      "message": "从活期账户给张三转一两千",
+      "resultStatus": "needs_clarification",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "从活期账户给张三转0.001元",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "payee_ref": "张三",
-              "source_account_ref": "活期账户"
-            },
-            "missingSlots": [
-              "amount"
-            ],
-            "status": "needs_clarification"
-          }
+          "action": "transfer.create",
+          "status": "needs_clarification"
         }
       ],
-      "queries": [],
-      "prepares": [],
-      "resultStatus": "needs_clarification"
+      "queries": []
     },
     {
       "index": 21,
       "passed": true,
-      "message": "从活期账户给张三转钱",
-      "answer": "一千五",
+      "message": "从活期账户给张三转几百",
+      "resultStatus": "needs_clarification",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "从活期账户给张三转钱",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "payee_ref": "张三",
-              "source_account_ref": "活期账户"
-            },
-            "missingSlots": [
-              "amount"
-            ],
-            "status": "needs_clarification"
-          }
-        },
-        {
-          "input": {
-            "userMessage": "一千五",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            },
-            "context": {
-              "action": "transfer.create",
-              "slots": {
-                "payee_ref": "张三",
-                "source_account_ref": "活期账户"
-              },
-              "pendingSlot": "amount",
-              "question": "要转多少钱？例如 500 元。",
-              "choices": []
-            }
-          },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "payee_ref": "张三",
-              "source_account_ref": "活期账户",
-              "amount": {
-                "amount_minor": 150000,
-                "currency": "CNY"
-              }
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
-          }
+          "action": "transfer.create",
+          "status": "needs_clarification"
         }
       ],
-      "queries": [
-        {
-          "month": "2026-08"
-        }
-      ],
-      "prepares": [
-        {
-          "action": "transfer_money",
-          "input": {
-            "fromAccountId": "ACC-CHECKING",
-            "payeeId": "payee_001",
-            "amountFen": 150000,
-            "currency": "CNY"
-          },
-          "origin": "user_requested"
-        }
-      ],
-      "resultStatus": "awaiting_confirmation",
-      "previewEffects": [
-        {
-          "kind": "transfer_out",
-          "fromAccountId": "ACC-CHECKING",
-          "accountName": "模拟活期账户",
-          "payeeId": "payee_001",
-          "payeeName": "张三",
-          "accountNoMasked": "****1001",
-          "amountFen": 150000,
-          "feeFen": 0,
-          "currency": "CNY",
-          "balanceBeforeFen": 5000000,
-          "balanceAfterFen": 4850000,
-          "availableBalanceAfterFen": 4850000,
-          "accountVersion": 0,
-          "memo": "",
-          "arrival": "mock_immediate"
-        }
-      ]
+      "queries": []
     },
     {
       "index": 22,
       "passed": true,
-      "message": "从活期账户给张三转一千元",
-      "answer": "算了，数额换成一千五，其他照旧",
+      "message": "从活期账户给张三转差不多一万",
+      "resultStatus": "needs_clarification",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "从活期账户给张三转一千元",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "payee_ref": "张三",
-              "amount": {
-                "amount_minor": 100000,
-                "currency": "CNY"
-              },
-              "source_account_ref": "活期账户"
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
-          }
-        },
-        {
-          "input": {
-            "userMessage": "算了，数额换成一千五，其他照旧",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            },
-            "context": {
-              "action": "transfer.create",
-              "slots": {
-                "payee_ref": "张三",
-                "amount": {
-                  "amount_minor": 100000,
-                  "currency": "CNY"
-                },
-                "source_account_ref": "活期账户"
-              },
-              "pendingSlot": "amount",
-              "choices": []
-            }
-          },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "payee_ref": "张三",
-              "amount": {
-                "amount_minor": 150000,
-                "currency": "CNY"
-              },
-              "source_account_ref": "活期账户"
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
-          }
+          "action": "transfer.create",
+          "status": "needs_clarification"
         }
       ],
-      "queries": [
-        {
-          "month": "2026-08"
-        },
-        {
-          "month": "2026-08"
-        }
-      ],
-      "prepares": [
-        {
-          "action": "transfer_money",
-          "input": {
-            "fromAccountId": "ACC-CHECKING",
-            "payeeId": "payee_001",
-            "amountFen": 100000,
-            "currency": "CNY"
-          },
-          "origin": "user_requested"
-        },
-        {
-          "action": "transfer_money",
-          "input": {
-            "fromAccountId": "ACC-CHECKING",
-            "payeeId": "payee_001",
-            "amountFen": 150000,
-            "currency": "CNY"
-          },
-          "origin": "user_requested"
-        }
-      ],
-      "resultStatus": "awaiting_confirmation",
-      "previewEffects": [
-        {
-          "kind": "transfer_out",
-          "fromAccountId": "ACC-CHECKING",
-          "accountName": "模拟活期账户",
-          "payeeId": "payee_001",
-          "payeeName": "张三",
-          "accountNoMasked": "****1001",
-          "amountFen": 150000,
-          "feeFen": 0,
-          "currency": "CNY",
-          "balanceBeforeFen": 5000000,
-          "balanceAfterFen": 4850000,
-          "availableBalanceAfterFen": 4850000,
-          "accountVersion": 0,
-          "memo": "",
-          "arrival": "mock_immediate"
-        }
-      ]
+      "queries": []
     },
     {
       "index": 23,
       "passed": true,
-      "message": "从活期账户给王先生转一千五",
-      "answer": "第二个",
+      "message": "查2026年2月30日的账单",
+      "resultStatus": "needs_clarification",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "从活期账户给王先生转一千五",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "payee_ref": "王先生",
-              "amount": {
-                "amount_minor": 150000,
-                "currency": "CNY"
-              },
-              "source_account_ref": "活期账户"
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
-          }
+          "action": "bill.summary",
+          "status": "needs_clarification",
+          "time": {}
+        }
+      ],
+      "queries": []
+    },
+    {
+      "index": 24,
+      "passed": true,
+      "message": "给那个人转一千",
+      "resultStatus": "needs_clarification",
+      "modelTurns": [
+        {
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "transfer.create",
+          "status": "needs_clarification"
+        }
+      ],
+      "queries": []
+    },
+    {
+      "index": 25,
+      "passed": true,
+      "message": "从活期账户给张三转0.001元",
+      "resultStatus": "needs_clarification",
+      "modelTurns": [
+        {
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "transfer.create",
+          "status": "needs_clarification"
+        }
+      ],
+      "queries": []
+    },
+    {
+      "index": 26,
+      "passed": true,
+      "message": "从活期账户给张三转钱",
+      "resultStatus": "awaiting_confirmation",
+      "modelTurns": [
+        {
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "transfer.create",
+          "status": "needs_clarification"
         },
         {
-          "input": {
-            "userMessage": "第二个",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            },
-            "context": {
-              "action": "transfer.create",
-              "slots": {
-                "payee_ref": "王先生",
-                "amount": {
-                  "amount_minor": 150000,
-                  "currency": "CNY"
-                },
-                "source_account_ref": "活期账户"
-              },
-              "pendingSlot": "payee_ref",
-              "question": "「王先生」匹配到多位收款人，请确认。",
-              "choices": [
-                {
-                  "optionId": "opt_efcaa14c-59fc-4795-8905-12b33bd89cb3",
-                  "label": "房东王先生（****1003）",
-                  "rawValue": "房东王先生"
-                },
-                {
-                  "optionId": "opt_118e2634-0480-433e-b1eb-b7379e74fbd4",
-                  "label": "王强（****1004）",
-                  "rawValue": "王强"
-                }
-              ]
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "transfer.create",
-            "slots": {
-              "payee_ref": "王强",
-              "amount": {
-                "amount_minor": 150000,
-                "currency": "CNY"
-              },
-              "source_account_ref": "活期账户"
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution",
-            "choice": {
-              "optionId": "opt_118e2634-0480-433e-b1eb-b7379e74fbd4"
-            }
-          }
+          "action": "transfer.create",
+          "status": "ready_for_resolution"
         }
       ],
       "queries": [
         {
           "month": "2026-08"
         }
-      ],
-      "prepares": [
+      ]
+    },
+    {
+      "index": 27,
+      "passed": true,
+      "message": "从活期账户给张三转一千元",
+      "resultStatus": "awaiting_confirmation",
+      "modelTurns": [
         {
-          "action": "transfer_money",
-          "input": {
-            "fromAccountId": "ACC-CHECKING",
-            "payeeId": "payee_004",
-            "amountFen": 150000,
-            "currency": "CNY"
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "origin": "user_requested"
+          "action": "transfer.create",
+          "status": "ready_for_resolution"
+        },
+        {
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "transfer.create",
+          "status": "ready_for_resolution"
         }
       ],
-      "resultStatus": "awaiting_confirmation",
-      "previewEffects": [
+      "queries": [
         {
-          "kind": "transfer_out",
-          "fromAccountId": "ACC-CHECKING",
-          "accountName": "模拟活期账户",
-          "payeeId": "payee_004",
-          "payeeName": "王强",
-          "accountNoMasked": "****1004",
-          "amountFen": 150000,
-          "feeFen": 0,
-          "currency": "CNY",
-          "balanceBeforeFen": 5000000,
-          "balanceAfterFen": 4850000,
-          "availableBalanceAfterFen": 4850000,
-          "accountVersion": 0,
-          "memo": "",
-          "arrival": "mock_immediate"
+          "month": "2026-08"
+        },
+        {
+          "month": "2026-08"
         }
       ]
     },
     {
-      "index": 24,
+      "index": 28,
+      "passed": true,
+      "message": "从活期账户给王先生转一千五",
+      "resultStatus": "awaiting_confirmation",
+      "modelTurns": [
+        {
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "transfer.create",
+          "status": "ready_for_resolution"
+        },
+        {
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
+          },
+          "action": "transfer.create",
+          "status": "ready_for_resolution"
+        }
+      ],
+      "queries": [
+        {
+          "month": "2026-08"
+        }
+      ]
+    },
+    {
+      "index": 29,
       "passed": true,
       "message": "先看看上个月账单，再给张三转一千",
+      "resultStatus": "needs_clarification",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "先看看上个月账单，再给张三转一千",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "clarify",
-            "slots": {},
-            "missingSlots": [
-              "action"
-            ],
-            "status": "needs_clarification"
-          }
+          "action": "clarify",
+          "status": "needs_clarification"
         }
       ],
-      "queries": [],
-      "prepares": [],
-      "resultStatus": "needs_clarification"
+      "queries": []
     },
     {
-      "index": 25,
+      "index": 30,
       "passed": true,
       "message": "年底攒个一两万吧",
+      "resultStatus": "needs_clarification",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "年底攒个一两万吧",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "orchestrator.goal",
-            "slots": {
-              "goal_text": "年底攒个一两万",
-              "deadline": "2026-12-31"
-            },
-            "missingSlots": [
-              "amount"
-            ],
-            "status": "needs_clarification"
-          }
+          "action": "orchestrator.goal",
+          "status": "needs_clarification"
         }
       ],
-      "queries": [],
-      "prepares": [],
-      "resultStatus": "needs_clarification"
+      "queries": []
     },
     {
-      "index": 26,
+      "index": 31,
       "passed": true,
       "message": "想在年底攒个大概一万",
-      "answer": "确切是一万二",
+      "resultStatus": "goal_plan",
       "modelTurns": [
         {
-          "input": {
-            "userMessage": "想在年底攒个大概一万",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "orchestrator.goal",
-            "slots": {
-              "goal_text": "年底攒钱",
-              "deadline": "2026-12-31"
-            },
-            "missingSlots": [
-              "amount"
-            ],
-            "status": "needs_clarification"
-          }
+          "action": "orchestrator.goal",
+          "status": "needs_clarification"
         },
         {
-          "input": {
-            "userMessage": "确切是一万二",
-            "history": [],
-            "calendar": {
-              "currentTime": "2026-10-22T04:00:00.000Z",
-              "currentDate": "2026-10-22",
-              "timezone": "Asia/Shanghai",
-              "dateRangeConvention": "inclusive local calendar dates: start_date <= transaction local date <= end_date",
-              "financialData": {
-                "datasetId": "saveflow-phase1-fixed-v1",
-                "asOf": "2026-09-01T00:00:00+08:00",
-                "currentMonth": "2026-08",
-                "previousMonth": "2026-07",
-                "snapshotId": "saveflow-phase1-fixed-v1:0",
-                "dataSource": "synthetic_demo_only",
-                "currency": "CNY",
-                "availableMonths": [
-                  "2026-06",
-                  "2026-07",
-                  "2026-08"
-                ]
-              }
-            },
-            "context": {
-              "action": "orchestrator.goal",
-              "slots": {
-                "goal_text": "年底攒钱",
-                "deadline": "2026-12-31"
-              },
-              "pendingSlot": "amount",
-              "question": "希望存到的准确目标金额是多少？",
-              "choices": []
-            }
+          "calendar": {
+            "currentDate": "2026-10-22",
+            "timezone": "Asia/Shanghai",
+            "financialContextPresent": true
           },
-          "output": {
-            "schemaVersion": "1.0.0",
-            "action": "orchestrator.goal",
-            "slots": {
-              "goal_text": "年底攒钱",
-              "deadline": "2026-12-31",
-              "amount": {
-                "amount_minor": 1200000,
-                "currency": "CNY"
-              }
-            },
-            "missingSlots": [],
-            "status": "ready_for_resolution"
-          }
+          "action": "orchestrator.goal",
+          "status": "ready_for_resolution"
         }
       ],
-      "queries": [],
-      "prepares": [],
-      "resultStatus": "goal_plan",
-      "resultData": {
-        "goal_text": "年底攒钱",
-        "horizon": null,
-        "targetAmountFen": 1200000,
-        "deadline": "2026-12-31",
-        "constraints": null,
-        "steps": [
-          {
-            "action": "bill.analyze",
-            "origin": "agent_suggested",
-            "reason": "先核对目标期间的收入、支出和异常交易。",
-            "requires_confirmation": false
-          },
-          {
-            "action": "subscription.list",
-            "origin": "agent_suggested",
-            "reason": "发现 1 项可能闲置订阅，建议先核实；不会自动取消。",
-            "requires_confirmation": false
-          },
-          {
-            "action": "card.get",
-            "origin": "agent_suggested",
-            "reason": "查看现有卡片预算和消费情况；不会自动调整预算。",
-            "requires_confirmation": false
-          },
-          {
-            "action": "wealth.recommend",
-            "origin": "agent_suggested",
-            "reason": "如有明确风险、期限和流动性约束，可进行只读产品筛选。",
-            "requires_confirmation": false
-          }
-        ],
-        "snapshot": {
-          "available_balance_minor": 5000000,
-          "active_subscription_count": 2,
-          "potentially_unused_subscription_count": 1,
-          "card_count": 2
-        },
-        "execution_allowed": false
-      }
+      "queries": []
     }
   ],
-  "passed": 26,
+  "passed": 31,
   "failed": 0
 }
