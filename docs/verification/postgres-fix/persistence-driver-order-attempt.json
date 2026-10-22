@@ -1,0 +1,37 @@
+{
+  "at": "2026-10-18T03:08:44.595Z",
+  "syntheticOnly": true,
+  "checks": [
+    {
+      "name": "MCP exposes queries/previews only",
+      "tools": [
+        "bill_summary",
+        "card_get",
+        "transfer_preview",
+        "card_budget_preview",
+        "card_freeze_preview",
+        "card_unfreeze_preview",
+        "subscription_list",
+        "product_list"
+      ]
+    },
+    {
+      "name": "JSONB object/action/fingerprint and prefix-stripping execution boundary",
+      "record": {
+        "operation_id": "op_d068c084-3aef-4e29-8f83-2b8c9e27748f",
+        "action": "transfer_money",
+        "state": "awaiting_confirmation",
+        "kind": "object",
+        "record_action": "transfer_money",
+        "fingerprint_matches": true
+      }
+    }
+  ],
+  "mergeBlockers": [],
+  "acceptanceChecksPassed": false,
+  "failure": {
+    "name": "AssertionError",
+    "code": "ERR_ASSERTION",
+    "message": "Expected values to be strictly equal:\n\nfalse !== true\n"
+  }
+}

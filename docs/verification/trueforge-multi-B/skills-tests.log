@@ -1,0 +1,20 @@
+﻿✔ A: three distinct business schemas map real MCP values without preparing Core (88.1713ms)
+✔ A: unknown cards clarify instead of inventing data; choice stays in one session and duplicates share one turn (30.6038ms)
+✔ A: signed, scoped, expired and cross-session choices reject before tools run (12.8066ms)
+✔ A: linked-event validation rejects wrong tool, action, source, IDs and malformed financial fields (11.8084ms)
+✔ A: real MCP query failures return explicit errors without success cards (10.9983ms)
+✔ A: allowlist, feature switches and ambiguous routing preserve non-pilot Harness (1.9277ms)
+✔ B: real Core transfer preview, edits, chat confirmation and cancellation never change ledger (22.9375ms)
+✔ B: missing account, editing before preview and ambiguous payee choices preserve one Session without guessed IDs (23.7121ms)
+✔ B: invalid amounts, insufficient balance, malformed previews and cross-tool credentials do not form cards (17.4226ms)
+✔ B: backend rejects preview IDs for decide/execute/status even with flags off and no state Map (1.5722ms)
+✔ bridge: credential aliases preserve fields, bind tools/expiry, and forward duplicate resumes once (0.7218ms)
+✔ SDK gate: exact arguments are approved once, repeated tool requests are denied before MCP (1.0106ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 746.6102

@@ -1,0 +1,22 @@
+{
+  "realHttpChecks": [
+    "August bill values, balance, metadata and desktop layout",
+    "390px and 320px bill layout",
+    "Missing month and real clarification continuation",
+    "Real zero-transaction month"
+  ],
+  "fixtureChecks": [
+    "Safe-integer maximum amounts at 320px; absent categories hidden (mock HTTP only)"
+  ],
+  "screenshots": [
+    "after-desktop-page.png",
+    "after-desktop-card.png",
+    "after-mobile-page.png",
+    "after-mobile-card.png",
+    "after-zero-page.png",
+    "after-zero-card.png",
+    "fixture-long-mobile-page.png",
+    "fixture-long-mobile-card.png"
+  ],
+  "success": true
+}

@@ -49,7 +49,8 @@ test('缺账户先展示真实账户选项，选择后返回 Core 正式预览',
   assert.equal(firstBody.data.choices.length, 2);
   assert.equal(firstBody.data.continuationToken.includes('ACC-CHECKING'), false);
   assert.equal(prepares, 0);
-  assert.equal(firstBody.data.choices[0].label, core.repository.getAccounts()[0].name);
+  assert.equal(firstBody.data.choices[0].label, `${core.repository.getAccounts()[0].name}（可用 ¥5000.00）`);
+  assert.match(firstBody.data.choices[1].label, /可用 ¥0\.00/);
   const before = core.repository.getAccount('ACC-CHECKING').availableBalanceFen;
   const transactionCount = core.repository.getTransactions().length;
   const second = await handleBankingAgent(request({ continuationToken: firstBody.data.continuationToken, choice: { optionId: firstBody.data.choices[0].optionId } }), { env, core: wrapped, parseIntent, now: () => 1000 });

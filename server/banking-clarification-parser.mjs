@@ -9,6 +9,12 @@ function amount(message, allowZero = false) {
   return Number.isSafeInteger(minor) && minor >= (allowZero ? 0 : 1) && Math.abs(yuan * 100 - minor) < 0.000001 ? { amount_minor: minor, currency: 'CNY' } : null;
 }
 
+function amountAnswer(message, action) {
+  const input = action === 'transfer.create' ? message.trim().replace(/^((?:金额)?改成|改为)\s*转账\s*/, '$1') : message.trim();
+  const value = /^(?:(?:金额|预算)?改成|改为)?\s*-?\d[\d,]*(?:\.\d+)?\s*(?:元|块钱?|人民币)?[。！]?$/.test(input) ? amount(input, action === 'card.set_budget') : null;
+  return value && (action !== 'card.set_budget' || value.amount_minor <= 10_000_000) ? { kind: 'slot', updates: { amount: value } } : { kind: 'unrecognized' };
+}
+
 function month(message, now) {
   const explicit = message.match(/(20\d{2})\s*(?:年|-|\/|\.)\s*(\d{1,2})\s*月?/);
   if (explicit) {
@@ -35,6 +41,12 @@ export function parseClarificationAnswer(message, { action, slot, choices = [], 
     if (payee) return { kind: 'slot', updates: { payee_ref: payee[1] } };
     if (/^(?:重新选择|改选|更换)(?:付款)?账户[。！]?$/.test(message.trim())) return { kind: 'slot', updates: { source_account_ref: undefined } };
     if (/^(?:重新选择|改选|更换)收款人[。！]?$/.test(message.trim())) return { kind: 'slot', updates: { payee_ref: undefined } };
+    // Explicit amount edits retain signed account/payee selections even when
+    // the current clarification is asking the user to change the payer.
+    if (['transfer.create', 'card.set_budget'].includes(action) && /^(?:(?:金额|预算)?改成|改为)/.test(message.trim())) {
+      const edit = amountAnswer(message, action);
+      if (edit.kind === 'slot') return edit;
+    }
   }
   if (choice || choices.length) {
     const selected = resolveChoice(choice ?? message, choices);
@@ -42,8 +54,7 @@ export function parseClarificationAnswer(message, { action, slot, choices = [], 
     if (choice || message.trim()) return { kind: 'unrecognized' };
   }
   if (slot === 'amount') {
-    const value = /^(?:(?:金额|预算)?改成|改为)?\s*-?\d[\d,]*(?:\.\d+)?\s*(?:元|块钱?|人民币)?[。！]?$/.test(message.trim()) ? amount(message, action === 'card.set_budget') : null;
-    return value && (action !== 'card.set_budget' || value.amount_minor <= 10_000_000) ? { kind: 'slot', updates: { amount: value } } : { kind: 'unrecognized' };
+    return amountAnswer(message, action);
   }
   if (slot === 'card_ref' && message.trim()) return { kind: 'slot', updates: { card_ref: message.trim() } };
   if (slot === 'product_ref' && message.trim()) return { kind: 'slot', updates: { product_ref: message.trim() } };

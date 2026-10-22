@@ -1,0 +1,164 @@
+{
+  "at": "2026-10-17T11:53:57.021Z",
+  "realTrueforgeMcpHttpUi": true,
+  "checks": [
+    "真实选择零余额储蓄账户 → Core拒绝500元，没有伪造预览；页面输入和新账户选项可用",
+    "仅重新选择活期账户即可生成500元正式预览，房东选择保留，不再消歧",
+    "超余额金额仍拒绝；改成400元使用签名续接保留原账户和房东",
+    "余额恢复后仍能跨Skill查询卡片并返回修改，历史卡片完整",
+    "三张真实历史预览保留；聊天确认和受控端点均不允许执行，取消不转账"
+  ],
+  "requests": [
+    {
+      "message": "给王先生转500元",
+      "elapsedMs": 1612,
+      "httpStatus": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "status": "needs_clarification",
+      "slot": "source_account_ref"
+    },
+    {
+      "message": "选择模拟储蓄账户（可用 ¥0.00）",
+      "elapsedMs": 1794,
+      "httpStatus": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "status": "needs_clarification",
+      "slot": "payee_ref"
+    },
+    {
+      "message": "选择房东王先生",
+      "elapsedMs": 1660,
+      "httpStatus": 400,
+      "code": "INSUFFICIENT_BALANCE",
+      "status": "error",
+      "recovery": {
+        "question": "模拟储蓄账户可用余额为 ¥0.00，不足以转出 ¥500.00。请重新选择付款账户，或修改金额；已保留收款人和转账草稿。",
+        "choices": [
+          {
+            "optionId": "opt_9be2b090-a108-4a0e-9f0b-bba677939b32",
+            "label": "模拟活期账户（可用 ¥5000.00）"
+          },
+          {
+            "optionId": "opt_2a7acc61-85e2-4411-ae5a-0c51e65640d8",
+            "label": "模拟储蓄账户（可用 ¥0.00）"
+          }
+        ]
+      }
+    },
+    {
+      "message": "选择模拟活期账户（可用 ¥5000.00）",
+      "elapsedMs": 2228,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "awaiting_confirmation",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 50000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 450000,
+        "availableBalanceAfterFen": 450000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "改成6000元",
+      "elapsedMs": 1731,
+      "httpStatus": 400,
+      "code": "INSUFFICIENT_BALANCE",
+      "status": "error",
+      "recovery": {
+        "question": "模拟活期账户可用余额为 ¥5000.00，不足以转出 ¥6000.00。请重新选择付款账户，或修改金额；已保留收款人和转账草稿。",
+        "choices": [
+          {
+            "optionId": "opt_35e81eaf-3a95-43e5-900c-1bcbdeb04ffa",
+            "label": "模拟活期账户（可用 ¥5000.00）"
+          },
+          {
+            "optionId": "opt_85fcf0d3-292b-4aa6-8c01-6525b94574ab",
+            "label": "模拟储蓄账户（可用 ¥0.00）"
+          }
+        ]
+      }
+    },
+    {
+      "message": "改成400元",
+      "elapsedMs": 1622,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "awaiting_confirmation",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 40000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 460000,
+        "availableBalanceAfterFen": 460000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "查看日常虚拟卡",
+      "elapsedMs": 1435,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "card_result"
+    },
+    {
+      "message": "返回转账修改300元",
+      "elapsedMs": 2370,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "awaiting_confirmation",
+      "effect": {
+        "kind": "transfer_out",
+        "fromAccountId": "ACC-CHECKING",
+        "accountName": "模拟活期账户",
+        "payeeId": "payee_003",
+        "payeeName": "房东王先生",
+        "accountNoMasked": "****1003",
+        "amountFen": 30000,
+        "feeFen": 0,
+        "currency": "CNY",
+        "balanceBeforeFen": 500000,
+        "balanceAfterFen": 470000,
+        "availableBalanceAfterFen": 470000,
+        "accountVersion": 0,
+        "memo": "",
+        "arrival": "mock_immediate"
+      }
+    },
+    {
+      "message": "确认转账",
+      "elapsedMs": 109,
+      "httpStatus": 403,
+      "code": "PREVIEW_ONLY",
+      "status": "error"
+    },
+    {
+      "message": "取消",
+      "elapsedMs": 103,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "cancelled"
+    }
+  ],
+  "browserErrors": [],
+  "success": true
+}

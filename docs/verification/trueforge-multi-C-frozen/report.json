@@ -1,0 +1,46 @@
+{
+  "phase": "C-frozen",
+  "realTrueforgeAndMcpAndUi": true,
+  "checks": [
+    "missing-card clarification and actual unfreeze preview from isolated frozen fixture",
+    "already-frozen error; unfreeze preview leaves card frozen with original budget/version"
+  ],
+  "requests": [
+    {
+      "message": "解冻我的卡",
+      "elapsedMs": 2024,
+      "httpStatus": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "status": "needs_clarification",
+      "action": "card.unfreeze",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "candidate choice",
+      "elapsedMs": 1324,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "awaiting_confirmation",
+      "action": "card.unfreeze",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "冻结娱乐虚拟卡",
+      "elapsedMs": 1719,
+      "httpStatus": 400,
+      "code": "INVALID_STATE",
+      "status": "error"
+    },
+    {
+      "message": "查看娱乐虚拟卡",
+      "elapsedMs": 1908,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "card_result",
+      "action": "card.get",
+      "source": "trueforge-mcp"
+    }
+  ],
+  "fixture": "ISOLATED frozen-card seed in memory; original seed file unchanged",
+  "success": true
+}

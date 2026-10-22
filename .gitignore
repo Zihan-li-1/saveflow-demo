@@ -16,6 +16,10 @@
 # next.js
 /.next/
 /out/
+/.netlify/
+/.trueforge/
+*.sqlite
+*.sqlite-*
 
 # production
 /build
@@ -39,3 +43,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+ocr_result.txt

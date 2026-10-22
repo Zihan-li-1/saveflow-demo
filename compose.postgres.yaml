@@ -1,0 +1,44 @@
+# Local synthetic persistence acceptance only; no real banking connector.
+# Usage: docker compose --env-file .env.local -f compose.yaml -f compose.postgres.yaml up -d web mcp bridge
+# 组长决定：试点 MCP 与网站 Core 共用同一本账（Core 那个库），不再分 pilot-web / pilot-trial 两本账。
+services:
+  pilot-db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: saveflow_web
+      POSTGRES_PASSWORD: local-synthetic-web-only
+      POSTGRES_DB: saveflow_web
+    volumes:
+      - pilot-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U saveflow_web -d saveflow_web"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+  pilot-migrate:
+    # 独立迁移镜像：只带 migrations/ 与迁移脚本，依赖 web 构建缓存的依赖层。
+    image: saveflow-docker-migrate:local
+    build:
+      context: .
+      target: migrate
+    command: [node, scripts/migrate-banking.mjs]
+    environment:
+      DATABASE_URL: postgresql://saveflow_web:local-synthetic-web-only@pilot-db:5432/saveflow_web
+    depends_on:
+      pilot-db:
+        condition: service_healthy
+  web:
+    environment:
+      DATABASE_URL: postgresql://saveflow_web:local-synthetic-web-only@pilot-db:5432/saveflow_web
+      ALLOW_EPHEMERAL_BANKING: "false"
+    depends_on:
+      pilot-migrate:
+        condition: service_completed_successfully
+  mcp:
+    environment:
+      DATABASE_URL: postgresql://saveflow_web:local-synthetic-web-only@pilot-db:5432/saveflow_web
+    depends_on:
+      pilot-migrate:
+        condition: service_completed_successfully
+volumes:
+  pilot-postgres:

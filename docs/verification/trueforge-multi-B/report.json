@@ -1,0 +1,73 @@
+{
+  "phase": "B",
+  "realTrueforgeAndMcpAndUi": true,
+  "checks": [
+    "missing account, ambiguous payee, same session, real preview and changed amount",
+    "chat confirmation rejected",
+    "local cancellation without execution",
+    "direct backend execution rejected",
+    "Core insufficient balance without a success card"
+  ],
+  "requests": [
+    {
+      "message": "给王先生转500元",
+      "elapsedMs": 1762,
+      "httpStatus": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "status": "needs_clarification",
+      "action": "transfer.create",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "candidate choice",
+      "elapsedMs": 1309,
+      "httpStatus": 200,
+      "code": "NEEDS_CLARIFICATION",
+      "status": "needs_clarification",
+      "action": "transfer.create",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "candidate choice",
+      "elapsedMs": 1935,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "awaiting_confirmation",
+      "action": "transfer.create",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "改成600元",
+      "elapsedMs": 1560,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "awaiting_confirmation",
+      "action": "transfer.create",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "确认",
+      "elapsedMs": 71,
+      "httpStatus": 403,
+      "code": "PREVIEW_ONLY",
+      "status": "error"
+    },
+    {
+      "message": "取消",
+      "elapsedMs": 59,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "cancelled",
+      "action": "transfer.create",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "从活期账户给张三转6000元",
+      "elapsedMs": 1675,
+      "httpStatus": 400,
+      "code": "INSUFFICIENT_BALANCE",
+      "status": "error"
+    }
+  ],
+  "success": true
+}

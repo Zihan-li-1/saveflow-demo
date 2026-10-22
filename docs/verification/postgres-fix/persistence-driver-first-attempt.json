@@ -1,0 +1,26 @@
+{
+  "at": "2026-10-18T03:08:23.708Z",
+  "syntheticOnly": true,
+  "checks": [
+    {
+      "name": "MCP exposes queries/previews only",
+      "tools": [
+        "bill_summary",
+        "card_get",
+        "transfer_preview",
+        "card_budget_preview",
+        "card_freeze_preview",
+        "card_unfreeze_preview",
+        "subscription_list",
+        "product_list"
+      ]
+    }
+  ],
+  "mergeBlockers": [],
+  "acceptanceChecksPassed": false,
+  "failure": {
+    "name": "Error",
+    "code": 1,
+    "message": "Acceptance stopped; inspect local service diagnostics privately."
+  }
+}

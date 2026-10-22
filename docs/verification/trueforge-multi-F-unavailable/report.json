@@ -1,0 +1,17 @@
+{
+  "phase": "F-unavailable",
+  "realTrueforgeAndMcpAndUi": true,
+  "checks": [
+    "real TrueForge outage produces error and no success card"
+  ],
+  "requests": [
+    {
+      "message": "查看娱乐虚拟卡",
+      "elapsedMs": 60,
+      "httpStatus": 502,
+      "code": "TRUEFORGE_UNAVAILABLE",
+      "status": "error"
+    }
+  ],
+  "success": true
+}

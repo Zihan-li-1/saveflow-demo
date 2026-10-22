@@ -1,0 +1,114 @@
+{
+  "at": "2026-10-18T03:25:40.931Z",
+  "syntheticOnly": true,
+  "checks": [
+    {
+      "name": "MCP exposes queries/previews only",
+      "tools": [
+        "bill_summary",
+        "card_get",
+        "transfer_preview",
+        "card_budget_preview",
+        "card_freeze_preview",
+        "card_unfreeze_preview",
+        "subscription_list",
+        "product_list"
+      ]
+    },
+    {
+      "name": "JSONB object/action/fingerprint and prefix-stripping execution boundary",
+      "record": {
+        "operation_id": "op_b0a8d418-3225-4d39-86bb-5e779df4c431",
+        "action": "transfer_money",
+        "state": "awaiting_confirmation",
+        "kind": "object",
+        "record_action": "transfer_money",
+        "fingerprint_matches": true
+      }
+    },
+    {
+      "name": "real web and bridge duplicate continuation requests replay the same preview",
+      "webOperationId": "tfpreview:op_8359f6a5-b79e-4fad-97df-cb86474bea41",
+      "bridgeOperationId": "op_a5d53194-4bff-454e-972a-d07f1f23dcfe"
+    },
+    {
+      "name": "database container recreation + independent Core/MCP restart restore preview, receipt, balance and exactly one ledger entry",
+      "record": {
+        "operation_id": "op_b0a8d418-3225-4d39-86bb-5e779df4c431",
+        "action": "transfer_money",
+        "state": "awaiting_confirmation",
+        "kind": "object",
+        "record_action": "transfer_money",
+        "fingerprint_matches": true
+      },
+      "simulatedReceipt": {
+        "action": "transfer_money",
+        "planId": "plan_1a5be3ba-1872-48ec-9599-85f137c57f18",
+        "status": "succeeded",
+        "stepId": "step_a8a8da50-3412-44b6-a8e0-96fc1e0ac845",
+        "effects": [
+          {
+            "kind": "transfer_out",
+            "memo": "",
+            "feeFen": 0,
+            "arrival": "mock_immediate",
+            "payeeId": "payee_001",
+            "currency": "CNY",
+            "amountFen": 100,
+            "payeeName": "张三",
+            "accountName": "模拟活期账户",
+            "fromAccountId": "ACC-CHECKING",
+            "accountVersion": 0,
+            "accountNoMasked": "****1001",
+            "balanceAfterFen": 499900,
+            "balanceBeforeFen": 500000,
+            "availableBalanceAfterFen": 499900
+          }
+        ],
+        "message": "模拟转账成功",
+        "receiptId": "receipt_op_f8bf1cb4-4d2c-43d1-a366-4caaefac2ced",
+        "dataSource": "synthetic_demo_only",
+        "executedAt": "2026-10-18T03:25:46.534Z",
+        "operationId": "op_f8bf1cb4-4d2c-43d1-a366-4caaefac2ced",
+        "transactionIds": [
+          "txn_op_f8bf1cb4-4d2c-43d1-a366-4caaefac2ced"
+        ]
+      },
+      "ledgerCount": 1,
+      "balanceFen": 499900
+    },
+    {
+      "name": "encrypted MCP clarification token resumes after process restart",
+      "status": "awaiting_confirmation"
+    },
+    {
+      "name": "TrueForge Session survives web/MCP/bridge restarts (TrueForge service itself was not restarted)",
+      "shared": false
+    },
+    {
+      "name": "trial account balances/cards/ledger unchanged throughout real chain",
+      "transactions": 36
+    }
+  ],
+  "mergeBlockers": [
+    {
+      "layer": "web TrueForge adapter",
+      "observed": "CONTINUATION_INVALID",
+      "reason": "tfm1 state/revision/cancellation/replay cache is process-local Map"
+    },
+    {
+      "layer": "web TrueForge bill adapter",
+      "observed": "CONTINUATION_INVALID",
+      "reason": "tfb1 session/scope/replay cache is process-local Map"
+    },
+    {
+      "layer": "MCP credential bridge",
+      "observed": "CONTINUATION_INVALID",
+      "reason": "tfg1 alias/replay cache is process-local Map"
+    }
+  ],
+  "corePersistencePassed": true,
+  "endToEndContinuationPersistencePassed": false,
+  "safeToMerge": false,
+  "acceptanceChecksPassed": true
+}

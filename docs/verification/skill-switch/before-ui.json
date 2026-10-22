@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-17T10:59:23.309Z",
+  "requests": [
+    {
+      "message": "从模拟活期账户转账500元给房东王先生",
+      "sentPreviousToken": false,
+      "status": 200,
+      "code": "OK",
+      "resultStatus": "awaiting_confirmation",
+      "source": "trueforge-mcp",
+      "previewCount": 1
+    },
+    {
+      "message": "查看我的卡",
+      "sentPreviousToken": true,
+      "status": 400,
+      "code": "CONTINUATION_ACTION_MISMATCH",
+      "resultStatus": "error",
+      "previewCount": 1
+    }
+  ]
+}

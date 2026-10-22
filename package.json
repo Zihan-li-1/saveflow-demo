@@ -2,26 +2,57 @@
   "name": "saveflow-demo",
   "version": "0.1.0",
   "private": true,
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "next dev",
     "dev:qwen": "node scripts/dev-qwen.mjs",
+    "mcp:trial": "node server/mcp/saveflow-trial.mjs",
+    "test:mcp:trial": "node --test tests/saveflow-trial.test.mjs",
+    "test:trueforge:bill": "node --test tests/trueforge-bill.test.mjs tests/banking-agent-auth.test.cjs tests/banking-bill-card.test.cjs",
+    "test:banking:auth": "node --test tests/banking-agent-auth.test.cjs tests/banking-bill-card.test.cjs",
+    "verify:trueforge:bill": "node scripts/verify-trueforge-bill.mjs",
+    "verify:trueforge:ui": "node scripts/verify-trueforge-ui.mjs",
     "dev:network": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
     "start:network": "next start --hostname 0.0.0.0",
     "lint": "eslint",
-    "test": "node --test tests/flow.test.cjs tests/qwen.test.cjs tests/banking-core.test.mjs tests/banking-http.test.cjs tests/transfer-alignment.test.cjs tests/wealth-skill.test.mjs tests/wealth-commerce.test.mjs tests/wealth-agent-integration.test.mjs tests/banking-wealth-client.test.cjs tests/postgres-persistence.test.mjs",
+    "test": "node --test tests/flow.test.cjs tests/qwen.test.cjs tests/banking-core.test.mjs tests/banking-http.test.cjs tests/parsed-intent.test.cjs tests/banking-intent-parser.test.cjs tests/agent-dispatcher.test.cjs tests/transfer-orchestrator.test.cjs tests/banking-agent-http.test.cjs tests/banking-clarification.test.cjs tests/banking-agent-integration.test.cjs tests/card-agent.test.mjs tests/banking-card-client.test.cjs tests/card-skill.test.mjs tests/card-core.test.mjs tests/postgres-persistence.test.mjs tests/saveflow-trial.test.mjs tests/trueforge-bill.test.mjs tests/banking-agent-auth.test.cjs tests/banking-bill-card.test.cjs tests/trueforge-skills.test.mjs tests/trueforge-preview-client.test.cjs tests/transfer-alignment.test.cjs tests/transfer-execute.test.mjs tests/banking-agent.test.mjs tests/transfer-execute-bridge.test.mjs tests/bill-skill.test.mjs tests/wealth-skill.test.mjs tests/wealth-commerce.test.mjs tests/wealth-agent-integration.test.mjs tests/banking-wealth-client.test.cjs",
     "demo:banking": "node scripts/demo-banking.mjs",
     "db:migrate": "node scripts/migrate-banking.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "mcp:bridge": "node server/mcp/trueforge-token-bridge.mjs",
+    "configure:trueforge:bridge": "node scripts/configure-trueforge-bridge.mjs",
+    "test:trueforge:skills": "node --test tests/trueforge-skills.test.mjs tests/trueforge-preview-client.test.cjs",
+    "verify:trueforge:skills:ui": "node scripts/verify-trueforge-skills-ui.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@truefoundry/trueforge-sdk": "0.2.1",
     "lucide-react": "^1.47.0",
     "next": "16.3.5",
     "postgres": "^3.4.7",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.5",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

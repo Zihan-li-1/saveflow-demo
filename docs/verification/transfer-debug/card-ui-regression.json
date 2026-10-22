@@ -1,0 +1,87 @@
+{
+  "phase": "C",
+  "realTrueforgeAndMcpAndUi": true,
+  "checks": [
+    "budget edit/card switch/new hash; original preview marked replaced; no execution buttons",
+    "freeze preview does not freeze card; unfreezing active card rejected"
+  ],
+  "requests": [
+    {
+      "message": "设置娱乐虚拟卡预算1000元",
+      "elapsedMs": 2143,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "awaiting_confirmation",
+      "action": "card.set_budget",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "改成2000元",
+      "elapsedMs": 1747,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "awaiting_confirmation",
+      "action": "card.set_budget",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "换成日常虚拟卡",
+      "elapsedMs": 1607,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "awaiting_confirmation",
+      "action": "card.set_budget",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "取消",
+      "elapsedMs": 47,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "cancelled",
+      "action": "card.set_budget",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "设置娱乐虚拟卡预算0元",
+      "elapsedMs": 1721,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "awaiting_confirmation",
+      "action": "card.set_budget",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "设置娱乐虚拟卡预算100000元",
+      "elapsedMs": 1261,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "awaiting_confirmation",
+      "action": "card.set_budget",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "冻结娱乐虚拟卡",
+      "elapsedMs": 1623,
+      "httpStatus": 200,
+      "code": "OK",
+      "status": "awaiting_confirmation",
+      "action": "card.freeze",
+      "source": "trueforge-mcp"
+    },
+    {
+      "message": "解冻娱乐虚拟卡",
+      "elapsedMs": 1672,
+      "httpStatus": 400,
+      "code": "INVALID_STATE",
+      "status": "error"
+    }
+  ],
+  "verifiedBudgetsFen": [
+    100000,
+    200000,
+    0,
+    10000000
+  ],
+  "success": true
+}

@@ -45,12 +45,14 @@ export function createBankingCore(options = {}) {
   // The synthetic Wealth write port is only valid for this in-memory context.
   // A configured database must supply its own transactional adapter before enabling writes.
   const wealthPorts = options.wealthPorts ?? (options.repository || options.store ? undefined : createWealthMockPorts({ getHoldings: context.getWealthHoldings, now }));
-  const policy = Object.freeze({ version: 'mock-transfer-v1', maxTransferFen: 10000000, previewTtlMs: 300000, ...options.policy });
-  assertFen(policy.maxTransferFen); assertFen(policy.previewTtlMs);
+  const policy = Object.freeze({ version: 'mock-transfer-v1', maxTransferFen: 10000000, previewTtlMs: 300000, largeTransferFen: 100000, ...options.policy });
+  assertFen(policy.maxTransferFen); assertFen(policy.previewTtlMs); assertFen(policy.largeTransferFen);
   /** @type {import('./contracts').AuditEvent[]} */
   const audit = [];
   /** @type {Map<string, Promise<import('./contracts').ActionResult<import('./contracts').ActionReceipt>>>} */
   const executions = new Map();
+  /** 执行桥授权窗口内的试点操作编号；普通 decide/execute 仅在这些编号上放行一次。 */
+  const trialAuthorized = new Set();
   /** @param {import('./contracts').OperationRecord} record */
   async function save(record) {
     await store.put(ownerId, record);
@@ -90,7 +92,10 @@ export function createBankingCore(options = {}) {
       if (input.amountFen > policy.maxTransferFen) throw new BankingError('LIMIT_EXCEEDED', '超过 Mock 单笔转账限额');
       return true;
     });
-    return { allowed: result.ok, riskLevel: 'L3', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', warnings: ['合成数据模拟转账，不接真实银行；此确认仅用于 Mock。'], ...(!result.ok ? { error: result.error } : {}) };
+    const largeTransfer = input.amountFen > policy.largeTransferFen;
+    const warnings = ['合成数据模拟转账，不接真实银行；此确认仅用于 Mock。'];
+    if (largeTransfer) warnings.push(`大额转账（>¥${(policy.largeTransferFen / 100).toFixed(2)}）需短信验证码（演示码 123456）。`);
+    return { allowed: result.ok, riskLevel: 'L3', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', requiredVerification: largeTransfer ? 'mock_sms' : 'none', ...(largeTransfer ? { verificationCode: '123456' } : {}), warnings, ...(!result.ok ? { error: result.error } : {}) };
   }
   /** @param {import('./contracts').TransferInput} input @returns {Promise<import('./contracts').TransferEffect>} */
   async function effectFor(input) {
@@ -250,7 +255,7 @@ export function createBankingCore(options = {}) {
     }
   }
 
-  return Object.freeze({
+  const core = Object.freeze({
     repository,
     wealthPorts,
     close: async () => { if (typeof store.close === 'function') await store.close(); },
@@ -295,6 +300,7 @@ export function createBankingCore(options = {}) {
     async decide(operationId, decision) {
       return guard(async () => {
         const record = await lookup(operationId);
+        if (!trialAuthorized.has(operationId) && record.request && 'origin' in record.request && record.request.origin === 'agent_suggested') throw new BankingError('FORBIDDEN', '试点建议的操作仅供预览，请通过执行桥或正式请求重新发起后再执行。');
         if (!decision || Object.keys(decision).some(k => !['previewHash', 'decision', 'confirmedStepIds'].includes(k))) throw new BankingError('CONFIRMATION_INVALID', '需要针对具体预览进行确认');
         verifyHash(record, decision.previewHash);
         if (!record.preview) throw new BankingError('INVALID_STATE', '缺少预览');
@@ -317,6 +323,7 @@ export function createBankingCore(options = {}) {
       if (running) return running;
       const execution = guard(async () => {
         const record = await lookup(operationId);
+        if (!trialAuthorized.has(operationId) && record.request && 'origin' in record.request && record.request.origin === 'agent_suggested') throw new BankingError('FORBIDDEN', '试点建议的操作仅供预览，请通过执行桥或正式请求重新发起后再执行。');
         if (record.action !== 'transfer_money' && !cardActions.has(record.action) && !wealthActions.has(record.action)) throw new BankingError('UNKNOWN_ACTION', '此执行入口不接受该动作');
         verifyHash(record, previewHash);
         if (!record.preview) throw new BankingError('INVALID_STATE', '缺少预览');
@@ -392,7 +399,27 @@ export function createBankingCore(options = {}) {
       record.receipt = receiptFor(record, 'succeeded', '模拟储蓄计划已生效；本次未发起支付。');
       await save(record); return structuredClone(record.receipt);
     },
+    /** 唯一授权执行试点建议操作（origin=agent_suggested）的入口，仅供执行桥调用。
+     * 普通 decide/execute 会拒绝试点操作；这里先核验来源，再在授权窗口内确认并执行，幂等只扣一次款。
+     * @param {string} operationId @param {string} previewHash */
+    async executeTrial(operationId, previewHash) {
+      const recordResult = await guard(async () => lookup(operationId), operationId);
+      if (!recordResult.ok) return recordResult;
+      const record = recordResult.data;
+      const origin = record.request && 'origin' in record.request ? record.request.origin : undefined;
+      if (origin !== 'agent_suggested') return { ok: false, error: errorData(new BankingError('FORBIDDEN', '该操作不是试点建议，请通过普通执行入口')), operationId };
+      trialAuthorized.add(operationId);
+      try {
+        const decided = await core.decide(operationId, { previewHash, decision: 'confirm', confirmedStepIds: record.preview?.stepIds ?? [] });
+        if (!decided.ok) return decided;
+        return await core.execute(operationId, previewHash);
+      } finally {
+        trialAuthorized.delete(operationId);
+      }
+    },
   });
+
+  return core;
 }
 
 /** Shared per browser tab or server process; factories provide isolated test/demo sessions. */

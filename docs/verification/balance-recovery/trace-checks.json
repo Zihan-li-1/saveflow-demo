@@ -1,0 +1,19 @@
+{
+  "success": true,
+  "sessionCount": 2,
+  "transferSessionTag": "2ad0208f9bdaa1da",
+  "realTransferCalls": 7,
+  "realCardCalls": 1,
+  "failedPrepares": 2,
+  "successfulPreviewAmountsFen": [
+    50000,
+    40000,
+    30000
+  ],
+  "samePayee": "payee_003",
+  "payer": "ACC-CHECKING",
+  "balanceBeforeEveryPreviewFen": 500000,
+  "allContinuationsLinked": true,
+  "confirmOrExecuteCalls": 0,
+  "rawMcpCredentialsRedacted": true
+}
