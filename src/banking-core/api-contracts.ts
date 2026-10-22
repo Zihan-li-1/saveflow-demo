@@ -1,4 +1,4 @@
-import type { Account, ActionReceipt, ContextInfo, DecisionInput, OperationStatus, Payee, PreparedAction, Transaction, TransferInput, InvestmentProduct, Card, Subscription, CardInput } from "./contracts";
+import type { Account, ActionReceipt, ContextInfo, DecisionInput, OperationStatus, Payee, PreparedAction, Transaction, TransferInput, InvestmentProduct, Card, Subscription } from "./contracts";
 export type BankingRequestMap = {
   "context.get": Record<string, never>;
   "account.list": Record<string, never>;
@@ -9,7 +9,8 @@ export type BankingRequestMap = {
   "product.list": Record<string, never>;
   "card.list": Record<string, never>;
   "card.get": { id: string };
-  "card.set_budget": Required<CardInput>;
+  "card.set_budget": { cardId: string; monthlyBudgetFen: number };
+  "card.set_controls": { cardId: string; onlinePaymentsEnabled?: boolean; blockedCategories?: string[]; alertThresholdFen?: number | null };
   "card.freeze": { cardId: string };
   "card.unfreeze": { cardId: string };
   "subscription.list": Record<string, never>;
@@ -29,6 +30,7 @@ export type BankingResultMap = {
   "card.list": Card[];
   "card.get": Card;
   "card.set_budget": PreparedAction;
+  "card.set_controls": PreparedAction;
   "card.freeze": PreparedAction;
   "card.unfreeze": PreparedAction;
   "subscription.list": Subscription[];

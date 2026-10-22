@@ -35,10 +35,10 @@ function accountFromRow(row, sourceAccount) {
 
 function cardFromRow(row) {
   if (!row) return undefined;
-  return { id: row.card_id, name: row.name, accountId: row.account_id, status: row.status, monthlyBudgetFen: Number(row.monthly_budget_fen), monthlySpentFen: Number(row.monthly_spent_fen), version: Number(row.version), previewGeneration: Number(row.preview_generation) };
+  return { id: row.card_id, name: row.name, accountId: row.account_id, status: row.status, monthlyBudgetFen: Number(row.monthly_budget_fen), monthlySpentFen: Number(row.monthly_spent_fen), onlinePaymentsEnabled: row.online_payments_enabled !== false, blockedCategories: Array.isArray(row.blocked_categories) ? row.blocked_categories : [], alertThresholdFen: row.alert_threshold_fen === null ? null : Number(row.alert_threshold_fen), version: Number(row.version), previewGeneration: Number(row.preview_generation) };
 }
 
-/** Creates an async Postgres adapter; migrations 001 through 003 must be applied first. */
+/** Creates an async Postgres adapter; migrations 001 through 004 must be applied first. */
 export async function createPostgresBankingCore({ connectionString, source = seed } = {}) {
   if (typeof connectionString !== 'string' || !connectionString.trim()) throw new Error('DATABASE_URL is required');
   const { default: postgres } = await import('postgres');
@@ -67,9 +67,9 @@ export async function createPostgresBankingCore({ connectionString, source = see
     }
     for (const card of staticCards) {
       await tx.unsafe(
-        `INSERT INTO banking_cards (owner_id, card_id, name, account_id, status, monthly_budget_fen, monthly_spent_fen, version, preview_generation)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (owner_id, card_id) DO NOTHING`,
-        [ownerId, card.id, card.name, card.accountId, card.status, card.monthlyBudgetFen, card.monthlySpentFen, card.version, card.previewGeneration],
+        `INSERT INTO banking_cards (owner_id, card_id, name, account_id, status, monthly_budget_fen, monthly_spent_fen, online_payments_enabled, blocked_categories, alert_threshold_fen, version, preview_generation)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12) ON CONFLICT (owner_id, card_id) DO NOTHING`,
+        [ownerId, card.id, card.name, card.accountId, card.status, card.monthlyBudgetFen, card.monthlySpentFen, card.onlinePaymentsEnabled, tx.json(card.blockedCategories), card.alertThresholdFen, card.version, card.previewGeneration],
       );
     }
     for (const holding of staticHoldings) {
@@ -210,8 +210,8 @@ export async function createPostgresBankingCore({ connectionString, source = see
         if (persisted.receipt) return structuredClone(persisted.receipt);
         if (persisted.action !== effect.action || persisted.state !== 'executing' || persisted.decision?.decision !== 'confirm' || persisted.preview?.previewHash !== record.preview?.previewHash) throw new BankingError('INVALID_STATE', '卡片操作未处于已确认的执行状态', true);
         const [card] = await tx.unsafe('SELECT * FROM banking_cards WHERE owner_id = $1 AND card_id = $2 FOR UPDATE', [owner, effect.cardId]);
-        if (!card || Number(card.version) !== effect.cardVersion || Number(card.preview_generation) !== effect.previewGeneration || card.status !== effect.before.status || Number(card.monthly_budget_fen) !== effect.before.monthlyBudgetFen) throw new BankingError('PREVIEW_STALE', '卡片已变化，请重新预览并确认');
-        await tx.unsafe('UPDATE banking_cards SET status = $3, monthly_budget_fen = $4, version = version + 1, updated_at = now() WHERE owner_id = $1 AND card_id = $2', [owner, effect.cardId, effect.after.status, effect.after.monthlyBudgetFen]);
+        if (!card || Number(card.version) !== effect.cardVersion || Number(card.preview_generation) !== effect.previewGeneration || card.status !== effect.before.status || Number(card.monthly_budget_fen) !== effect.before.monthlyBudgetFen || card.online_payments_enabled !== effect.before.onlinePaymentsEnabled || JSON.stringify(card.blocked_categories ?? []) !== JSON.stringify(effect.before.blockedCategories) || (card.alert_threshold_fen === null ? null : Number(card.alert_threshold_fen)) !== effect.before.alertThresholdFen) throw new BankingError('PREVIEW_STALE', '卡片已变化，请重新预览并确认');
+        await tx.unsafe('UPDATE banking_cards SET status = $3, monthly_budget_fen = $4, online_payments_enabled = $5, blocked_categories = $6::jsonb, alert_threshold_fen = $7, version = version + 1, updated_at = now() WHERE owner_id = $1 AND card_id = $2', [owner, effect.cardId, effect.after.status, effect.after.monthlyBudgetFen, effect.after.onlinePaymentsEnabled, tx.json(effect.after.blockedCategories), effect.after.alertThresholdFen]);
         const receipt = makeReceipt();
         persisted.receipt = receipt;
         persisted.state = 'succeeded';

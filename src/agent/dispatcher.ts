@@ -57,6 +57,8 @@ export async function dispatchParsedIntent(
         return dependencies.subscriptionHandler ? await dependencies.subscriptionHandler(intent) : { ok: false, kind: "unsupported" };
       case "card.get":
       case "card.set_budget":
+      case "card.set_controls":
+      case "card.security_review":
       case "card.freeze":
       case "card.unfreeze":
         return dependencies.cardHandler ? await dependencies.cardHandler(intent) : { ok: false, kind: "unsupported" };

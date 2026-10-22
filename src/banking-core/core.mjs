@@ -17,7 +17,7 @@ function validateTransfer(input) {
   return { fromAccountId: body.fromAccountId, payeeId: body.payeeId, amountFen: body.amountFen, currency: 'CNY', memo: /** @type {string} */ (body.memo ?? '') };
 }
 
-const cardActions = new Set(['card.set_budget', 'card.freeze', 'card.unfreeze']);
+const cardActions = new Set(['card.set_budget', 'card.set_controls', 'card.freeze', 'card.unfreeze']);
 const wealthActions = new Set(['wealth.subscribe', 'wealth.redeem']);
 const scenarioActions = new Set(['scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule']);
 const safeScenarioSteps = new Set(['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get']);
@@ -25,10 +25,16 @@ const safeScenarioSteps = new Set(['bill.analyze', 'bill.report', 'subscription.
 function validateCardInput(action, input) {
   if (!cardActions.has(action) || !input || typeof input !== 'object' || Array.isArray(input)) throw new BankingError('VALIDATION_ERROR', '卡片操作参数无效');
   const body = /** @type {Record<string, unknown>} */ (input);
-  const fields = action === 'card.set_budget' ? ['cardId', 'monthlyBudgetFen'] : ['cardId'];
-  if (Object.keys(body).some(key => !fields.includes(key)) || fields.some(key => !Object.hasOwn(body, key))) throw new BankingError('VALIDATION_ERROR', '卡片操作包含缺失或未注册字段');
+  const fields = action === 'card.set_budget' ? ['cardId', 'monthlyBudgetFen'] : action === 'card.set_controls' ? ['cardId', 'onlinePaymentsEnabled', 'blockedCategories', 'alertThresholdFen'] : ['cardId'];
+  if (Object.keys(body).some(key => !fields.includes(key)) || !Object.hasOwn(body, 'cardId') || (action === 'card.set_budget' && !Object.hasOwn(body, 'monthlyBudgetFen'))) throw new BankingError('VALIDATION_ERROR', '卡片操作包含缺失或未注册字段');
   assertId(body.cardId, '卡片');
   if (action === 'card.set_budget' && (!Number.isSafeInteger(body.monthlyBudgetFen) || Number(body.monthlyBudgetFen) < 0 || Number(body.monthlyBudgetFen) > 10_000_000)) throw new BankingError('VALIDATION_ERROR', '月预算必须是 0 到 10000000 的整数分');
+  if (action === 'card.set_controls') {
+    if (!['onlinePaymentsEnabled', 'blockedCategories', 'alertThresholdFen'].some(key => Object.hasOwn(body, key))) throw new BankingError('VALIDATION_ERROR', '至少需要修改一项卡片安全设置');
+    if (Object.hasOwn(body, 'onlinePaymentsEnabled') && typeof body.onlinePaymentsEnabled !== 'boolean') throw new BankingError('VALIDATION_ERROR', '线上支付开关必须是布尔值');
+    if (Object.hasOwn(body, 'blockedCategories') && (!Array.isArray(body.blockedCategories) || body.blockedCategories.length > 10 || body.blockedCategories.some(value => typeof value !== 'string' || !value.trim() || value.length > 32) || new Set(body.blockedCategories).size !== body.blockedCategories.length)) throw new BankingError('VALIDATION_ERROR', '禁用交易类别必须是最多 10 个不重复的短文本');
+    if (Object.hasOwn(body, 'alertThresholdFen') && body.alertThresholdFen !== null && (!Number.isSafeInteger(body.alertThresholdFen) || Number(body.alertThresholdFen) < 1 || Number(body.alertThresholdFen) > 10_000_000)) throw new BankingError('VALIDATION_ERROR', '单笔提醒金额必须是 1 到 10000000 的整数分或 null');
+  }
   return /** @type {import('./contracts').CardInput} */ (body);
 }
 
@@ -150,7 +156,10 @@ export function createBankingCore(options = {}) {
     if (action === 'card.freeze' && card.status !== 'active') throw new BankingError('INVALID_STATE', '卡片已经冻结');
     if (action === 'card.unfreeze' && card.status !== 'frozen') throw new BankingError('INVALID_STATE', '卡片并未冻结');
     if (action === 'card.set_budget' && card.monthlyBudgetFen === input.monthlyBudgetFen) throw new BankingError('INVALID_STATE', '新预算与当前预算相同');
-    return { kind: 'card_change', action, cardId: card.id, cardName: card.name, cardVersion: card.version, previewGeneration: card.previewGeneration, before: { status: card.status, monthlyBudgetFen: card.monthlyBudgetFen }, after: { status: action === 'card.freeze' ? 'frozen' : action === 'card.unfreeze' ? 'active' : card.status, monthlyBudgetFen: action === 'card.set_budget' ? /** @type {number} */ (input.monthlyBudgetFen) : card.monthlyBudgetFen }, monthlySpentFen: card.monthlySpentFen };
+    const before = { status: card.status, monthlyBudgetFen: card.monthlyBudgetFen, onlinePaymentsEnabled: card.onlinePaymentsEnabled, blockedCategories: structuredClone(card.blockedCategories), alertThresholdFen: card.alertThresholdFen };
+    const after = { ...before, status: action === 'card.freeze' ? 'frozen' : action === 'card.unfreeze' ? 'active' : card.status, monthlyBudgetFen: action === 'card.set_budget' ? /** @type {number} */ (input.monthlyBudgetFen) : card.monthlyBudgetFen, onlinePaymentsEnabled: action === 'card.set_controls' && input.onlinePaymentsEnabled !== undefined ? input.onlinePaymentsEnabled : card.onlinePaymentsEnabled, blockedCategories: action === 'card.set_controls' && input.blockedCategories !== undefined ? structuredClone(input.blockedCategories) : structuredClone(card.blockedCategories), alertThresholdFen: action === 'card.set_controls' && input.alertThresholdFen !== undefined ? input.alertThresholdFen : card.alertThresholdFen };
+    if (action === 'card.set_controls' && JSON.stringify(before) === JSON.stringify(after)) throw new BankingError('INVALID_STATE', '安全设置没有变化');
+    return { kind: 'card_change', action, cardId: card.id, cardName: card.name, cardVersion: card.version, previewGeneration: card.previewGeneration, before, after, monthlySpentFen: card.monthlySpentFen };
   }
   /** @param {import('./contracts').WealthAction} action @param {Record<string, any>} input @returns {Promise<import('./contracts').WealthEffect>} */
   async function wealthEffectFor(action, input) {
@@ -193,6 +202,8 @@ export function createBankingCore(options = {}) {
   function cardRisk(effect) {
     const warnings = ['合成数据模拟卡片操作，不接真实银行。'];
     if (effect.action === 'card.set_budget' && effect.after.monthlyBudgetFen < effect.monthlySpentFen) warnings.push(`当前已超预算 ¥${((effect.monthlySpentFen - effect.after.monthlyBudgetFen) / 100).toFixed(2)}；预算不会阻止消费。`);
+    if (effect.action === 'card.set_controls' && !effect.after.onlinePaymentsEnabled) warnings.push('关闭线上支付后，网购、应用内支付和部分订阅扣款可能失败。');
+    if (effect.action === 'card.set_controls' && effect.after.blockedCategories.length) warnings.push(`以下消费类别将被限制：${effect.after.blockedCategories.join('、')}。`);
     return { allowed: true, riskLevel: effect.action === 'card.unfreeze' ? 'L3' : 'L2', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', warnings };
   }
   /** @param {import('./contracts').ScenarioAction} action @param {import('./contracts').ScenarioInput} input @param {string|undefined} reservedRuleId @param {string|undefined} fixedTimestamp @returns {Promise<import('./contracts').ScenarioEffect>} */
@@ -283,7 +294,7 @@ export function createBankingCore(options = {}) {
       const planId = `plan_${crypto.randomUUID()}`, stepId = `step_${crypto.randomUUID()}`;
       const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical({ ownerId, operationId, planId, stepId, effect, expiresAt, contextSnapshotId, policy })));
       const previewHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
-      const summary = action === 'card.set_budget' ? `${effect.cardName}月消费预算 ¥${(effect.before.monthlyBudgetFen / 100).toFixed(2)} → ¥${(effect.after.monthlyBudgetFen / 100).toFixed(2)}` : `${effect.cardName}${action === 'card.freeze' ? '冻结' : '解冻'}：${effect.before.status} → ${effect.after.status}`;
+      const summary = action === 'card.set_budget' ? `${effect.cardName}月消费预算 ¥${(effect.before.monthlyBudgetFen / 100).toFixed(2)} → ¥${(effect.after.monthlyBudgetFen / 100).toFixed(2)}` : action === 'card.set_controls' ? `${effect.cardName}安全设置：线上支付${effect.after.onlinePaymentsEnabled ? '开启' : '关闭'}；禁用类别${effect.after.blockedCategories.length ? effect.after.blockedCategories.join('、') : '无'}；单笔提醒${effect.after.alertThresholdFen === null ? '关闭' : `¥${(effect.after.alertThresholdFen / 100).toFixed(2)}`}` : `${effect.cardName}${action === 'card.freeze' ? '冻结' : '解冻'}：${effect.before.status} → ${effect.after.status}`;
       record.preview = { planId, stepIds: [stepId], summary, exactEffects: [effect], riskLevel: risk.riskLevel, warnings: risk.warnings, expiresAt, previewHash, contextSnapshotId };
       await move(record, 'PREVIEWED');
       return /** @type {import('./contracts').ActionResult<import('./contracts').PreparedAction>} */ ({ ok: true, data: { operationId, state: 'awaiting_confirmation', preview: structuredClone(record.preview), risk: structuredClone(risk) } });

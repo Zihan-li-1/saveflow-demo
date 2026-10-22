@@ -5,7 +5,7 @@ export type RiskLevel = "L0" | "L1" | "L2" | "L3";
 export type Account = { id: string; name: string; type: "checking" | "saving"; currency: Currency; balanceFen: number; availableBalanceFen: number; version: number; status: "active" | "frozen" };
 export type Payee = { id: string; name: string; phone?: string; aliases: string[]; accountNoMasked: string; currency: Currency; status: "active" | "disabled" };
 export type Transaction = { id: string; accountId: string; payeeId?: string; operationId?: string; occurredAt: string; type: "income" | "expense" | "transfer_out"; category: string; merchant: string; amountFen: number; currency: Currency; status: "posted"; source: "synthetic_seed" | "mock_execution" };
-export type Card = { id: string; name: string; accountId: string; status: "active" | "frozen"; monthlyBudgetFen: number; monthlySpentFen: number; version: number; previewGeneration: number };
+export type Card = { id: string; name: string; accountId: string; status: "active" | "frozen"; monthlyBudgetFen: number; monthlySpentFen: number; onlinePaymentsEnabled: boolean; blockedCategories: string[]; alertThresholdFen: number | null; version: number; previewGeneration: number };
 export type Subscription = { id: string; name: string; monthlyFeeFen: number; status: "active" | "cancelled"; lastUsedDate: string; isPotentiallyUnused: boolean; mandateId: string | null };
 /** expectedYield is an illustrative annual rate in BPS, never a guaranteed yield. */
 export type InvestmentProduct = { id: string; name: string; riskLevel: "R1" | "R2" | "R3"; expectedYield: number; liquidity: "T+0" | "T+1" | "AT_MATURITY"; minimumAmountFen: number; durationDays: number; currency: Currency; isSynthetic: true };
@@ -45,8 +45,8 @@ export interface BankingOperationStore {
   commitScenario?(owner: string, record: OperationRecord, effect: ScenarioEffect, makeReceipt: () => ActionReceipt): MaybePromise<ActionReceipt>;
 }
 export type TransferInput = { fromAccountId: string; payeeId: string; amountFen: number; currency: Currency; memo?: string };
-export type CardAction = "card.set_budget" | "card.freeze" | "card.unfreeze";
-export type CardInput = { cardId: string; monthlyBudgetFen?: number };
+export type CardAction = "card.set_budget" | "card.set_controls" | "card.freeze" | "card.unfreeze";
+export type CardInput = { cardId: string; monthlyBudgetFen?: number; onlinePaymentsEnabled?: boolean; blockedCategories?: string[]; alertThresholdFen?: number | null };
 export type WealthAction = "wealth.subscribe" | "wealth.redeem";
 export type WealthInput = { productId?: string; amountFen?: number; currency?: Currency; sourceAccountId?: string; holdingId?: string; quantityKind?: "amount" | "units"; unitsMilli?: number };
 export type ScenarioStep = { action: string; parameters: Record<string, string | number | boolean | string[]> };
@@ -59,7 +59,7 @@ export type ErrorCode = "VALIDATION_ERROR" | "UNKNOWN_ACTION" | "CARD_NOT_FOUND"
 export type ActionError = { code: ErrorCode; message: string; uncertain: boolean };
 export type RiskResult = { allowed: boolean; riskLevel: RiskLevel; policyVersion: string; requiredConfirmation: "mock_explicit"; requiredVerification?: "none" | "mock_sms"; verificationCode?: string; warnings: string[]; error?: ActionError };
 export type TransferEffect = { kind: "transfer_out"; fromAccountId: string; accountName: string; payeeId: string; payeeName: string; accountNoMasked: string; amountFen: number; feeFen: number; currency: Currency; balanceBeforeFen: number; balanceAfterFen: number; availableBalanceAfterFen: number; accountVersion: number; memo: string; arrival: "mock_immediate" };
-export type CardEffect = { kind: "card_change"; action: CardAction; cardId: string; cardName: string; cardVersion: number; previewGeneration: number; before: { status: Card["status"]; monthlyBudgetFen: number }; after: { status: Card["status"]; monthlyBudgetFen: number }; monthlySpentFen: number };
+export type CardEffect = { kind: "card_change"; action: CardAction; cardId: string; cardName: string; cardVersion: number; previewGeneration: number; before: { status: Card["status"]; monthlyBudgetFen: number; onlinePaymentsEnabled: boolean; blockedCategories: string[]; alertThresholdFen: number | null }; after: { status: Card["status"]; monthlyBudgetFen: number; onlinePaymentsEnabled: boolean; blockedCategories: string[]; alertThresholdFen: number | null }; monthlySpentFen: number };
 export type WealthEffect = { kind: "wealth_change"; action: WealthAction; productId: string; productName: string; holdingId: string; holdingVersion: number | null; fundingAccountId?: string; accountVersion?: number; amountFen: number; unitsMilli: number; disclosureVersion?: string; assessmentId?: string; settlement?: string };
 export type ScenarioEffect = { kind: "scenario_rule_change"; action: ScenarioAction; ruleId: string; ruleVersion: number | null; previewGeneration: number; before: ScenarioRule | null; after: ScenarioRule };
 export type ActionPreview = { planId: string; stepIds: string[]; summary: string; exactEffects: (TransferEffect | CardEffect | ScenarioEffect | WealthEffect)[]; riskLevel: RiskLevel; warnings: string[]; expiresAt: string; previewHash: string; contextSnapshotId: string };

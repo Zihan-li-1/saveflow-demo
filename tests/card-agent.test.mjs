@@ -20,8 +20,8 @@ const request = body => new Request('http://localhost/api/banking-agent', {
 });
 const send = async (body, options) => (await handleBankingAgent(request(body), { env, now: () => 1000, parseIntent: continuationModel, ...options })).json();
 
-test('all four card actions have strict matching parser and runtime contracts', async () => {
-  assert.match(bankingIntentSystemPrompt, /card\.get、card\.set_budget、card\.freeze、card\.unfreeze/);
+test('all card actions have strict matching parser and runtime contracts', async () => {
+  assert.match(bankingIntentSystemPrompt, /card\.get、card\.set_budget、card\.set_controls、card\.security_review、card\.freeze、card\.unfreeze/);
   for (const action of ['card.get', 'card.set_budget', 'card.freeze', 'card.unfreeze']) {
     const slots = action === 'card.set_budget' ? { card_ref: '娱乐虚拟卡', amount: { amount_minor: 100000, currency: 'CNY' } } : { card_ref: '娱乐虚拟卡' };
     const value = card(action, slots);

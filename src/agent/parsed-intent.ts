@@ -7,6 +7,8 @@ export const PARSED_INTENT_ACTIONS = [
   "subscription.list",
   "card.get",
   "card.set_budget",
+  "card.set_controls",
+  "card.security_review",
   "card.freeze",
   "card.unfreeze",
   "wealth.recommend",
@@ -65,6 +67,8 @@ export interface CardReferenceSlots {
 export interface CardBudgetSlots extends CardReferenceSlots {
   amount?: ParsedAmount;
 }
+export interface CardControlSlots extends CardReferenceSlots { online_payments_enabled?: boolean; blocked_categories?: string[]; alert_amount?: ParsedAmount | null }
+export interface CardSecurityReviewSlots extends CardReferenceSlots { issue_type?: "card_details_exposed" | "unauthorized_transaction" | "device_lost" }
 
 export type WealthAction = "wealth.recommend" | "wealth.compare" | "wealth.assess_risk" | "wealth.subscribe" | "wealth.redeem";
 export type WealthSlots = {
@@ -115,6 +119,20 @@ type ParsedIntentBody =
       action: "card.set_budget";
       slots: CardBudgetSlots;
       missingSlots: CardSlotName[];
+      status: "ready_for_resolution" | "needs_clarification";
+    }
+  | {
+      schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
+      action: "card.set_controls";
+      slots: CardControlSlots;
+      missingSlots: string[];
+      status: "ready_for_resolution" | "needs_clarification";
+    }
+  | {
+      schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
+      action: "card.security_review";
+      slots: CardSecurityReviewSlots;
+      missingSlots: string[];
       status: "ready_for_resolution" | "needs_clarification";
     }
   | {

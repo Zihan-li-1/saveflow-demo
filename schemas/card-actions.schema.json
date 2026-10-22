@@ -4,6 +4,8 @@
   "oneOf": [
     { "$ref": "#/$defs/get" },
     { "$ref": "#/$defs/setBudget" },
+    { "$ref": "#/$defs/setControls" },
+    { "$ref": "#/$defs/securityReview" },
     { "$ref": "#/$defs/freeze" },
     { "$ref": "#/$defs/unfreeze" }
   ],
@@ -29,6 +31,15 @@
       "required": ["amount_minor", "currency"],
       "properties": {
         "amount_minor": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "currency": { "const": "CNY" }
+      }
+    },
+    "alertAmount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amount_minor", "currency"],
+      "properties": {
+        "amount_minor": { "type": "integer", "minimum": 1, "maximum": 10000000 },
         "currency": { "const": "CNY" }
       }
     },
@@ -66,6 +77,17 @@
           }
         }
       }
+    },
+    "setControls": {
+      "type": "object", "additionalProperties": false, "required": ["action", "slots"],
+      "properties": { "action": { "const": "card.set_controls" }, "slots": {
+        "type": "object", "additionalProperties": false, "required": ["card_ref"], "minProperties": 2,
+        "properties": { "card_ref": { "$ref": "#/$defs/cardRef" }, "online_payments_enabled": { "type": "boolean" }, "blocked_categories": { "type": "array", "maxItems": 10, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 32 } }, "alert_amount": { "anyOf": [{ "$ref": "#/$defs/alertAmount" }, { "type": "null" }] } }
+      } }
+    },
+    "securityReview": {
+      "type": "object", "additionalProperties": false, "required": ["action", "slots"],
+      "properties": { "action": { "const": "card.security_review" }, "slots": { "type": "object", "additionalProperties": false, "required": ["card_ref", "issue_type"], "properties": { "card_ref": { "$ref": "#/$defs/cardRef" }, "issue_type": { "enum": ["card_details_exposed", "unauthorized_transaction", "device_lost"] } } } }
     }
   }
 }

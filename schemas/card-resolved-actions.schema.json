@@ -4,6 +4,8 @@
   "oneOf": [
     { "$ref": "#/$defs/get" },
     { "$ref": "#/$defs/setBudget" },
+    { "$ref": "#/$defs/setControls" },
+    { "$ref": "#/$defs/securityReview" },
     { "$ref": "#/$defs/freeze" },
     { "$ref": "#/$defs/unfreeze" }
   ],
@@ -18,6 +20,10 @@
         "amount_minor": { "type": "integer", "minimum": 0, "maximum": 10000000 },
         "currency": { "const": "CNY" }
       }
+    },
+    "alertAmount": {
+      "type": "object", "additionalProperties": false, "required": ["amount_minor", "currency"],
+      "properties": { "amount_minor": { "type": "integer", "minimum": 1, "maximum": 10000000 }, "currency": { "const": "CNY" } }
     },
     "reference": {
       "type": "object",
@@ -103,6 +109,14 @@
           }
         }
       }
+    },
+    "setControls": {
+      "type": "object", "additionalProperties": false, "required": ["intent_id", "action", "state", "resolved_slots", "references", "missing_slots"],
+      "properties": { "intent_id": { "$ref": "#/$defs/intentId" }, "action": { "const": "card.set_controls" }, "state": { "const": "ready_for_planning" }, "references": { "$ref": "#/$defs/references" }, "missing_slots": { "$ref": "#/$defs/missingSlots" }, "resolved_slots": { "type": "object", "additionalProperties": false, "required": ["card_id"], "minProperties": 2, "properties": { "card_id": { "$ref": "#/$defs/cardId" }, "online_payments_enabled": { "type": "boolean" }, "blocked_categories": { "type": "array", "maxItems": 10, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 32 } }, "alert_amount": { "anyOf": [{ "$ref": "#/$defs/alertAmount" }, { "type": "null" }] } } } }
+    },
+    "securityReview": {
+      "type": "object", "additionalProperties": false, "required": ["intent_id", "action", "state", "resolved_slots", "references", "missing_slots"],
+      "properties": { "intent_id": { "$ref": "#/$defs/intentId" }, "action": { "const": "card.security_review" }, "state": { "const": "ready_for_planning" }, "references": { "$ref": "#/$defs/references" }, "missing_slots": { "$ref": "#/$defs/missingSlots" }, "resolved_slots": { "type": "object", "additionalProperties": false, "required": ["card_id", "issue_type"], "properties": { "card_id": { "$ref": "#/$defs/cardId" }, "issue_type": { "enum": ["card_details_exposed", "unauthorized_transaction", "device_lost"] } } } }
     }
   }
 }
