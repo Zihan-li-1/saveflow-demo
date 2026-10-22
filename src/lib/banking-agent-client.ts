@@ -2,8 +2,10 @@ import { ApiError } from './api/contracts';
 import { isTrialOperationId } from './trial-preview.mjs';
 import type { ActionReceipt } from '../banking-core/contracts';
 
+export type BankingReply = { text: string; style: 'concise' | 'friendly' | 'professional'; safetyNotices: string[] };
 export type BankingChoice = { optionId: string; label: string };
 export type BankingAgentData = {
+  reply?: BankingReply;
   kind?: 'clarification';
   status: string;
   action?: string;
@@ -35,6 +37,7 @@ export type BankingAgentRequest = {
   message?: string;
   continuationToken?: string;
   choice?: { optionId: string };
+  replyStyle?: BankingReply['style'];
 };
 
 /** Clarifications without selectable options stay as plain chat prompts. */
@@ -58,20 +61,23 @@ export async function askBankingAgent(
   } catch {
     throw new ApiError('BANKING_AGENT_NETWORK_ERROR', 'Banking Agent 连接失败，请稍后重试。');
   }
-  let payload: { code?: string; message?: string; requestId?: string; data?: BankingAgentData };
+  let payload: { code?: string; message?: string; requestId?: string; reply?: BankingReply; data?: BankingAgentData };
   try { payload = await response.json(); } catch { throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 返回格式异常。'); }
   if (response.status === 401) throw new ApiError('UNAUTHORIZED', '访问验证失败，请检查演示访问码后重试。');
   if (['ACCESS_NOT_CONFIGURED', 'CONTINUATION_CONFIG_ERROR', 'SERVICE_UNAVAILABLE'].includes(payload?.code || '')) throw new ApiError('SERVICE_UNAVAILABLE', '服务暂时不可用，请联系演示维护者。');
+  const validReply = (reply: BankingReply | undefined): reply is BankingReply => !!reply && typeof reply.text === 'string' && ['concise', 'friendly', 'professional'].includes(reply.style) && Array.isArray(reply.safetyNotices) && reply.safetyNotices.every(n => typeof n === 'string');
   if (response.status === 400 && payload?.code === 'INSUFFICIENT_BALANCE' && payload.data?.recovery !== undefined) {
     const c = payload.data.recovery;
-    if (!c || typeof c !== 'object' || typeof payload.requestId !== 'string' || payload.data.status !== 'error' || payload.data.error?.code !== payload.code ||
-        c.kind !== 'clarification' || c.status !== 'needs_clarification' || c.action !== 'transfer.create' || c.slot !== 'source_account_ref' || c.source !== 'trueforge-mcp' ||
-        typeof c.continuationToken !== 'string' || !/^tfm1\.[\w-]{43}\.[\w-]{43}$/.test(c.continuationToken) || typeof c.question !== 'string' || !c.question || c.question.length > 1000 ||
+    if (!validReply(payload.reply) || !c || typeof c !== 'object' || typeof payload.requestId !== 'string' || !['error', 'core_error'].includes(payload.data.status) || payload.data.error?.code !== payload.code ||
+        c.kind !== 'clarification' || c.status !== 'needs_clarification' || c.action !== 'transfer.create' || c.slot !== 'source_account_ref' ||
+        typeof c.continuationToken !== 'string' || c.continuationToken.length > 10000 || !/^(?:tfm1\.[\w-]{43}\.[\w-]{43}|[\w-]{16}\.[\w-]{22}\.[\w-]+)$/.test(c.continuationToken) || typeof c.question !== 'string' || !c.question || c.question.length > 1000 ||
         !Array.isArray(c.choices) || !c.choices.length || c.choices.some(v => !v || typeof v.optionId !== 'string' || !v.optionId || typeof v.label !== 'string' || !v.label) ||
         new Set(c.choices.map(v => v.optionId)).size !== c.choices.length || Object.keys(c).some(k => !['kind', 'status', 'action', 'slot', 'question', 'source', 'choices', 'continuationToken'].includes(k))) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 恢复凭据格式异常。');
-    throw new BankingAgentError(payload.code, payload.message || '付款账户可用余额不足。', c, payload.requestId);
+    throw new BankingAgentError(payload.code, payload.reply?.text || payload.message || '付款账户可用余额不足。', { ...c, reply: payload.reply }, payload.requestId);
   }
-  if (!payload || !response.ok || !payload.data || !['OK', 'NEEDS_CLARIFICATION'].includes(payload.code || '')) throw new ApiError(String(payload?.code || 'BANKING_AGENT_ERROR'), payload?.message || 'Banking Agent 请求失败');
+  if (!payload || !response.ok || !payload.data || !['OK', 'NEEDS_CLARIFICATION', 'UNSUPPORTED'].includes(payload.code || '')) throw new ApiError(String(payload?.code || 'BANKING_AGENT_ERROR'), payload?.message || 'Banking Agent 请求失败');
+  const reply = payload.reply;
+  if (!validReply(reply)) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 回复格式异常。');
   const data = payload.data;
   const card = data.data?.card as Record<string, unknown> | undefined;
   const cardPreview = data.preview as Record<string, unknown> | undefined;
@@ -86,7 +92,8 @@ export async function askBankingAgent(
   const listEvidence = evidence?.source === 'synthetic_demo_only' && typeof evidence.asOf === 'string' && Array.isArray(evidence.entityIds);
   const trialMetadataValid = !isTrialOperationId(data.operationId) || (data.source === 'trueforge-mcp' && data.previewOnly === true && data.executionAllowed === false);
   const valid = typeof payload.requestId === 'string' && trialMetadataValid && (
-    (payload.code === 'OK' && data.status === 'cancelled' && data.source === 'trueforge-mcp' && data.previewOnly === true && data.executionAllowed === false) ||
+    (payload.code === 'UNSUPPORTED' && data.status === 'unsupported') ||
+    (payload.code === 'OK' && data.status === 'cancelled') ||
     (payload.code === 'NEEDS_CLARIFICATION' && data.status === 'needs_clarification' && typeof data.question === 'string' && typeof data.continuationToken === 'string' && Array.isArray(data.choices) && data.choices.every(choice => typeof choice.optionId === 'string' && typeof choice.label === 'string')) ||
     (payload.code === 'OK' && data.status === 'bill_result' && typeof data.data?.month === 'string' && Number.isSafeInteger(data.data?.totalExpenseFen) && Number.isSafeInteger(data.data?.totalIncomeFen) && Number.isSafeInteger(data.data?.transactionCount) && Array.isArray(data.evidence) && data.evidence.length > 0) ||
     (payload.code === 'OK' && data.status === 'card_result' && data.action === 'card.get' && typeof card?.id === 'string' && typeof card.name === 'string' && ['active', 'frozen'].includes(String(card.status)) && Number.isSafeInteger(card.monthlyBudgetFen) && Number(card.monthlyBudgetFen) >= 0 && Number.isSafeInteger(card.monthlySpentFen) && Number(card.monthlySpentFen) >= 0 && Number.isSafeInteger(card.version) && cardEvidenceValid) ||
@@ -96,7 +103,7 @@ export async function askBankingAgent(
     (payload.code === 'OK' && data.status === 'awaiting_confirmation' && data.action === 'transfer.create' && typeof data.operationId === 'string' && typeof data.continuationToken === 'string' && typeof data.preview?.previewHash === 'string' && typeof data.preview?.summary === 'string' && Array.isArray(data.preview?.exactEffects) && data.preview.exactEffects.length > 0 && data.risk?.allowed === true)
   );
   if (!valid) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 返回格式异常。');
-  return { ...data, requestId: payload.requestId };
+  return { ...data, reply, requestId: payload.requestId };
 }
 
 /** 经服务端「执行桥」把一座试点转账预览真正执行（扣款）并取回回执。仅接受 tfpreview: 编号 + 预览哈希。 */

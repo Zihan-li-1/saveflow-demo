@@ -7,7 +7,7 @@ const path = require('node:path');
 const { createBankingCore } = require('../src/banking-core/core.mjs');
 const { handleBankingAgent } = require('../server/banking-agent.mjs');
 
-const env = { SAVEFLOW_ACCESS_CODE: 'integration-access-code-1234', CONTINUATION_TOKEN_SECRET: 'integration-continuation-secret-1234' };
+const env = { SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen', SAVEFLOW_ACCESS_CODE: 'integration-access-code-1234', CONTINUATION_TOKEN_SECRET: 'integration-continuation-secret-1234' };
 let ip = 0;
 const request = body => new Request('http://localhost/api/banking-agent', {
   method: 'POST', headers: { 'content-type': 'application/json', 'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'x-forwarded-for': `integration-${++ip}` }, body: JSON.stringify(body),

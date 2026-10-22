@@ -86,13 +86,13 @@ test('A: real MCP query failures return explicit errors without success cards', 
     assert.equal(r.code, 'TRIAL_TOOL_FAILED'); assert.equal(r.data.status, 'error'); assert.equal(r.data.data, undefined);
   }, { repository: { getSubscriptions: () => { throw new Error('private upstream credential'); } } });
 });
-test('A: allowlist, feature switches and ambiguous routing preserve non-pilot Harness', async () => {
+test('standalone MCP allowlist and phrase helpers never override the configured Banking runtime', async () => {
   for (const tool of ['card_get', 'subscription_list', 'product_list']) assert.deepEqual(trialAgentSpec(env, tool).mcpServers[0].enableTools, [tool]);
   assert.throws(() => trialAgentSpec(env, 'action.execute'));
   for (const msg of ['冻结我的卡', '给张三转500元', '查账单', '查询订阅并取消', '产品申购', '查看我的卡然后转账', '聊聊理财']) assert.equal(routeTrueforgeSkill(msg, env), undefined);
   assert.equal(routeTrueforgeSkill('查询订阅', { ...env, SAVEFLOW_TRUEFORGE_READ_ENABLED: 'false' }), undefined);
   const request = new Request('http://localhost/api/banking-agent', { method: 'POST', headers: { 'content-type': 'application/json', 'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'x-forwarded-for': 'multi-disabled' }, body: JSON.stringify(body('查看娱乐虚拟卡')) });
-  const r = await handleBankingAgent(request, { env: { ...env, SAVEFLOW_TRUEFORGE_READ_ENABLED: 'false' }, core: createBankingCore(), trueforgeSkillAdapter: { handle: () => assert.fail('off') }, parseIntent: async () => ({ schemaVersion: '1.0.0', action: 'card.get', slots: { card_ref: '娱乐虚拟卡' }, missingSlots: [], status: 'ready_for_resolution' }) });
+  const r = await handleBankingAgent(request, { env: { ...env, SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen', SAVEFLOW_TRUEFORGE_READ_ENABLED: 'false' }, core: createBankingCore(), trueforgeSkillAdapter: { handle: () => assert.fail('off') }, parseIntent: async () => ({ schemaVersion: '1.0.0', action: 'card.get', slots: { card_ref: '娱乐虚拟卡' }, missingSlots: [], status: 'ready_for_resolution' }) });
   assert.equal((await r.json()).data.data.card.id, 'CARD-ENT');
 });
 

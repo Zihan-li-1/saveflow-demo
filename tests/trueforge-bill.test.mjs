@@ -44,11 +44,10 @@ test('captured real bill data maps to the unchanged HTTP envelope and TS browser
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
   }).outputText, filename);
   const { askBankingAgent } = require('../src/lib/banking-agent-client.ts');
-  const adapter = createTrueforgeBillAdapter({ env, client: fakeClient() });
   const oldFetch = global.fetch;
   try {
     global.fetch = async (_url, init) => handleBankingAgent(request(JSON.parse(init.body)), {
-      env, trueforgeBillAdapter: adapter, parseIntent: () => assert.fail('must not fall back'),
+      env, trueforgeRuntimeClient: { createSession: async () => 'runtime', cancel: async () => {}, runTurn: async () => JSON.stringify({ schemaVersion: '1.0.0', action: 'bill.summary', slots: { month: '2026-08' }, missingSlots: [], status: 'ready_for_resolution' }) },
     });
     const data = await askBankingAgent({ message: '查询 2026 年 8 月账单' }, env.SAVEFLOW_ACCESS_CODE, new AbortController().signal);
     assert.equal(data.status, 'bill_result'); assert.equal(data.data.totalIncomeFen, 1200000);
@@ -196,42 +195,33 @@ test('transport security runs before TrueForge routing', async () => {
   for (const [b, h, status] of [[body('查账单'), { 'x-saveflow-access': 'wrong' }, 401], [body('查账单'), { origin: 'https://evil.test' }, 403], [body('查账单'), { 'content-type': 'text/plain' }, 415], [{ message: '查账单', junk: 'x'.repeat(17000) }, {}, 413]]) {
     const r = await handleBankingAgent(request(b, h), { env, trueforgeBillAdapter: adapter }); assert.equal(r.status, status);
   }
-  for (let i = 0; i < 10; i++) assert.equal((await handleBankingAgent(request(body('查账单'), { 'x-forwarded-for': 'rate-test' }), { env, trueforgeBillAdapter: { handle: async () => ({ httpStatus: 200, code: 'OK', message: 'ok' }) } })).status, 200);
+  for (let i = 0; i < 10; i++) assert.equal((await handleBankingAgent(request(body('查账单'), { 'x-forwarded-for': 'rate-test' }), { env, parseIntent: async () => ({ schemaVersion: '1.0.0', action: 'unsupported', slots: {}, missingSlots: [], status: 'unsupported' }) })).status, 200);
   assert.equal((await handleBankingAgent(request(body('查账单'), { 'x-forwarded-for': 'rate-test' }), { env, trueforgeBillAdapter: adapter })).status, 429);
 });
 
-test('disabled switch, non-bill operations, and legacy continuation keep the old Harness', async () => {
+test('retired phrase flags cannot override an explicitly configured legacy runtime', async () => {
   const core = createBankingCore(); let parsed = 0;
   const parseIntent = async () => { parsed++; return { schemaVersion: '1.0.0', action: 'bill.summary', slots: { month: '2026-08' }, missingSlots: [], status: 'ready_for_resolution' }; };
   const never = { handle: () => assert.fail('must use old Harness') };
   for (const [message, e] of [['查账单', { ...env, SAVEFLOW_TRUEFORGE_BILL_ENABLED: 'false' }], ['查看我的卡', env], ['给张三转500元', env], ['账单和转账', env]]) {
-    const r = await handleBankingAgent(request(body(message)), { env: e, core, parseIntent, trueforgeBillAdapter: never }); assert.equal(r.status, 200);
+    const r = await handleBankingAgent(request(body(message)), { env: { ...e, SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen' }, core, parseIntent, trueforgeBillAdapter: never }); assert.equal(r.status, 200);
   }
   assert.equal(parsed, 4);
-  const legacy = await handleBankingAgent(request(body('anything')), { env, core, parseIntent: async () => ({ schemaVersion: '1.0.0', action: 'bill.summary', slots: {}, missingSlots: ['month'], status: 'needs_clarification' }), trueforgeBillAdapter: never });
+  const legacy = await handleBankingAgent(request(body('anything')), { env: { ...env, SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen' }, core, parseIntent: async () => ({ schemaVersion: '1.0.0', action: 'bill.summary', slots: {}, missingSlots: ['month'], status: 'needs_clarification' }), trueforgeBillAdapter: never });
   const token = (await legacy.json()).data.continuationToken;
-  const resumed = await handleBankingAgent(request({ ...body('2026 年 8 月'), continuationToken: token }), { env, core, trueforgeBillAdapter: never }); assert.equal(resumed.status, 200);
+  const resumed = await handleBankingAgent(request({ ...body('2026 年 8 月'), continuationToken: token }), { env: { ...env, SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen' }, core, trueforgeBillAdapter: never }); assert.equal(resumed.status, 200);
 });
 
-test('a clear card task during bill clarification revokes the verified token and uses only the old Harness', async () => {
-  const client = fakeClient([missingTurn()]); const adapter = createTrueforgeBillAdapter({ env, client });
-  const headers = { 'x-forwarded-for': 'task-switch-client' }; const core = createBankingCore();
-  const first = await handleBankingAgent(request(body('查账单'), headers), { env, core, trueforgeBillAdapter: adapter });
-  const token = (await first.json()).data.continuationToken;
-  const switched = { ...body('冻结娱乐虚拟卡'), continuationToken: token };
-  assert.equal(shouldRouteTrueforgeBill(switched, env), false);
-  let parsed = 0;
-  const options = { env, core, trueforgeBillAdapter: adapter, parseIntent: async () => {
-    parsed++; return { schemaVersion: '1.0.0', action: 'card.freeze', slots: { card_ref: '娱乐虚拟卡' }, missingSlots: [], status: 'ready_for_resolution' };
-  } };
-  const forged = await handleBankingAgent(request({ ...switched, continuationToken: token + 'x' }, headers), options);
-  assert.equal(forged.status, 400); assert.equal(parsed, 0);
-  const response = await handleBankingAgent(request(switched, headers), options);
-  const result = await response.json(); assert.equal(result.data.status, 'awaiting_confirmation');
-  assert.equal(result.data.action, 'card.freeze'); assert.equal(parsed, 1);
-  assert.equal(core.repository.getCards()[1].status, 'active');
-  const stale = await handleBankingAgent(request({ ...body('2026 年 8 月'), continuationToken: token }, headers), options);
-  assert.equal(stale.status, 400); assert.equal(client.seen.filter(x => x?.message).length, 1);
+test('retired bill pilot tokens cannot cross the unified Banking boundary', async () => {
+  const adapter = createTrueforgeBillAdapter({ env, client: fakeClient([missingTurn()]) });
+  const first = await adapter.handle(body('查账单'), { scope });
+  const token = first.data.continuationToken;
+  for (const message of ['冻结娱乐虚拟卡', '2026年8月']) {
+    const response = await handleBankingAgent(request({ ...body(message), continuationToken: token }), {
+      env, parseIntent: () => assert.fail('retired token reached parser'), trueforgeBillAdapter: adapter,
+    });
+    assert.equal(response.status, 400); assert.equal((await response.json()).code, 'CONTINUATION_INVALID');
+  }
 });
 
 test('service failure, network failure, timeout, and client abort finish without a fallback', async () => {
@@ -245,10 +235,8 @@ test('service failure, network failure, timeout, and client abort finish without
     };
     const adapter = createTrueforgeBillAdapter({ env, client, timeoutMs: 30 });
     const controller = new AbortController(); if (failure === 'abort') setTimeout(() => controller.abort(), 5);
-    const r = await handleBankingAgent(new Request(request(body('查2026年8月账单')), { signal: controller.signal }), {
-      env, trueforgeBillAdapter: adapter, parseIntent: () => assert.fail('no fallback after TrueForge starts'),
-    });
-    assert.equal(r.status, failure === 'network' ? 502 : 504); const text = await r.text(); assert.ok(!text.includes('secret=abc'));
+    const r = await adapter.handle(body('查2026年8月账单'), { scope, signal: controller.signal });
+    assert.equal(r.httpStatus, failure === 'network' ? 502 : 504); assert.ok(!JSON.stringify(r).includes('secret=abc'));
     assert.equal(client.seen.at(-1).cancel, 'private-session-id');
   }
 });

@@ -6,13 +6,15 @@ export const PARSED_INTENT_ACTIONS = Object.freeze([
   'card.set_budget',
   'card.freeze',
   'card.unfreeze',
+  'subscription.list',
+  'product.list',
   'clarify',
   'unsupported',
 ]);
 
 const TOP_LEVEL_KEYS = ['schemaVersion', 'action', 'slots', 'missingSlots', 'status'];
 const TRANSFER_SLOT_KEYS = ['payee_ref', 'amount', 'source_account_ref'];
-const BILL_SLOT_KEYS = ['month'];
+const BILL_SLOT_KEYS = ['month', 'year', 'monthNumber'];
 const CARD_SLOT_KEYS = ['card_ref', 'amount'];
 
 export class ParsedIntentValidationError extends Error {
@@ -114,6 +116,10 @@ function validateTransfer(input, slots) {
 
 function validateBill(input, slots) {
   rejectUnknownKeys(slots, BILL_SLOT_KEYS, 'slots');
+  if ('year' in slots && (!Number.isInteger(slots.year) || slots.year < 1900 || slots.year > 2099)) fail('slots.year must be an explicit year');
+  if ('monthNumber' in slots && (!Number.isInteger(slots.monthNumber) || slots.monthNumber < 1 || slots.monthNumber > 12)) fail('slots.monthNumber must be 1-12');
+  if ('month' in slots && ('year' in slots || 'monthNumber' in slots)) fail('slots.month cannot coexist with partial period slots');
+  if ('year' in slots && 'monthNumber' in slots) fail('complete periods must use slots.month');
   if ('month' in slots) {
     const month = requireNonEmptyString(slots.month, 'slots.month');
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) fail('slots.month must use YYYY-MM format');
@@ -151,6 +157,12 @@ export function validateParsedIntent(value) {
       rejectUnknownKeys(slots, [], 'slots');
       requireMissingSlots(input.missingSlots, ['action']);
       requireStatus(input.status, 'needs_clarification');
+      break;
+    case 'subscription.list':
+    case 'product.list':
+      rejectUnknownKeys(slots, [], 'slots');
+      requireMissingSlots(input.missingSlots, []);
+      requireStatus(input.status, 'ready_for_resolution');
       break;
     case 'unsupported':
       rejectUnknownKeys(slots, [], 'slots');

@@ -11,8 +11,7 @@ import type { ActionReceipt } from "../banking-core/contracts";
 import { ApiError, validatePlan, type Analysis, type Receipt } from "./api/contracts";
 import { isTrialOperationId, isTrialPreview } from "./trial-preview.mjs";
 import { bankingChatKey, restoreBankingChat, saveBankingChat } from "./banking-chat-storage";
-import { bankingTaskBoundary } from "./trueforge-routing.mjs";
-import { transferFlow, trialContinuation, updateBankingFlows, type BankingFlows } from "./banking-flow-state";
+import { transferFlow, bankingContinuationToken, updateBankingFlows, type BankingFlows } from "./banking-flow-state";
 
 export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read"; analysis?: Analysis; banking?: BankingAgentData; errorHint?: string };
 const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。可以查询模拟账单，或生成转账正式预览，例如：给张三转 500 元。" }];
@@ -21,6 +20,7 @@ const pendingKey = "saveflow.pending-operation.v1";
 export function useSaveflow() {
   const [stage, setStage] = useState<Stage>("welcome");
   const [modelMode, setModelMode] = useState<"qwen" | "mock" | "banking">("banking");
+  const [replyStyle, setReplyStyle] = useState<"concise" | "friendly" | "professional">("concise");
   const [accessCode, setAccessCode] = useState("");
   const [targetAmountFen, setTargetAmountFen] = useState<number | null>(saveflowMock.goal.targetAmount * 100);
   const [usage, setUsage] = useState<{ inputTokens: number; outputTokens: number } | null>(null);
@@ -104,12 +104,10 @@ export function useSaveflow() {
   }, [bankingFlows]);
   const startBanking = async (text: string, choice?: { optionId: string; label: string }, resumeFlowId?: string) => {
     if (!consent || !accessCode.trim()) { setValidation("请勾选授权并输入演示访问码。"); return; }
-    const focused = focusedFlowId ? bankingFlows[focusedFlowId] : undefined;
-    const boundary = choice || resumeFlowId ? "continue" : bankingTaskBoundary(text, focused?.action, focused?.slot);
-    const flowId = resumeFlowId || (boundary === "continue" && focusedFlowId) || crypto.randomUUID();
+    const flowId = resumeFlowId || focusedFlowId || crypto.randomUUID();
     const resumed = resumeFlowId ? bankingFlows[resumeFlowId] : undefined;
     if (resumeFlowId && (!resumed || resumed.expiresAt <= Date.now())) { setValidation("该预览续接已过期，请发起新转账。"); return; }
-    const requestToken = boundary === "new" ? undefined : resumed?.token || bankingContinuation || undefined;
+    const requestToken = resumed?.token || bankingContinuation || undefined;
     if (!send("START")) return;
     lastBankingRequest.current = { text, choice, resumeFlowId };
     setValidation("");
@@ -118,55 +116,54 @@ export function useSaveflow() {
     setActiveCardOperationId(null);
     setActiveTransferOperationId(null);
     addMessage({ role: "user", text: choice?.label || text });
-    if (boundary === "clarify" || (!choice && !requestToken && boundary === "continue" && Object.values(bankingFlows).some(flow => flow.expiresAt > Date.now()))) {
-      addMessage({ role: "agent", text: "请明确要查询卡片、查询哪年哪月的账单，还是修改转账。返回原转账时，请点击对应预览的“修改金额”或“修改收款人”。" });
-      send("ANSWER"); return;
-    }
-    if (boundary === "new") { setBankingContinuation(null); setFocusedFlowId(null); }
     const version = ++generation.current;
     active.current?.abort(); active.current = new AbortController();
     try {
       const body = choice
-        ? { continuationToken: requestToken, choice: { optionId: choice.optionId } }
-        : { message: text, continuationToken: requestToken };
+        ? { continuationToken: requestToken, choice: { optionId: choice.optionId }, replyStyle }
+        : { message: text, continuationToken: requestToken, replyStyle };
       const answer = await askBankingAgent(body, accessCode, active.current.signal);
       if (generation.current !== version) return;
+      const replyText = [answer.reply!.text, ...answer.reply!.safetyNotices].join("\n");
       continuationIssuedAt.current = Date.now();
       setBankingContinuation(answer.continuationToken || null);
       setBankingFlows(current => updateBankingFlows(current, flowId, answer));
-      setFocusedFlowId(trialContinuation(answer.continuationToken) ? flowId : null);
+      setFocusedFlowId(bankingContinuationToken(answer.continuationToken) ? flowId : null);
       if (answer.kind === "clarification" || answer.status === "needs_clarification") {
-        addMessage({ role: "agent", kind: "banking_clarification", text: answer.question || "请补充必要信息。", banking: answer });
+        addMessage({ role: "agent", kind: "banking_clarification", text: replyText, banking: answer });
         send("CLARIFY");
       } else if (answer.status === "bill_result") {
         setBankingContinuation(null);
-        addMessage({ role: "agent", kind: "banking_bill", text: "账单统计已生成。", banking: answer });
+        addMessage({ role: "agent", kind: "banking_bill", text: replyText, banking: answer });
         send("ANSWER");
       } else if (answer.status === "card_result") {
         setBankingContinuation(null);
-        addMessage({ role: "agent", kind: "banking_card", text: "卡片信息已查询。", banking: answer });
+        addMessage({ role: "agent", kind: "banking_card", text: replyText, banking: answer });
         send("ANSWER");
       } else if (["subscription_result", "product_result"].includes(answer.status)) {
         setBankingContinuation(null);
-        addMessage({ role: "agent", kind: "banking_read", text: "只读查询完成。", banking: answer });
+        addMessage({ role: "agent", kind: "banking_read", text: replyText, banking: answer });
         send("ANSWER");
       } else if (answer.status === "cancelled") {
         setBankingContinuation(null);
-        addMessage({ role: "agent", text: "本次预览会话已取消，未执行资金或卡片操作。" });
+        addMessage({ role: "agent", text: replyText });
         send("ANSWER");
       } else if (answer.status === "awaiting_confirmation") {
         if (answer.action?.startsWith("card.") && isTrialPreview(answer)) {
           setActiveCardOperationId(null);
-          addMessage({ role: "agent", kind: "banking_card_preview", text: "卡片操作仅供预览，尚未执行。可继续改金额、换卡，或输入“取消”。", banking: { ...answer, previewCurrent: true } });
+          addMessage({ role: "agent", kind: "banking_card_preview", text: replyText, banking: { ...answer, previewCurrent: true } });
         } else if (answer.action?.startsWith("card.")) {
           setBankingContinuation(null);
           setActiveCardOperationId(answer.operationId || null);
-          addMessage({ role: "agent", kind: "banking_card_preview", text: "卡片操作正式预览已生成；点击预览中的确认按钮后才会执行。", banking: answer });
+          addMessage({ role: "agent", kind: "banking_card_preview", text: replyText, banking: answer });
         } else if (answer.action?.startsWith("transfer.") && !isTrialPreview(answer)) {
           setBankingContinuation(null);
           setActiveTransferOperationId(answer.operationId || null);
-          addMessage({ role: "agent", kind: "banking_preview", text: "转账正式预览已生成，资金未变；点击预览中的确认按钮后才会执行扣款。", banking: answer });
-        } else addMessage({ role: "agent", kind: "banking_preview", text: "转账预览已生成，仅供预览（资金未变）。可继续修改金额或收款人。", banking: answer });
+          addMessage({ role: "agent", kind: "banking_preview", text: replyText, banking: answer });
+        } else addMessage({ role: "agent", kind: "banking_preview", text: replyText, banking: answer });
+        send("ANSWER");
+      } else if (answer.status === "unsupported") {
+        addMessage({ role: "agent", text: replyText });
         send("ANSWER");
       } else {
         setFailure("analysis");
@@ -181,7 +178,7 @@ export function useSaveflow() {
         setBankingContinuation(recovery.continuationToken!);
         setBankingFlows(current => updateBankingFlows(current, flowId, recovery));
         setFocusedFlowId(flowId);
-        addMessage({ role: "agent", kind: "banking_clarification", text: `${error.code}：${recovery.question}`, banking: recovery });
+        addMessage({ role: "agent", kind: "banking_clarification", text: [recovery.reply?.text || error.message, ...(recovery.reply?.safetyNotices || [])].join("\n"), banking: recovery });
         send("CLARIFY"); return;
       }
       const editableTrialError = requestToken?.startsWith("tfm1.") && error instanceof ApiError && ["PREVIEW_ONLY", "INVALID_AMOUNT", "INVALID_REQUEST", "INVALID_CHOICE", "CONTINUATION_ACTION_MISMATCH"].includes(error.code);
@@ -405,5 +402,5 @@ export function useSaveflow() {
     if (modelMode !== "banking" || !isTrialPreview(data) || !flow || !canTransition(stageRef.current, "START")) return;
     void startBanking(message, undefined, flow.id);
   };
-  return { stage, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId) : startDemo(goal.current), canStart: ["welcome", "success", "cancelled", "clarifying", "answered"].includes(stage), canReset: canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage };
+  return { stage, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId) : startDemo(goal.current), canStart: ["welcome", "success", "cancelled", "clarifying", "answered"].includes(stage), canReset: canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
 }

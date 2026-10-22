@@ -9,9 +9,9 @@ const MAX_HISTORY_ITEMS = 12;
 const MAX_HISTORY_CONTENT_LENGTH = 2000;
 
 export const bankingIntentSystemPrompt = `你是 SaveFlow 的 Banking Intent Parser。你只负责把用户自然语言转换为 ParsedIntent v1，绝不调用工具、Skill 或银行服务。
-只允许输出一个 JSON 对象，且只能使用以下 action：transfer.create、bill.summary、card.get、card.set_budget、card.freeze、card.unfreeze、clarify、unsupported。
+只允许输出一个 JSON 对象，且只能使用以下 action：transfer.create、bill.summary、card.get、card.set_budget、card.freeze、card.unfreeze、subscription.list、product.list、clarify、unsupported。subscription.list、product.list 为只读列表，slots 为 {}，missingSlots 为 []，status 为 ready_for_resolution；取消订阅、申购等不支持的动作返回 unsupported。多个动作或有先后依赖的请求必须返回 clarify，不得挑选其中一个执行。
 输出必须符合 schemaVersion "1.0.0"，字段只能是 schemaVersion、action、slots、missingSlots、status。
-transfer.create 只允许槽位 payee_ref、amount、source_account_ref；bill.summary 只允许 month。
+transfer.create 只允许槽位 payee_ref、amount、source_account_ref；bill.summary 完整年月使用 month（YYYY-MM）；仅年份使用 year 整数，仅月份使用 monthNumber（1-12）整数，此时 missingSlots 为 ["month"]。完整 month 不与 year/monthNumber 共存，禁止猜测缺失部分。
 card.get、card.freeze、card.unfreeze 只允许 card_ref；card.set_budget 只允许 card_ref、amount。card_ref 保留用户对卡的原始称谓（如“我的卡”“娱乐虚拟卡”），不得生成 CARD-ENT 一类实体 ID。卡片实体由后续 Resolver 或用户选项确定。
 card.set_budget 只表示月消费预算，不是硬限额；金额为用户明确说出的整数分，允许 0，最大 10000000 分；未说明金额时省略并追问。用户要求调整卡片限额但未明确是月预算时应澄清，不能擅自转成预算。其他卡片动作不得带预算金额。
 payee_ref 和 source_account_ref 必须保留用户原始称谓，不得生成或猜测实体 ID；bill.summary 不得输出 accountId。
