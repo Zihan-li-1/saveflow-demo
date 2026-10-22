@@ -39,12 +39,30 @@ const resolved = (action, cardId = 'CARD-ENT', extra = {}) => ({
   missing_slots: [],
 });
 
-test('four registered actions match both machine-readable schemas', () => {
+test('registered card actions match both machine-readable schemas', () => {
   const raw = JSON.parse(readFileSync(new URL('../schemas/card-actions.schema.json', import.meta.url), 'utf8'));
   const ready = JSON.parse(readFileSync(new URL('../schemas/card-resolved-actions.schema.json', import.meta.url), 'utf8'));
   const actions = schema => schema.oneOf.map(item => schema.$defs[item.$ref.split('/').at(-1)].properties.action.const).sort();
   assert.deepEqual(actions(raw), [...CARD_ACTIONS].sort());
   assert.deepEqual(actions(ready), [...CARD_ACTIONS].sort());
+});
+
+test('security review is advisory and never creates a freeze request', async () => {
+  const result = await runResolvedCardIntent(repository(), resolved('card.security_review', 'CARD-ENT', { issue_type: 'unauthorized_transaction' }));
+  assert.equal(result.ok, true);
+  assert.equal(result.data.kind, 'security_review');
+  assert.equal(result.data.execution_allowed, false);
+  assert.equal(result.data.recommended_action, 'card.freeze');
+  assert.equal(result.data.requires_explicit_user_request_to_freeze, true);
+  assert.equal(result.data.request, undefined);
+});
+
+test('transaction controls map to a confirmation-required Core request', async () => {
+  const result = await runResolvedCardIntent(repository(), resolved('card.set_controls', 'CARD-ENT', { online_payments_enabled: false, blocked_categories: ['游戏'], alert_amount: { amount_minor: 50000, currency: 'CNY' } }));
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data.request, { action: 'card.set_controls', input: { cardId: 'CARD-ENT', onlinePaymentsEnabled: false, blockedCategories: ['游戏'], alertThresholdFen: 50000 } });
+  assert.equal(result.data.requirements.explicitUserConfirmation, true);
+  assert.throws(() => validateCardIntent({ action: 'card.set_controls', slots: { card_ref: '娱乐虚拟卡', alert_amount: { amount_minor: 0, currency: 'CNY' } } }), /大于 0 分/);
 });
 
 test('raw schema blocks padded service IDs and keeps the money object closed', () => {

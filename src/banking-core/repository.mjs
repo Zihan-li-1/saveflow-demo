@@ -19,7 +19,7 @@ export function createFinancialContext(source = seed) {
   /** @type {import('./contracts').Transaction[]} */
   const transactions = raw.transactions.map(t => ({ id: t.id, accountId: t.accountId, occurredAt: `${t.date}T00:00:00+08:00`, type: t.type === 'income' ? 'income' : 'expense', category: t.category, merchant: t.merchant, amountFen: seedYuanToFen(t.amount), currency: 'CNY', status: 'posted', source: 'synthetic_seed' }));
   /** @type {import('./contracts').Card[]} */
-  const cards = raw.cards.map(c => ({ id: c.id, name: c.name, accountId: c.linkedAccountId, status: c.status === 'active' ? 'active' : 'frozen', monthlyBudgetFen: seedYuanToFen(c.monthlyBudget), monthlySpentFen: seedYuanToFen(c.monthlySpent), version: 0, previewGeneration: 0 }));
+  const cards = raw.cards.map(c => ({ id: c.id, name: c.name, accountId: c.linkedAccountId, status: c.status === 'active' ? 'active' : 'frozen', monthlyBudgetFen: seedYuanToFen(c.monthlyBudget), monthlySpentFen: seedYuanToFen(c.monthlySpent), onlinePaymentsEnabled: true, blockedCategories: [], alertThresholdFen: seedYuanToFen(c.monthlyBudget), version: 0, previewGeneration: 0 }));
   /** @type {import('./contracts').InvestmentProduct[]} */
   const products = [
     { id: 'product_001', name: '模拟灵活现金 A', riskLevel: 'R1', expectedYield: 150, liquidity: 'T+0', minimumAmountFen: 100, durationDays: 0, currency: 'CNY', isSynthetic: true },
@@ -67,9 +67,12 @@ export function createFinancialContext(source = seed) {
   /** @param {import('./contracts').CardEffect} effect */
   function commitCard(effect) {
     const card = cards.find(c => c.id === effect.cardId);
-    if (!card || card.version !== effect.cardVersion || card.previewGeneration !== effect.previewGeneration || card.status !== effect.before.status || card.monthlyBudgetFen !== effect.before.monthlyBudgetFen) throw new BankingError('PREVIEW_STALE', '卡片已变化，请重新预览并确认');
+    if (!card || card.version !== effect.cardVersion || card.previewGeneration !== effect.previewGeneration || card.status !== effect.before.status || card.monthlyBudgetFen !== effect.before.monthlyBudgetFen || card.onlinePaymentsEnabled !== effect.before.onlinePaymentsEnabled || JSON.stringify(card.blockedCategories) !== JSON.stringify(effect.before.blockedCategories) || card.alertThresholdFen !== effect.before.alertThresholdFen) throw new BankingError('PREVIEW_STALE', '卡片已变化，请重新预览并确认');
     card.status = effect.after.status;
     card.monthlyBudgetFen = effect.after.monthlyBudgetFen;
+    card.onlinePaymentsEnabled = effect.after.onlinePaymentsEnabled;
+    card.blockedCategories = structuredClone(effect.after.blockedCategories);
+    card.alertThresholdFen = effect.after.alertThresholdFen;
     card.version++;
     revision++;
     return structuredClone(card);

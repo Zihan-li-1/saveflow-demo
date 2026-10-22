@@ -16,6 +16,10 @@ export async function handleCard(intent, repository, selections = {}) {
   if (intent.action === 'card.set_budget') {
     resolvedSlots.amount = intent.slots.amount;
   }
+  if (intent.action === 'card.set_controls') {
+    for (const key of ['online_payments_enabled', 'blocked_categories', 'alert_amount']) if (key in intent.slots) resolvedSlots[key] = intent.slots[key];
+  }
+  if (intent.action === 'card.security_review') resolvedSlots.issue_type = intent.slots.issue_type;
   const result = await runResolvedCardIntent(repository, {
     intent_id: `intent_${randomUUID()}`, action: intent.action, state: 'ready_for_planning',
     resolved_slots: resolvedSlots, references: [resolution.reference], missing_slots: [],
@@ -24,7 +28,7 @@ export async function handleCard(intent, repository, selections = {}) {
 
   const context = await repository.getContextInfo();
   const evidence = [{ source: context.dataSource, asOf: context.asOf, entityIds: [resolution.cardId] }];
-  if (result.data.kind === 'query') {
+  if (result.data.kind === 'query' || result.data.kind === 'security_review') {
     return { ok: true, kind: 'card_result', action: intent.action, data: result.data, evidence };
   }
 

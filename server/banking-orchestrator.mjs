@@ -126,6 +126,8 @@ function switchesTask(message, continuation) {
   if (!isCardTask(message)) return false;
   if (!continuation.action.startsWith('card.')) return true;
   if (/解冻|解除冻结/.test(message)) return continuation.action !== 'card.unfreeze';
+  if (/异常交易|未授权|不是我付|卡号泄露|信息泄露|手机丢|设备丢/.test(message)) return continuation.action !== 'card.security_review';
+  if (/线上支付|交易权限|消费类别|单笔提醒|超额提醒/.test(message)) return continuation.action !== 'card.set_controls';
   if (/冻结|锁卡/.test(message)) return continuation.action !== 'card.freeze';
   if (/预算/.test(message) && /调整|修改|设置|改成/.test(message)) return continuation.action !== 'card.set_budget';
   if (/查(?:询|看)?.{0,4}(?:银行卡|卡片)|卡片?信息/.test(message)) return continuation.action !== 'card.get';

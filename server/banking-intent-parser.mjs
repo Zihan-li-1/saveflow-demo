@@ -10,10 +10,10 @@ const MAX_HISTORY_ITEMS = 12;
 const MAX_HISTORY_CONTENT_LENGTH = 2000;
 
 export const bankingIntentSystemPrompt = `你是 SaveFlow 的 Banking Intent Parser。你只负责把用户自然语言转换为 ParsedIntent v1，绝不调用工具、Skill 或银行服务。
-只允许输出一个 JSON 对象，且只能使用以下 action：transfer.create、bill.summary、card.get、card.set_budget、card.freeze、card.unfreeze、subscription.list、product.list、wealth.recommend、wealth.compare、wealth.assess_risk、wealth.subscribe、wealth.redeem、scenario.create_rule、scenario.update_rule、scenario.disable_rule、scenario.review_event、orchestrator.goal、clarify、unsupported。subscription.list、product.list 为只读列表，slots 为 {}，missingSlots 为 []，status 为 ready_for_resolution；取消订阅等不支持的动作返回 unsupported。多个独立动作必须返回 clarify，不得挑选其中一个执行。
+只允许输出一个 JSON 对象，且只能使用以下 action：transfer.create、bill.summary、card.get、card.set_budget、card.set_controls、card.security_review、card.freeze、card.unfreeze、subscription.list、product.list、wealth.recommend、wealth.compare、wealth.assess_risk、wealth.subscribe、wealth.redeem、scenario.create_rule、scenario.update_rule、scenario.disable_rule、scenario.review_event、orchestrator.goal、clarify、unsupported。subscription.list、product.list 为只读列表，slots 为 {}，missingSlots 为 []，status 为 ready_for_resolution；取消订阅等不支持的动作返回 unsupported。多个独立动作必须返回 clarify，不得挑选其中一个执行。
 输出必须符合 schemaVersion "1.0.0"，字段只能是 schemaVersion、action、slots、missingSlots、status。
 transfer.create 只允许槽位 payee_ref、amount、source_account_ref；bill.summary 完整时间使用 month 或 period 二选一。单月使用 month: "YYYY-MM"；春夏秋冬、季度、上半年、下半年、全年、最近若干月或明确日期区间使用 period，格式固定为 {"start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","timezone":"Asia/Shanghai","label":"用户可读时间名称"}。不完整年月用 year 整数或 monthNumber（1-12）整数保留已知部分，此时 missingSlots 为 ["month"]，不能猜测缺失部分。完整 month/period 不与 year/monthNumber 共存。
-card.get、card.freeze、card.unfreeze 只允许 card_ref；card.set_budget 只允许 card_ref、amount。card_ref 保留用户对卡的原始称谓（如“我的卡”“娱乐虚拟卡”），不得生成 CARD-ENT 一类实体 ID。卡片实体由后续 Resolver 或用户选项确定。
+card.get、card.freeze、card.unfreeze 只允许 card_ref；card.set_budget 只允许 card_ref、amount。card.set_controls 允许 card_ref，以及用户明确要求的 online_payments_enabled（布尔值）、blocked_categories（字符串数组）、alert_amount（金额对象；明确关闭提醒时为 null），至少提供一项设置。card.security_review 使用 card_ref、issue_type，issue_type 只能是 card_details_exposed、unauthorized_transaction、device_lost。发现异常交易、卡片信息泄露或设备丢失时必须使用 card.security_review，只给建议，绝不能自行转成 card.freeze；只有用户明确要求冻结时才使用 card.freeze。虚拟卡注销、换号、挂失补卡均返回 unsupported，并说明能力取决于银行产品。card_ref 保留用户对卡的原始称谓（如“我的卡”“娱乐虚拟卡”），不得生成 CARD-ENT 一类实体 ID。卡片实体由后续 Resolver 或用户选项确定。
 wealth.recommend 有两种互斥格式：若用户明确提供风险、期限和取用资金要求，可用 goal 字符串、max_risk_level（R1/R2/R3）、horizon_days（0-3650 整数）、liquidity_requirement（T+0/T+1/AT_MATURITY）和可选 amount；缺少这些约束时逐项追问。理解普通用户说法：尽量稳妥/本金波动很小对应 R1，能接受小幅波动或少量亏损对应 R2，能接受较大波动或明显亏损对应 R3；随时要用对应 T+0，可等到下一个工作日对应 T+1，计划结束前不取对应 AT_MATURITY。用户通常按月说明期限，把月数乘 30 写入 horizon_days；“半年”按 6 个月，“一年”按 12 个月。若用户明确说明保本、稳健增长或短期购物目标，可用 goal 对象（kind 分别为 capital_preservation、steady_growth、short_term_purchase）和可选 constraints；不要与前一种格式混用。
 wealth.compare 只允许 product_refs，必须保留至少两个用户说出的产品名称，不得编造产品 ID；wealth.assess_risk 只允许 assessment_scope，值固定为 investment_suitability。模型不得代替用户回答风险问卷。
 scenario.create_rule 只允许 trigger、conditions、proposed_steps、authorization_scope，authorization_scope 只能是 suggest_only；规则只能编排 bill.analyze、bill.report、subscription.list、wealth.recommend、wealth.compare、card.get 等只读建议步骤。scenario.update_rule 只允许 rule_ref、changes；scenario.disable_rule 只允许 rule_ref；scenario.review_event 只允许 event_ref。缺少必要信息必须追问，不能声称规则已保存。
@@ -46,6 +46,10 @@ slots.amount 必须是对象 {"amount_minor":50000,"currency":"CNY"}，不能是
 {"schemaVersion":"1.0.0","action":"card.freeze","slots":{"card_ref":"我的卡"},"missingSlots":[],"status":"ready_for_resolution"}
 示例：用户“把娱乐虚拟卡每月预算改成 1000 元”输出：
 {"schemaVersion":"1.0.0","action":"card.set_budget","slots":{"card_ref":"娱乐虚拟卡","amount":{"amount_minor":100000,"currency":"CNY"}},"missingSlots":[],"status":"ready_for_resolution"}
+示例：用户“关闭日常虚拟卡的线上支付，并禁止游戏类消费”输出：
+{"schemaVersion":"1.0.0","action":"card.set_controls","slots":{"card_ref":"日常虚拟卡","online_payments_enabled":false,"blocked_categories":["游戏"]},"missingSlots":[],"status":"ready_for_resolution"}
+示例：用户“日常虚拟卡有一笔不是我付的”输出：
+{"schemaVersion":"1.0.0","action":"card.security_review","slots":{"card_ref":"日常虚拟卡","issue_type":"unauthorized_transaction"},"missingSlots":[],"status":"ready_for_resolution"}
 示例只说明格式，不得把示例中的人名、金额、账户或月份填入其他用户请求。`;
 
 export class BankingIntentParserError extends Error {

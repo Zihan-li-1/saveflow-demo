@@ -8,7 +8,7 @@ const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v ===
 const fen = (v: unknown) => Number.isSafeInteger(v) && Number(v) >= 0;
 function receipt(v: unknown, id: string): boolean {
   if (!object(v)) return false;
-  const cardAction = ["card.set_budget", "card.freeze", "card.unfreeze"].includes(String(v.action));
+  const cardAction = ["card.set_budget", "card.set_controls", "card.freeze", "card.unfreeze"].includes(String(v.action));
   const wealthAction = ["wealth.subscribe", "wealth.redeem"].includes(String(v.action));
   return v.operationId === id && typeof v.receiptId === "string" && (v.action === "transfer_money" || cardAction || wealthAction) && ["succeeded", "failed", "cancelled"].includes(String(v.status)) && typeof v.message === "string" && typeof v.planId === "string" && typeof v.stepId === "string" && typeof v.executedAt === "string" && Number.isFinite(Date.parse(v.executedAt)) && v.dataSource === "synthetic_demo_only" && Array.isArray(v.transactionIds) && v.transactionIds.every(t => typeof t === "string") && Array.isArray(v.effects) && (v.status !== "succeeded" || (cardAction ? v.transactionIds.length === 0 && v.effects.length === 1 && cardEffect(v.effects[0], String(v.action)) : wealthAction ? v.transactionIds.length === 0 && v.effects.length === 1 && wealthEffect(v.effects[0], String(v.action)) : v.transactionIds.length === 1 && v.effects.length === 1 && effect(v.effects[0])));
 }
@@ -17,18 +17,19 @@ function wealthEffect(v: unknown, action: string): boolean {
   return action === "wealth.subscribe" ? typeof v.fundingAccountId === "string" && Number.isSafeInteger(v.accountVersion) && typeof v.disclosureVersion === "string" && typeof v.assessmentId === "string" : Number.isSafeInteger(v.holdingVersion) && typeof v.settlement === "string";
 }
 function cardEffect(v: unknown, action?: string): boolean {
-  if (!object(v) || v.kind !== "card_change" || !["card.set_budget", "card.freeze", "card.unfreeze"].includes(String(v.action)) || (action && v.action !== action)) return false;
+  if (!object(v) || v.kind !== "card_change" || !["card.set_budget", "card.set_controls", "card.freeze", "card.unfreeze"].includes(String(v.action)) || (action && v.action !== action)) return false;
   const before = v.before, after = v.after;
-  if (!(typeof v.cardId === "string" && typeof v.cardName === "string" && Number.isSafeInteger(v.cardVersion) && Number.isSafeInteger(v.previewGeneration) && fen(v.monthlySpentFen) && object(before) && object(after) && ["active", "frozen"].includes(String(before.status)) && ["active", "frozen"].includes(String(after.status)) && fen(before.monthlyBudgetFen) && fen(after.monthlyBudgetFen))) return false;
+  if (!(typeof v.cardId === "string" && typeof v.cardName === "string" && Number.isSafeInteger(v.cardVersion) && Number.isSafeInteger(v.previewGeneration) && fen(v.monthlySpentFen) && object(before) && object(after) && ["active", "frozen"].includes(String(before.status)) && ["active", "frozen"].includes(String(after.status)) && fen(before.monthlyBudgetFen) && fen(after.monthlyBudgetFen) && typeof before.onlinePaymentsEnabled === "boolean" && typeof after.onlinePaymentsEnabled === "boolean" && Array.isArray(before.blockedCategories) && Array.isArray(after.blockedCategories) && (before.alertThresholdFen === null || fen(before.alertThresholdFen)) && (after.alertThresholdFen === null || fen(after.alertThresholdFen)))) return false;
   if (v.action === "card.freeze") return before.status === "active" && after.status === "frozen" && before.monthlyBudgetFen === after.monthlyBudgetFen;
   if (v.action === "card.unfreeze") return before.status === "frozen" && after.status === "active" && before.monthlyBudgetFen === after.monthlyBudgetFen;
+  if (v.action === "card.set_controls") return before.status === after.status && before.monthlyBudgetFen === after.monthlyBudgetFen && JSON.stringify(before) !== JSON.stringify(after);
   return before.status === after.status && before.monthlyBudgetFen !== after.monthlyBudgetFen;
 }
 function effect(v: unknown): boolean {
   return object(v) && v.kind === "transfer_out" && v.currency === "CNY" && fen(v.amountFen) && Number(v.amountFen) > 0 && fen(v.feeFen) && fen(v.balanceBeforeFen) && fen(v.balanceAfterFen) && fen(v.availableBalanceAfterFen) && typeof v.fromAccountId === "string" && typeof v.payeeId === "string" && typeof v.payeeName === "string" && typeof v.accountNoMasked === "string" && v.balanceBeforeFen === Number(v.balanceAfterFen) + Number(v.amountFen) + Number(v.feeFen);
 }
 function valid<A extends BankingAction>(action: A, value: unknown, input: BankingRequestMap[A]): boolean {
-  if (["card.set_budget", "card.freeze", "card.unfreeze"].includes(action)) {
+  if (["card.set_budget", "card.set_controls", "card.freeze", "card.unfreeze"].includes(action)) {
     if (!object(value) || typeof value.operationId !== "string" || value.state !== "awaiting_confirmation" || !object(value.preview) || !object(value.risk)) return false;
     const preview = value.preview, effects = preview.exactEffects;
     return value.risk.allowed === true && preview.riskLevel === (action === "card.unfreeze" ? "L3" : "L2") && typeof preview.previewHash === "string" && /^[a-f0-9]{64}$/.test(preview.previewHash) && typeof preview.expiresAt === "string" && Number.isFinite(Date.parse(preview.expiresAt)) && Array.isArray(preview.stepIds) && preview.stepIds.length === 1 && Array.isArray(effects) && effects.length === 1 && cardEffect(effects[0], action) && effects[0].cardId === (input as { cardId: string }).cardId;
@@ -46,7 +47,7 @@ function valid<A extends BankingAction>(action: A, value: unknown, input: Bankin
     return ["succeeded", "failed", "cancelled"].includes(String(value.status)) && value.state === value.status && receipt(value.receipt, String(value.operationId)) && object(value.receipt) && value.receipt.status === value.status;
   }
   if (action.endsWith(".list")) return Array.isArray(value) && value.every(v => object(v) && typeof v.id === "string");
-  if (action === "card.get") return object(value) && value.id === (input as { id: string }).id && typeof value.name === "string" && ["active", "frozen"].includes(String(value.status)) && fen(value.monthlyBudgetFen) && fen(value.monthlySpentFen) && Number.isSafeInteger(value.version);
+  if (action === "card.get") return object(value) && value.id === (input as { id: string }).id && typeof value.name === "string" && ["active", "frozen"].includes(String(value.status)) && fen(value.monthlyBudgetFen) && fen(value.monthlySpentFen) && typeof value.onlinePaymentsEnabled === "boolean" && Array.isArray(value.blockedCategories) && (value.alertThresholdFen === null || fen(value.alertThresholdFen)) && Number.isSafeInteger(value.version);
   if (action === "context.get") return object(value) && value.dataSource === "synthetic_demo_only" && typeof value.asOf === "string" && typeof value.snapshotId === "string";
   return object(value) && value.id === (input as { id: string }).id && (action !== "account.get" || (fen(value.balanceFen) && fen(value.availableBalanceFen) && value.currency === "CNY"));
 }

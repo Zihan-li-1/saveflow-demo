@@ -142,5 +142,5 @@ export function isTransferTask(message) {
 }
 
 export function isCardTask(message) {
-  return /冻结|解冻|解除冻结|锁卡|卡片?预算|月预算|查(?:询|看)?.{0,4}(?:银行卡|卡片)|卡片?信息/.test(message);
+  return /冻结|解冻|解除冻结|锁卡|卡片?预算|月预算|线上支付|交易权限|消费类别|单笔提醒|超额提醒|异常交易|未授权|不是我付|卡号泄露|信息泄露|手机丢|设备丢|虚拟卡|查(?:询|看)?.{0,4}(?:银行卡|卡片)|卡片?信息/.test(message);
 }

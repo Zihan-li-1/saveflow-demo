@@ -28,7 +28,7 @@ export type DispatchResult =
   | {
       ok: true;
       kind: "card_result" | "card_action_request";
-      action: "card.get" | "card.set_budget" | "card.freeze" | "card.unfreeze";
+      action: "card.get" | "card.set_budget" | "card.set_controls" | "card.security_review" | "card.freeze" | "card.unfreeze";
       data: unknown;
     }
   | {

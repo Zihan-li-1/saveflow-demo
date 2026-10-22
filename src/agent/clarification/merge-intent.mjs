@@ -5,6 +5,8 @@ const required = {
   'bill.summary': ['month'],
   'card.get': ['card_ref'],
   'card.set_budget': ['card_ref', 'amount'],
+  'card.set_controls': ['card_ref'],
+  'card.security_review': ['card_ref', 'issue_type'],
   'card.freeze': ['card_ref'],
   'card.unfreeze': ['card_ref'],
   'wealth.recommend': ['goal', 'max_risk_level', 'horizon_days', 'liquidity_requirement'],

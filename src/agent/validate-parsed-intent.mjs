@@ -7,6 +7,8 @@ export const PARSED_INTENT_ACTIONS = Object.freeze([
   'subscription.list',
   'card.get',
   'card.set_budget',
+  'card.set_controls',
+  'card.security_review',
   'card.freeze',
   'card.unfreeze',
   'product.list',
@@ -114,7 +116,10 @@ function validateAmount(value, { allowZero = false, maximum = Number.MAX_SAFE_IN
 
 function validateCard(input, slots) {
   const isLimit = input.action === 'card.set_budget';
-  rejectUnknownKeys(slots, isLimit ? CARD_SLOT_KEYS : ['card_ref'], 'slots');
+  const isControls = input.action === 'card.set_controls';
+  const isReview = input.action === 'card.security_review';
+  const allowed = isLimit ? CARD_SLOT_KEYS : isControls ? ['card_ref', 'online_payments_enabled', 'blocked_categories', 'alert_amount'] : isReview ? ['card_ref', 'issue_type'] : ['card_ref'];
+  rejectUnknownKeys(slots, allowed, 'slots');
   if ('card_ref' in slots) {
     requireRawReference(slots.card_ref, 'slots.card_ref');
     if (slots.card_ref.length > 128) fail('slots.card_ref must be at most 128 characters');
@@ -122,7 +127,15 @@ function validateCard(input, slots) {
   if (isLimit) {
     if ('amount' in slots) validateAmount(slots.amount, { allowZero: true, maximum: 10_000_000 });
   }
-  const required = isLimit ? CARD_SLOT_KEYS : ['card_ref'];
+  if (isControls) {
+    if ('online_payments_enabled' in slots && typeof slots.online_payments_enabled !== 'boolean') fail('slots.online_payments_enabled must be boolean');
+    if ('blocked_categories' in slots && (!Array.isArray(slots.blocked_categories) || slots.blocked_categories.length > 10 || slots.blocked_categories.some(value => typeof value !== 'string' || !value.trim() || value.length > 32) || new Set(slots.blocked_categories).size !== slots.blocked_categories.length)) fail('slots.blocked_categories is invalid');
+    if ('alert_amount' in slots && slots.alert_amount !== null) validateAmount(slots.alert_amount, { maximum: 10_000_000 });
+  }
+  if (isReview && 'issue_type' in slots && !['card_details_exposed', 'unauthorized_transaction', 'device_lost'].includes(slots.issue_type)) fail('slots.issue_type is invalid');
+  const required = isLimit ? CARD_SLOT_KEYS : isReview ? ['card_ref', 'issue_type'] : ['card_ref'];
+  const hasControl = ['online_payments_enabled', 'blocked_categories', 'alert_amount'].some(key => key in slots);
+  if (isControls && 'card_ref' in slots && !hasControl) fail('card.set_controls requires at least one control value');
   const missing = required.filter(slot => !(slot in slots));
   requireMissingSlots(input.missingSlots, missing);
   requireStatus(input.status, missing.length === 0 ? 'ready_for_resolution' : 'needs_clarification');
@@ -299,6 +312,8 @@ export function validateParsedIntent(value) {
       break;
     case 'card.get':
     case 'card.set_budget':
+    case 'card.set_controls':
+    case 'card.security_review':
     case 'card.freeze':
     case 'card.unfreeze':
       validateCard(input, slots);

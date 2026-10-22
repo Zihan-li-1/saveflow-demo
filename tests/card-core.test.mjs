@@ -44,6 +44,35 @@ test('card Core: monthly budget below spending warns, then changes only after ex
   assert.equal((await core.prepare({ action: 'card.set_budget', input: { cardId: 'CARD-ENT', monthlyBudgetFen: 1.5 } })).error.code, 'VALIDATION_ERROR');
 });
 
+test('card Core: security controls change only after explicit confirmation and execution', async () => {
+  const core = createBankingCore();
+  const before = core.repository.getCard('CARD-ENT');
+  const prepared = value(await core.prepare({ action: 'card.set_controls', input: { cardId: 'CARD-ENT', onlinePaymentsEnabled: false, blockedCategories: ['游戏', '博彩'], alertThresholdFen: 50000 } }));
+  const effect = prepared.preview.exactEffects[0];
+  assert.equal(effect.before.onlinePaymentsEnabled, true);
+  assert.equal(effect.after.onlinePaymentsEnabled, false);
+  assert.deepEqual(effect.after.blockedCategories, ['游戏', '博彩']);
+  assert.equal(effect.after.alertThresholdFen, 50000);
+  assert.deepEqual({ ...core.repository.getCard('CARD-ENT'), previewGeneration: before.previewGeneration }, before);
+  value(await confirm(core, prepared));
+  assert.deepEqual({ ...core.repository.getCard('CARD-ENT'), previewGeneration: before.previewGeneration }, before);
+  value(await execute(core, prepared));
+  const after = core.repository.getCard('CARD-ENT');
+  assert.equal(after.onlinePaymentsEnabled, false);
+  assert.deepEqual(after.blockedCategories, ['游戏', '博彩']);
+  assert.equal(after.alertThresholdFen, 50000);
+
+  const partial = value(await core.prepare({ action: 'card.set_controls', input: { cardId: 'CARD-ENT', onlinePaymentsEnabled: true } }));
+  assert.deepEqual(partial.preview.exactEffects[0].after.blockedCategories, ['游戏', '博彩']);
+  assert.equal(partial.preview.exactEffects[0].after.alertThresholdFen, 50000);
+  value(await confirm(core, partial));
+  value(await execute(core, partial));
+  const final = core.repository.getCard('CARD-ENT');
+  assert.equal(final.onlinePaymentsEnabled, true);
+  assert.deepEqual(final.blockedCategories, ['游戏', '博彩']);
+  assert.equal(final.alertThresholdFen, 50000);
+});
+
 test('card Core: expiry and newer preview invalidate old confirmation server-side', async () => {
   let time = 1000;
   const core = createBankingCore({ now: () => time, policy: { previewTtlMs: 1000 } });

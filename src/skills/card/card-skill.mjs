@@ -3,6 +3,8 @@
 export const CARD_ACTIONS = Object.freeze([
   'card.get',
   'card.set_budget',
+  'card.set_controls',
+  'card.security_review',
   'card.freeze',
   'card.unfreeze',
 ]);
@@ -46,6 +48,21 @@ function validateAmount(amount) {
   if (amount.currency !== 'CNY') throw new CardSkillError('VALIDATION_ERROR', '当前 Mock 只支持 CNY');
 }
 
+const INCIDENT_TYPES = new Set(['card_details_exposed', 'unauthorized_transaction', 'device_lost']);
+/** @param {Record<string, any>} slots @param {boolean} [resolved] */
+function validateControls(slots, resolved = false) {
+  const cardKey = resolved ? 'card_id' : 'card_ref';
+  const allowed = [cardKey, 'online_payments_enabled', 'blocked_categories', 'alert_amount'];
+  if (Object.keys(slots).some(key => !allowed.includes(key)) || !Object.hasOwn(slots, cardKey)) throw new CardSkillError('VALIDATION_ERROR', '安全设置字段无效');
+  if (!['online_payments_enabled', 'blocked_categories', 'alert_amount'].some(key => Object.hasOwn(slots, key))) throw new CardSkillError('VALIDATION_ERROR', '至少说明一项要修改的安全设置');
+  if ('online_payments_enabled' in slots && typeof slots.online_payments_enabled !== 'boolean') throw new CardSkillError('VALIDATION_ERROR', '线上支付开关必须是布尔值');
+  if ('blocked_categories' in slots && (!Array.isArray(slots.blocked_categories) || slots.blocked_categories.length > 10 || slots.blocked_categories.some((value) => typeof value !== 'string' || !value.trim() || value.length > 32) || new Set(slots.blocked_categories).size !== slots.blocked_categories.length)) throw new CardSkillError('VALIDATION_ERROR', '禁用交易类别格式无效');
+  if ('alert_amount' in slots && slots.alert_amount !== null) {
+    validateAmount(slots.alert_amount);
+    if (slots.alert_amount.amount_minor < 1) throw new CardSkillError('VALIDATION_ERROR', '单笔提醒金额必须大于 0 分');
+  }
+}
+
 /**
  * Validate the action + slots fragment carried by A's ParsedIntent.
  * This boundary rejects legacy intents and model-supplied authorization fields.
@@ -59,7 +76,8 @@ export function validateCardIntent(value) {
   }
   if (!isObject(value.slots)) throw new CardSkillError('VALIDATION_ERROR', 'slots 必须是对象');
   const slots = value.slots;
-  requireExactKeys(slots, value.action === 'card.set_budget' ? ['card_ref', 'amount'] : ['card_ref']);
+  if (value.action === 'card.set_controls') validateControls(slots);
+  else requireExactKeys(slots, value.action === 'card.set_budget' ? ['card_ref', 'amount'] : value.action === 'card.security_review' ? ['card_ref', 'issue_type'] : ['card_ref']);
   if (typeof slots.card_ref !== 'string' || !slots.card_ref.trim() || slots.card_ref.length > 128) {
     throw new CardSkillError('VALIDATION_ERROR', 'card_ref 必须是非空卡片称谓');
   }
@@ -69,6 +87,7 @@ export function validateCardIntent(value) {
   if (value.action === 'card.set_budget') {
     validateAmount(slots.amount);
   }
+  if (value.action === 'card.security_review' && !INCIDENT_TYPES.has(String(slots.issue_type))) throw new CardSkillError('VALIDATION_ERROR', '安全事件类型无效');
   return value;
 }
 
@@ -88,13 +107,15 @@ export function validateResolvedCardIntent(value) {
   }
   if (!isObject(value.resolved_slots)) throw new CardSkillError('VALIDATION_ERROR', 'resolved_slots 必须是对象');
   const slots = value.resolved_slots;
-  requireExactKeys(slots, value.action === 'card.set_budget' ? ['card_id', 'amount'] : ['card_id']);
+  if (value.action === 'card.set_controls') validateControls(slots, true);
+  else requireExactKeys(slots, value.action === 'card.set_budget' ? ['card_id', 'amount'] : value.action === 'card.security_review' ? ['card_id', 'issue_type'] : ['card_id']);
   if (typeof slots.card_id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(slots.card_id)) {
     throw new CardSkillError('VALIDATION_ERROR', 'card_id 格式无效');
   }
   if (value.action === 'card.set_budget') {
     validateAmount(slots.amount);
   }
+  if (value.action === 'card.security_review' && !INCIDENT_TYPES.has(String(slots.issue_type))) throw new CardSkillError('VALIDATION_ERROR', '安全事件类型无效');
   if (!Array.isArray(value.references) || value.references.length !== 1 || !isObject(value.references[0])) {
     throw new CardSkillError('VALIDATION_ERROR', '必须提供唯一卡片实体引用');
   }
@@ -162,7 +183,7 @@ export async function resolveCardReference(repository, rawReference) {
 export async function runResolvedCardIntent(repository, value) {
   try {
     const intent = validateResolvedCardIntent(value);
-    const slots = /** @type {{card_id:string,amount:{amount_minor:number,currency:'CNY'}}} */ (intent.resolved_slots);
+    const slots = /** @type {Record<string, any> & {card_id:string}} */ (intent.resolved_slots);
     const cards = await repository.getCards();
     const card = cards.find(candidate => candidate.id === slots.card_id);
     if (!card) throw new CardSkillError('CARD_NOT_FOUND', '当前用户无法访问该卡片');
@@ -170,6 +191,16 @@ export async function runResolvedCardIntent(repository, value) {
     if (intent.action === 'card.get') {
       const context = await repository.getContextInfo();
       return { ok: true, data: { kind: 'query', card: structuredClone(card), context: structuredClone(context) } };
+    }
+
+    if (intent.action === 'card.security_review') {
+      const issue = String(slots.issue_type);
+      const guidance = issue === 'unauthorized_transaction'
+        ? ['先核对交易商户和时间', '若不是本人交易，建议立即冻结虚拟卡', '联系发卡银行发起争议交易处理']
+        : issue === 'device_lost'
+          ? ['先从可信设备退出丢失设备的登录', '建议冻结虚拟卡并检查近期交易', '联系银行确认是否支持更换虚拟卡号']
+          : ['建议冻结虚拟卡，避免旧卡片信息继续使用', '检查近期交易', '联系银行确认是否支持注销或更换虚拟卡号'];
+      return { ok: true, data: { kind: 'security_review', card: structuredClone(card), issue_type: issue, severity: 'high', guidance, recommended_action: 'card.freeze', execution_allowed: false, requires_explicit_user_request_to_freeze: true, product_capability_notice: '注销或更换虚拟卡号取决于发卡银行及具体产品规则。' } };
     }
 
     if (intent.action === 'card.set_budget') {
@@ -187,6 +218,11 @@ export async function runResolvedCardIntent(repository, value) {
           requirements: { minimumRiskLevel: 'L2', explicitUserConfirmation: true, executionOwner: 'banking_core' },
         },
       };
+    }
+
+
+    if (intent.action === 'card.set_controls') {
+      return { ok: true, data: { kind: 'action_request', request: { action: 'card.set_controls', input: { cardId: card.id, ...('online_payments_enabled' in slots ? { onlinePaymentsEnabled: slots.online_payments_enabled } : {}), ...('blocked_categories' in slots ? { blockedCategories: slots.blocked_categories } : {}), ...('alert_amount' in slots ? { alertThresholdFen: slots.alert_amount === null ? null : slots.alert_amount.amount_minor } : {}) } }, requirements: { minimumRiskLevel: 'L2', explicitUserConfirmation: true, executionOwner: 'banking_core' } } };
     }
 
     if (intent.action === 'card.freeze' && card.status !== 'active') {
