@@ -113,9 +113,12 @@ test('all month-only and vague period bill requests receive a specific follow-up
     );
   }
   assert.equal(billClarificationQuestion('查看十二月账单'), '你想查询哪一年的 12 月账单？例如 2026 年 12 月。');
-  for (const message of ['查看最近的账单', '查询近期账单', '看前段时间账单', '查看今年账单', '查看去年账单', '查看最近3个月账单']) {
+  for (const message of ['查看最近的账单', '查询近期账单', '看前段时间账单']) {
     assert.ok(shouldRouteTrueforgeBill(body(message), env), message);
     assert.equal(billClarificationQuestion(message), '请提供明确的账单年月，例如 2026 年 8 月。');
+  }
+  for (const message of ['查看今年账单', '查看去年账单', '查看最近3个月账单', '查看春季账单', '查看下半年账单']) {
+    assert.equal(shouldRouteTrueforgeBill(body(message), env), false, message);
   }
 });
 

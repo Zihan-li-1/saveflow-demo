@@ -50,6 +50,8 @@ export interface TransferCreateSlots {
 export interface BillSummarySlots {
   /** Calendar month in YYYY-MM form. */
   month?: string;
+  /** Inclusive calendar-date range resolved from explicit or relative user wording. */
+  period?: { start_date: string; end_date: string; timezone: "Asia/Shanghai"; label: string };
 }
 
 export interface CardReferenceSlots {

@@ -20,7 +20,7 @@ export const PARSED_INTENT_ACTIONS = Object.freeze([
 
 const TOP_LEVEL_KEYS = ['schemaVersion', 'action', 'slots', 'missingSlots', 'status'];
 const TRANSFER_SLOT_KEYS = ['payee_ref', 'amount', 'source_account_ref'];
-const BILL_SLOT_KEYS = ['month'];
+const BILL_SLOT_KEYS = ['month', 'period'];
 const CARD_SLOT_KEYS = ['card_ref', 'amount'];
 const WEALTH_RECOMMEND_SLOT_KEYS = ['goal', 'max_risk_level', 'horizon_days', 'liquidity_requirement', 'amount'];
 const SCENARIO_CREATE_SLOT_KEYS = ['trigger', 'conditions', 'proposed_steps', 'authorization_scope'];
@@ -124,11 +124,26 @@ function validateTransfer(input, slots) {
 
 function validateBill(input, slots) {
   rejectUnknownKeys(slots, BILL_SLOT_KEYS, 'slots');
+  if ('month' in slots && 'period' in slots) fail('slots must contain either month or period, not both');
   if ('month' in slots) {
     const month = requireNonEmptyString(slots.month, 'slots.month');
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) fail('slots.month must use YYYY-MM format');
   }
-  const missing = 'month' in slots ? [] : ['month'];
+  if ('period' in slots) {
+    const period = requireRecord(slots.period, 'slots.period');
+    rejectUnknownKeys(period, ['start_date', 'end_date', 'timezone', 'label'], 'slots.period');
+    for (const field of ['start_date', 'end_date', 'label']) requireNonEmptyString(period[field], `slots.period.${field}`);
+    if (period.timezone !== 'Asia/Shanghai') fail('slots.period.timezone must be Asia/Shanghai');
+    const calendarDate = value => {
+      if (typeof value !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/.test(value)) return false;
+      const [year, month, day] = value.split('-').map(Number); const parsed = new Date(Date.UTC(year, month - 1, day));
+      return parsed.getUTCFullYear() === year && parsed.getUTCMonth() + 1 === month && parsed.getUTCDate() === day;
+    };
+    if (!calendarDate(period.start_date) || !calendarDate(period.end_date) || period.start_date > period.end_date) fail('slots.period date range is invalid');
+    const days = (Date.parse(`${period.end_date}T00:00:00Z`) - Date.parse(`${period.start_date}T00:00:00Z`)) / 86_400_000;
+    if (days >= 366 || period.label.length > 80) fail('slots.period exceeds the supported range');
+  }
+  const missing = 'month' in slots || 'period' in slots ? [] : ['month'];
   requireMissingSlots(input.missingSlots, missing);
   requireStatus(input.status, missing.length === 0 ? 'ready_for_resolution' : 'needs_clarification');
 }

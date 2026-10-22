@@ -3,6 +3,7 @@ import { createTrueforgeClient, trueforgeError } from './trueforge-client.mjs';
 import { isBillTask, isCardTask, isTransferTask } from './banking-clarification-parser.mjs';
 import { linkedToolResult } from './trueforge-tool-result.mjs';
 import { billClarificationQuestion, matchBillQuery, YEAR_MONTH } from '../src/lib/trueforge-routing.mjs';
+import { isExtendedBillPeriodQuery } from '../src/lib/bill-period.mjs';
 
 const MONTH = /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/;
 const ANSWER = new RegExp(`^(${YEAR_MONTH})(?:的?账单)?[。！？!?]?$`);
@@ -31,11 +32,11 @@ function monthFrom(raw) {
 export function isTrueforgeContinuation(token) { return typeof token === 'string' && token.startsWith(TOKEN_PREFIX); }
 export function isTrueforgeTaskSwitch(body) {
   return isTrueforgeContinuation(body?.continuationToken) && typeof body.message === 'string' &&
-    !isBillTask(body.message) && (isCardTask(body.message) || isTransferTask(body.message));
+    (isExtendedBillPeriodQuery(body.message) || (!isBillTask(body.message) && (isCardTask(body.message) || isTransferTask(body.message))));
 }
 export function shouldRouteTrueforgeBill(body, env) {
   return env.SAVEFLOW_TRUEFORGE_BILL_ENABLED === 'true' && object(body) &&
-    ((isTrueforgeContinuation(body.continuationToken) && !isTrueforgeTaskSwitch(body)) || (body.continuationToken === undefined && !!matchBillQuery(body.message)));
+    ((isTrueforgeContinuation(body.continuationToken) && !isTrueforgeTaskSwitch(body)) || (body.continuationToken === undefined && !isExtendedBillPeriodQuery(body.message) && !!matchBillQuery(body.message)));
 }
 
 // Parse only the exact, linked tool.response JSON; never parse model prose or turn output.

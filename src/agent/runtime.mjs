@@ -25,18 +25,54 @@ export async function dispatchParsedIntent(value, dependencies) {
 
 export async function handleBillSummary(intent, repository) {
   const month = intent.slots.month;
-  if (!month) throw new Error('bill.summary requires month before dispatch');
-  const transactions = await repository.getTransactions({ month });
-  const summary = transactions.reduce((result, transaction) => {
+  const period = intent.slots.period;
+  if (!month && !period) throw new Error('bill.summary requires a resolved time period before dispatch');
+  const localDate = occurredAt => {
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(occurredAt));
+    const value = type => parts.find(item => item.type === type)?.value ?? '';
+    return `${value('year')}-${value('month')}-${value('day')}`;
+  };
+  const summarize = items => items.reduce((result, transaction) => {
     if (transaction.type === 'income') result.totalIncomeFen += transaction.amountFen;
     if (transaction.type === 'expense') {
       result.totalExpenseFen += transaction.amountFen;
       result.categoryTotals[transaction.category] = (result.categoryTotals[transaction.category] ?? 0) + transaction.amountFen;
     }
     return result;
-  }, { totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: transactions.length, categoryTotals: {} });
+  }, { totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: items.length, categoryTotals: {} });
+  const transactions = month
+    ? await repository.getTransactions({ month })
+    : (await repository.getTransactions()).filter(transaction => {
+        const value = localDate(transaction.occurredAt);
+        return value >= period.start_date && value <= period.end_date;
+      });
+  const summary = summarize(transactions);
+  const startMonth = month ?? period.start_date.slice(0, 7);
+  const endMonth = month ?? period.end_date.slice(0, 7);
+  const months = [];
+  let cursor = new Date(`${startMonth}-01T00:00:00Z`);
+  while (months.length < 13) {
+    const value = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`;
+    months.push(value);
+    if (value === endMonth) break;
+    cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
+  }
+  const monthlyBreakdown = months.map(value => ({
+    month: value,
+    ...summarize(transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(value))),
+  }));
   const context = await repository.getContextInfo();
-  return { ok: true, kind: 'bill_result', action: 'bill.summary', data: summary, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: transactions.map(transaction => transaction.id) }] };
+  return {
+    ok: true,
+    kind: 'bill_result',
+    action: 'bill.summary',
+    data: {
+      ...summary,
+      ...(month ? { month } : { period: { startDate: period.start_date, endDate: period.end_date, timezone: period.timezone, label: period.label } }),
+      ...(!month ? { monthlyBreakdown } : {}),
+    },
+    evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: transactions.map(transaction => transaction.id) }],
+  };
 }
 
 function transferRepository(repository, selections = {}) {

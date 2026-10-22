@@ -69,6 +69,13 @@ test('accepts bill.summary for a valid month without requiring an account', () =
   assert.equal(validateParsedIntent(intent), intent);
 });
 
+test('accepts an exact bill period and rejects conflicting or oversized periods', () => {
+  const period = { start_date: '2026-07-01', end_date: '2026-12-31', timezone: 'Asia/Shanghai', label: '2026年下半年' };
+  assert.doesNotThrow(() => validateParsedIntent(base('bill.summary', { period }, [], 'ready_for_resolution')));
+  assert.throws(() => validateParsedIntent(base('bill.summary', { month: '2026-08', period }, [], 'ready_for_resolution')), ParsedIntentValidationError);
+  assert.throws(() => validateParsedIntent(base('bill.summary', { period: { ...period, end_date: '2027-07-02' } }, [], 'ready_for_resolution')), ParsedIntentValidationError);
+});
+
 test('rejects account entity IDs from the model', () => {
   assert.throws(() => validateParsedIntent(
     base('bill.summary', { month: '2026-08', accountId: 'ACC-CHECKING' }, [], 'ready_for_resolution'),

@@ -2,6 +2,7 @@ import {
   validateParsedIntent,
   ParsedIntentValidationError,
 } from '../src/agent/validate-parsed-intent.mjs';
+import { resolveBillPeriod } from '../src/lib/bill-period.mjs';
 
 const DEFAULT_QWEN_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const MAX_MESSAGE_LENGTH = 2000;
@@ -11,7 +12,7 @@ const MAX_HISTORY_CONTENT_LENGTH = 2000;
 export const bankingIntentSystemPrompt = `你是 SaveFlow 的 Banking Intent Parser。你只负责把用户自然语言转换为 ParsedIntent v1，绝不调用工具、Skill 或银行服务。
 只允许输出一个 JSON 对象，且只能使用以下 action：transfer.create、bill.summary、card.get、card.set_budget、card.freeze、card.unfreeze、wealth.recommend、wealth.compare、wealth.assess_risk、scenario.create_rule、scenario.update_rule、scenario.disable_rule、scenario.review_event、orchestrator.goal、clarify、unsupported。
 输出必须符合 schemaVersion "1.0.0"，字段只能是 schemaVersion、action、slots、missingSlots、status。
-transfer.create 只允许槽位 payee_ref、amount、source_account_ref；bill.summary 只允许 month。
+transfer.create 只允许槽位 payee_ref、amount、source_account_ref；bill.summary 只允许 month 或 period 二选一。单月使用 month: "YYYY-MM"；春夏秋冬、季度、上半年、下半年、全年、最近若干月或明确日期区间使用 period，格式固定为 {"start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","timezone":"Asia/Shanghai","label":"用户可读时间名称"}。没有年份的单独月份仍须追问年份，不能猜测。
 card.get、card.freeze、card.unfreeze 只允许 card_ref；card.set_budget 只允许 card_ref、amount。card_ref 保留用户对卡的原始称谓（如“我的卡”“娱乐虚拟卡”），不得生成 CARD-ENT 一类实体 ID。卡片实体由后续 Resolver 或用户选项确定。
 wealth.recommend 只允许 goal、max_risk_level、horizon_days、liquidity_requirement、可选 amount；其中风险等级只能是 R1/R2/R3，流动性只能是 T+0/T+1/AT_MATURITY，期限为 0-3650 天整数。用户没有明确风险、期限或流动性要求时必须逐项追问，不能猜测。
 wealth.compare 只允许 product_refs，必须保留至少两个用户说出的产品名称，不得编造产品 ID；wealth.assess_risk 只允许 assessment_scope，值固定为 investment_suitability。模型不得代替用户回答风险问卷。
@@ -21,7 +22,7 @@ card.set_budget 只表示月消费预算，不是硬限额；金额为用户明�
 payee_ref 和 source_account_ref 必须保留用户原始称谓，不得生成或猜测实体 ID；bill.summary 不得输出 accountId。
 金额必须是用户明确说出的正整数分 amount_minor，并且 currency 必须是 CNY；用户说 500 元时应换算为 50000 分，不能把 500 直接当成 amount_minor；不得从余额或上下文推断金额。
 缺少 transfer.create 的 payee_ref、amount 或 source_account_ref 时，必须把对应名称放入 missingSlots，并使用 needs_clarification，不能猜测默认值。
-缺少 bill.summary 的 month 时，必须把 month 放入 missingSlots，并使用 needs_clarification。
+bill.summary 没有可确定的 month 或 period 时，必须把 month 放入 missingSlots，并使用 needs_clarification。
 缺少卡片动作的 card_ref 时，把 card_ref 放入 missingSlots；card.set_budget 还需对缺少的 amount 标记并追问。“冻结我的卡”可保留 card_ref:"我的卡"，由 Resolver 提供卡片候选，不可猜测卡 ID。
 clarify 必须使用空 slots、missingSlots ["action"]、status needs_clarification；unsupported 必须使用空 slots、missingSlots []、status unsupported。
 不得输出 tool、ToolCall、confirmed、riskLevel、operationId、执行结果、实体 ID 或任何额外字段；不得声称已经执行。
@@ -35,6 +36,8 @@ slots.amount 必须是对象 {"amount_minor":50000,"currency":"CNY"}，不能是
 {"schemaVersion":"1.0.0","action":"transfer.create","slots":{"payee_ref":"张三","amount":{"amount_minor":50000,"currency":"CNY"},"source_account_ref":"活期账户"},"missingSlots":[],"status":"ready_for_resolution"}
 示例：用户“分析 2026 年 8 月账单”输出：
 {"schemaVersion":"1.0.0","action":"bill.summary","slots":{"month":"2026-08"},"missingSlots":[],"status":"ready_for_resolution"}
+示例：用户“查看 2026 年下半年账单”输出：
+{"schemaVersion":"1.0.0","action":"bill.summary","slots":{"period":{"start_date":"2026-07-01","end_date":"2026-12-31","timezone":"Asia/Shanghai","label":"2026年下半年"}},"missingSlots":[],"status":"ready_for_resolution"}
 示例：用户“冻结我的卡”输出：
 {"schemaVersion":"1.0.0","action":"card.freeze","slots":{"card_ref":"我的卡"},"missingSlots":[],"status":"ready_for_resolution"}
 示例：用户“把娱乐虚拟卡每月预算改成 1000 元”输出：
@@ -120,7 +123,7 @@ function parseModelResponse(payload, report) {
 /** Convert one user message into a validated ParsedIntent. This function never calls a Skill or Banking Core. */
 export async function parseBankingIntent(
   message,
-  { history = [], context = undefined, env = process.env, fetchImpl = fetch, requestId = undefined, onDiagnostic = entry => console.warn(JSON.stringify(entry)) } = {},
+  { history = [], context = undefined, env = process.env, fetchImpl = fetch, requestId = undefined, now = Date.now, onDiagnostic = entry => console.warn(JSON.stringify(entry)) } = {},
 ) {
   void context;
   validateInput(message, history);
@@ -168,5 +171,7 @@ export async function parseBankingIntent(
     report('invalid_response_json');
     throw new BankingIntentParserError('MODEL_FORMAT_ERROR', '模型响应格式无效。');
   }
-  return parseModelResponse(payload, report);
+  const parsed = parseModelResponse(payload, report);
+  const resolvedPeriod = parsed.action === 'bill.summary' ? resolveBillPeriod(message, now()) : null;
+  return resolvedPeriod ? validateParsedIntent({ ...parsed, slots: resolvedPeriod, missingSlots: [], status: 'ready_for_resolution' }) : parsed;
 }

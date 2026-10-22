@@ -1,4 +1,5 @@
 import { resolveChoice } from '../src/agent/clarification/choice-resolver.mjs';
+import { resolveBillPeriod } from '../src/lib/bill-period.mjs';
 
 function amount(message, allowZero = false) {
   const match = message.replaceAll(',', '').match(/(-?\d+(?:\.\d+)?)/);
@@ -59,8 +60,11 @@ export function parseClarificationAnswer(message, { action, slot, choices = [], 
   if (slot === 'card_ref' && message.trim()) return { kind: 'slot', updates: { card_ref: message.trim() } };
   if (slot === 'payee_ref' && message.trim()) return { kind: 'slot', updates: { payee_ref: message.trim() } };
   if (slot === 'month') {
+    const resolved = resolveBillPeriod(message, now);
+    if (resolved?.month) return { kind: 'slot', updates: { month: resolved.month, period: undefined } };
+    if (resolved?.period) return { kind: 'slot', updates: { period: resolved.period, month: undefined } };
     const value = month(message, now);
-    return value ? { kind: 'slot', updates: { month: value } } : { kind: 'unrecognized' };
+    return value ? { kind: 'slot', updates: { month: value, period: undefined } } : { kind: 'unrecognized' };
   }
   const text = message.trim().replace(/[。！]$/, '');
   if (slot === 'goal' && text) return { kind: 'slot', updates: { goal: text } };

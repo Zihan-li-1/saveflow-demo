@@ -229,7 +229,7 @@ export async function runBankingConversation(body, {
     : { prepare: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'Banking Core prepare 未配置', uncertain: true } }) };
   const result = await prepareTransferPreview(dispatched, prepareTransfer);
 
-  if (result.ok && result.kind === 'bill_result') return reply(200, 'OK', '账单统计已生成', { status: 'bill_result', action: result.action, data: { ...result.data, month: parsed.slots.month }, evidence: result.evidence });
+  if (result.ok && result.kind === 'bill_result') return reply(200, 'OK', '账单统计已生成', { status: 'bill_result', action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && result.kind === 'card_result') return reply(200, 'OK', '卡片信息已查询', { status: 'card_result', action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && ['wealth_recommendation', 'wealth_comparison', 'risk_assessment_required'].includes(result.kind)) return reply(200, 'OK', result.kind === 'wealth_comparison' ? '理财产品对比已生成' : result.kind === 'wealth_recommendation' ? '理财条件筛选已生成' : '需要完成风险测评', { status: result.kind, action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && result.kind === 'goal_plan') return reply(200, 'OK', '只读财务规划已生成', { status: 'goal_plan', action: result.action, data: result.data, evidence: result.evidence });

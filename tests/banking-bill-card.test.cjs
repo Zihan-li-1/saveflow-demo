@@ -61,3 +61,45 @@ test('categories preserve backend amounts in descending order without invented r
   assert.equal(render(input), render(fixture));
   assert.deepEqual(input.data, fixture.data);
 });
+
+test('range longer than two months renders a monthly expense bar chart', () => {
+  const range = {
+    ...fixture,
+    data: {
+      ...fixture.data,
+      month: undefined,
+      period: { startDate: '2026-07-01', endDate: '2026-12-31', timezone: 'Asia/Shanghai', label: '2026年下半年' },
+      monthlyBreakdown: [
+        { month: '2026-07', totalExpenseFen: 320000, totalIncomeFen: 0, transactionCount: 2 },
+        { month: '2026-08', totalExpenseFen: 846000, totalIncomeFen: 1200000, transactionCount: 12 },
+        { month: '2026-09', totalExpenseFen: 0, totalIncomeFen: 0, transactionCount: 0 },
+      ],
+    },
+  };
+  const html = render(range);
+  const value = text(html);
+  for (const expected of ['2026年下半年', '期间收支概览', '期间总支出', '每月支出对比', '7月', '8月', '9月']) assert.ok(value.includes(expected), expected);
+  assert.equal((html.match(/bill-report-bar-track/g) || []).length, 3);
+});
+
+test('one or two months do not render the comparison chart', () => {
+  const html = render({ ...fixture, data: { ...fixture.data, monthlyBreakdown: [
+    { month: '2026-07', totalExpenseFen: 320000, totalIncomeFen: 0, transactionCount: 2 },
+    { month: '2026-08', totalExpenseFen: 846000, totalIncomeFen: 1200000, transactionCount: 12 },
+  ] } });
+  assert.equal(html.includes('bill-report-chart'), false);
+});
+
+test('a short range touching three calendar months does not count as longer than two months', () => {
+  const html = render({ ...fixture, data: {
+    ...fixture.data,
+    month: undefined,
+    period: { startDate: '2026-06-30', endDate: '2026-08-01', timezone: 'Asia/Shanghai', label: '自定义时间段' },
+    monthlyBreakdown: [
+      { month: '2026-06', totalExpenseFen: 100, totalIncomeFen: 0, transactionCount: 1 },
+      { month: '2026-07', totalExpenseFen: 200, totalIncomeFen: 0, transactionCount: 1 },
+      { month: '2026-08', totalExpenseFen: 300, totalIncomeFen: 0, transactionCount: 1 },
+    ],
+  } });
+  assert.equal(html.includes('bill-report-chart'), false);
+});

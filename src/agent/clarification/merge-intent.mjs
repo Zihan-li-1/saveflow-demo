@@ -19,7 +19,7 @@ const required = {
 
 export function buildParsedIntent(action, slots) {
   const needed = required[action] ?? [];
-  const missingSlots = needed.filter(slot => slots[slot] === undefined || slots[slot] === null || slots[slot] === '');
+  const missingSlots = action === 'bill.summary' && (slots.month !== undefined || slots.period !== undefined) ? [] : needed.filter(slot => slots[slot] === undefined || slots[slot] === null || slots[slot] === '');
   const candidate = {
     schemaVersion: '1.0.0', action, slots, missingSlots,
     status: missingSlots.length ? 'needs_clarification' : 'ready_for_resolution',
