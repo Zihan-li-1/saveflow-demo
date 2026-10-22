@@ -43,10 +43,10 @@ const clarificationQuestions = {
   source_account_ref: '要从哪个账户转出？',
   payee_ref: '要转给谁？',
   card_ref: '请选择要查看或操作的卡片。',
-  goal: '请说明理财目标。',
-  max_risk_level: '请说明可接受的最高风险等级：R1、R2 或 R3。',
-  horizon_days: '请说明计划持有多少天。',
-  liquidity_requirement: '请说明流动性要求：T+0、T+1 或持有到期。',
+  goal: '你希望这笔理财帮你实现什么？例如：未来 6 个月争取获得一些额外收益、1 年内存下 1 万元、准备应急金，或为旅行和大额购物做准备。请说说金额、用途或时间，知道多少说多少。',
+  max_risk_level: '你最多能接受多大的波动？可以只回复 R1、R2、R3，或直接说：① 尽量稳妥（R1）——用波动示例理解，短期可能约亏 0%–2%；② 能接受小幅波动（R2）——阶段亏损可能约 2%–10%；③ 能接受较大波动（R3）——亏损可能超过 10%，极端情况下可能更多。百分比只是帮助理解的演示尺度，不是实际产品的亏损上限。',
+  horizon_days: '你计划把这笔钱放多久？请尽量按月回答，例如“3 个月”“半年”或“12 个月”。',
+  liquidity_requirement: '这笔钱最快需要什么时候能取出？例如：随时可能要用、可以等到下一个工作日，或在计划结束前都不需要取。',
   product_refs: '请提供至少两个要比较的理财产品名称。',
   assessment_scope: '是否要开始投资适当性风险测评？',
   trigger: '请说明规则在什么事件或日期触发。',
@@ -198,13 +198,21 @@ export async function runBankingConversation(body, {
       return reply(200, 'OK', '场景规则已保存', { status: 'scenario_rule', action: continuation.action, operationId: continuation.operation.operationId, receipt: executed.data, data: { rule: effect?.after, execution_policy: '规则只生成建议；写操作仍须另行预览并确认。' } });
     }
     if (understandContinuation && body.message) {
-      parsed = validateParsedIntent(await parseIntent(body.message, { history: [], env, fetchImpl, requestId,
-        context: { action: continuation.action, slots: continuation.slots, pendingSlot: continuation.pendingSlot } }));
-      // A model cannot convert an opaque candidate selection into entity IDs.
-      // Keep server selections only while their raw references remain unchanged.
-      if (parsed.action === continuation.action) {
+      const deterministicWealthSlot = continuation.action === 'wealth.recommend' && ['goal', 'max_risk_level', 'horizon_days', 'liquidity_requirement'].includes(continuation.pendingSlot);
+      const directAnswer = deterministicWealthSlot ? parseClarificationAnswer(body.message, { action: continuation.action, slot: continuation.pendingSlot, slots: continuation.slots, now: now() }) : { kind: 'unrecognized' };
+      if (directAnswer.kind === 'slot') {
+        parsed = buildParsedIntent(continuation.action, mergeSlots(continuation.slots, directAnswer.updates));
         selections = { ...continuation.selections };
-        for (const key of Object.keys(selections)) if (parsed.slots[key] !== continuation.slots[key]) delete selections[key];
+        for (const slot of Object.keys(directAnswer.updates)) delete selections[slot];
+      } else {
+        parsed = validateParsedIntent(await parseIntent(body.message, { history: [], env, fetchImpl, requestId,
+          context: { action: continuation.action, slots: continuation.slots, pendingSlot: continuation.pendingSlot } }));
+        // A model cannot convert an opaque candidate selection into entity IDs.
+        // Keep server selections only while their raw references remain unchanged.
+        if (parsed.action === continuation.action) {
+          selections = { ...continuation.selections };
+          for (const key of Object.keys(selections)) if (parsed.slots[key] !== continuation.slots[key]) delete selections[key];
+        }
       }
     } else if (body.message && (continuation.action === 'clarify' || switchesTask(body.message, continuation))) {
       if (expectedAction) throw Object.assign(new Error('请调用对应工具开始新任务'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });

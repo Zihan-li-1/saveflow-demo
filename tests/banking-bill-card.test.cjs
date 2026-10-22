@@ -13,10 +13,26 @@ require.extensions['.css'] = () => {};
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { BankingBillCard } = require('../src/app/BankingBillCard.tsx');
+const { BankingReadCard } = require('../src/app/BankingReadCards.tsx');
 const { formatBillMoney, formatBillAsOf, billCategories } = require('../src/lib/bill-display.ts');
 const fixture = JSON.parse(readFileSync(require.resolve('./fixtures/banking-agent/bill-result.json'), 'utf8')).data;
 const render = data => renderToStaticMarkup(React.createElement(BankingBillCard, { data }));
 const text = html => html.replace(/<[^>]*>/g, '');
+
+test('理财产品卡片用通俗语言解释风险、取用时间和月度期限', () => {
+  const html = renderToStaticMarkup(React.createElement(BankingReadCard, { data: {
+    status: 'wealth_recommendation',
+    data: { products: [{ product_ref: 'p1', name: '模拟稳健产品', risk_level: 'R2', expected_yield_bps: 210, minimum_amount_minor: 10000, liquidity: 'T+1', duration_days: 180 }] },
+    evidence: [{ source: 'synthetic_demo_only', as_of: '2026-09-01T00:00:00+08:00' }],
+  } }));
+  const value = text(html);
+  for (const expected of ['中等风险（示例：阶段亏损可能约 2%–10%）', '通常下一个工作日可取', '约 6 个月', '风险等级 点此了解', '流动性 点此了解', '百分比只是帮助理解差异的演示尺度']) assert.ok(value.includes(expected), expected);
+  assert.match(html, /<details><summary>风险等级 <span>点此了解<\/span><\/summary>/);
+  assert.equal(html.includes('<details open=""'), false);
+  assert.equal(value.includes('R2'), false);
+  assert.equal(value.includes('T+1'), false);
+  assert.equal(value.includes('180 天'), false);
+});
 
 test('August card uses structured amounts, exact signed balance, all transaction count and Chinese provenance', () => {
   const value = text(render(fixture));
