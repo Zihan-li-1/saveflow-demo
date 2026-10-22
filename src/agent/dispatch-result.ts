@@ -14,6 +14,13 @@ export type DispatchResult =
     }
   | {
       ok: true;
+      kind: "subscription_result";
+      action: "subscription.list";
+      data: unknown;
+      evidence: DispatchEvidence[];
+    }
+  | {
+      ok: true;
       kind: "transfer_resolution";
       action: "transfer.create";
       data: unknown;
@@ -26,7 +33,7 @@ export type DispatchResult =
     }
   | {
       ok: true;
-      kind: "wealth_recommendation" | "wealth_comparison" | "risk_assessment_required" | "scenario_rule_preview" | "scenario_rule" | "scenario_event_review" | "goal_plan";
+      kind: "wealth_result" | "wealth_action_request" | "wealth_recommendation" | "wealth_comparison" | "risk_assessment_required" | "scenario_rule_preview" | "scenario_rule" | "scenario_event_review" | "goal_plan";
       action: string;
       data: unknown;
       evidence?: DispatchEvidence[];
@@ -58,6 +65,12 @@ export type DispatchResult =
   | {
       ok: false;
       kind: "card_error";
+      action: string;
+      error: { code: string; message: string; uncertain?: boolean };
+    }
+  | {
+      ok: false;
+      kind: "wealth_error";
       action: string;
       error: { code: string; message: string; uncertain?: boolean };
     };

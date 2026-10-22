@@ -808,7 +808,7 @@
             "schemaVersion": "1.0.0",
             "action": "orchestrator.goal",
             "slots": {
-              "goal_text": "年底存够一万",
+              "goal_text": "在年底存够一万",
               "amount": {
                 "amount_minor": 1000000,
                 "currency": "CNY"
@@ -824,7 +824,7 @@
       "prepares": [],
       "resultStatus": "goal_plan",
       "resultData": {
-        "goal_text": "年底存够一万",
+        "goal_text": "在年底存够一万",
         "horizon": null,
         "targetAmountFen": 1000000,
         "deadline": "2026-12-31",
@@ -2238,12 +2238,12 @@
               "question": "「王先生」匹配到多位收款人，请确认。",
               "choices": [
                 {
-                  "optionId": "opt_c2a1b441-adb4-481f-b686-a1ea4517a5bb",
+                  "optionId": "opt_efcaa14c-59fc-4795-8905-12b33bd89cb3",
                   "label": "房东王先生（****1003）",
                   "rawValue": "房东王先生"
                 },
                 {
-                  "optionId": "opt_2db2e430-6c30-409c-a77a-17d37de2191f",
+                  "optionId": "opt_118e2634-0480-433e-b1eb-b7379e74fbd4",
                   "label": "王强（****1004）",
                   "rawValue": "王强"
                 }
@@ -2264,7 +2264,7 @@
             "missingSlots": [],
             "status": "ready_for_resolution",
             "choice": {
-              "optionId": "opt_2db2e430-6c30-409c-a77a-17d37de2191f"
+              "optionId": "opt_118e2634-0480-433e-b1eb-b7379e74fbd4"
             }
           }
         }

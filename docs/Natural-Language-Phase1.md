@@ -1,6 +1,6 @@
 # 自然语言金额与日期接入：第一阶段
 
-工作目录 `saveflow-demo`，分支 `feat/unified-trueforge-banking-runtime`。读取 README、CLAUDE.md 及现行 API/代码；工作目录、上级目录和仓库内未找到 AGENTS.md（CLAUDE.md 仅引用该缺失文件）。保留开始时已有的四个文件修改；未提交、推送或部署。
+工作目录 `saveflow-demo`，分支 `feat/unified-trueforge-banking-runtime`。读取 README、CLAUDE.md 及现行 API/代码；工作目录、上级目录和仓库内未找到 AGENTS.md（CLAUDE.md 仅引用该缺失文件）。第一阶段保留了开始时已有的四个文件修改，后续按用户要求提交为 `d53a16f` 并合并最新主分支；未发布或部署。最新合并验收见 [合并记录](Merge-Natural-Language-Phase1.md)，下表保留第一阶段提交前的验收结果。
 
 ## 原因与现行流程
 

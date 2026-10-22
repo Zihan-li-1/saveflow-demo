@@ -64,13 +64,13 @@ export function shouldShowMonthlyBillChart(period: unknown, monthCount: number):
   return end.getTime() > twoMonthsLater.getTime();
 }
 
-export type BillMonthRow = { month: string; status: "complete" | "partial" | "future" | "unavailable"; totalIncomeFen: number; totalExpenseFen: number; transactionCount: number };
+export type BillMonthRow = { month: string; status: "complete" | "partial" | "future" | "unavailable"; totalIncomeFen: number; totalExpenseFen: number; transactionCount: number; categoryTotals: Record<string, number> };
 
 export function billMonthlyBreakdown(value: unknown): BillMonthRow[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > 13) return [];
   const rows = value.filter(row => row && typeof row === "object" && !Array.isArray(row)).map(row => row as Record<string, unknown>);
-  if (rows.length !== value.length || rows.some(row => typeof row.month !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(row.month) || !["complete", "partial", "future", "unavailable"].includes(String(row.status)) || billFen(row.totalIncomeFen) === undefined || billFen(row.totalExpenseFen) === undefined || billFen(row.transactionCount) === undefined)) return [];
-  return rows.map(row => ({ month: row.month as string, status: row.status as BillMonthRow["status"], totalIncomeFen: row.totalIncomeFen as number, totalExpenseFen: row.totalExpenseFen as number, transactionCount: row.transactionCount as number }));
+  if (rows.length !== value.length || rows.some(row => typeof row.month !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(row.month) || !["complete", "partial", "future", "unavailable"].includes(String(row.status)) || billFen(row.totalIncomeFen) === undefined || billFen(row.totalExpenseFen) === undefined || billFen(row.transactionCount) === undefined || (row.categoryTotals !== undefined && (!row.categoryTotals || typeof row.categoryTotals !== "object" || Array.isArray(row.categoryTotals) || (row.totalExpenseFen === 0 ? Object.keys(row.categoryTotals as object).length !== 0 : billCategories(row.categoryTotals, row.totalExpenseFen as number).length === 0))))) return [];
+  return rows.map(row => ({ month: row.month as string, status: row.status as BillMonthRow["status"], totalIncomeFen: row.totalIncomeFen as number, totalExpenseFen: row.totalExpenseFen as number, transactionCount: row.transactionCount as number, categoryTotals: (row.categoryTotals ?? {}) as Record<string, number> }));
 }
 
 export function billMonthLabel(month: string, showYear: boolean): string {

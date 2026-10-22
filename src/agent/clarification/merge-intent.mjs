@@ -9,6 +9,8 @@ const required = {
   'card.unfreeze': ['card_ref'],
   'wealth.recommend': ['goal', 'max_risk_level', 'horizon_days', 'liquidity_requirement'],
   'wealth.compare': ['product_refs'],
+  'wealth.subscribe': ['product_ref', 'amount', 'source_account_ref'],
+  'wealth.redeem': ['holding_ref', 'quantity_or_amount'],
   'wealth.assess_risk': ['assessment_scope'],
   'scenario.create_rule': ['trigger', 'conditions', 'proposed_steps', 'authorization_scope'],
   'scenario.update_rule': ['rule_ref', 'changes'],

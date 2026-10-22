@@ -13,6 +13,7 @@ const assert = require('node:assert/strict');
 const { dispatchParsedIntent } = require('../src/agent/dispatcher.ts');
 const { handleBillSummary } = require('../src/agent/handlers/bill-handler.ts');
 const { handleTransfer } = require('../src/agent/handlers/transfer-handler.ts');
+const { handleSubscriptionList } = require('../src/agent/handlers/subscription-handler.ts');
 const { createTransferRepositoryAdapter } = require('../src/skill/transfer/repository-adapter.ts');
 const { ParsedIntentValidationError } = require('../src/agent/validate-parsed-intent.ts');
 
@@ -27,12 +28,13 @@ const readyTransfer = intent('transfer.create', {
 const readyBill = intent('bill.summary', { month: '2026-08' }, [], 'ready_for_resolution');
 
 function spies() {
-  const calls = { bill: 0, transfer: 0 };
+  const calls = { bill: 0, transfer: 0, subscription: 0 };
   return {
     calls,
     dependencies: {
       billHandler: async (value) => { calls.bill++; return { ok: true, kind: 'bill_result', action: value.action, data: 'bill', evidence: [] }; },
       transferHandler: async (value) => { calls.transfer++; return { ok: true, kind: 'transfer_resolution', action: value.action, data: 'transfer' }; },
+      subscriptionHandler: async (value) => { calls.subscription++; return { ok: true, kind: 'subscription_result', action: value.action, data: 'subscription', evidence: [] }; },
     },
   };
 }
@@ -41,14 +43,21 @@ test('routes transfer.create only to transferHandler', async () => {
   const { dependencies, calls } = spies();
   const result = await dispatchParsedIntent(readyTransfer, dependencies);
   assert.equal(result.kind, 'transfer_resolution');
-  assert.deepEqual(calls, { bill: 0, transfer: 1 });
+  assert.deepEqual(calls, { bill: 0, transfer: 1, subscription: 0 });
 });
 
 test('routes bill.summary only to billHandler', async () => {
   const { dependencies, calls } = spies();
   const result = await dispatchParsedIntent(readyBill, dependencies);
   assert.equal(result.kind, 'bill_result');
-  assert.deepEqual(calls, { bill: 1, transfer: 0 });
+  assert.deepEqual(calls, { bill: 1, transfer: 0, subscription: 0 });
+});
+
+test('routes subscription.list through the unified dispatcher', async () => {
+  const { dependencies, calls } = spies();
+  const result = await dispatchParsedIntent(intent('subscription.list', {}, [], 'ready_for_resolution'), dependencies);
+  assert.equal(result.kind, 'subscription_result');
+  assert.deepEqual(calls, { bill: 0, transfer: 0, subscription: 1 });
 });
 
 test('does not call handlers for parser clarification or unsupported intent', async () => {
@@ -59,7 +68,7 @@ test('does not call handlers for parser clarification or unsupported intent', as
   });
   const unsupported = await dispatchParsedIntent(intent('unsupported', {}, [], 'unsupported'), dependencies);
   assert.deepEqual(unsupported, { ok: false, kind: 'unsupported' });
-  assert.deepEqual(calls, { bill: 0, transfer: 0 });
+  assert.deepEqual(calls, { bill: 0, transfer: 0, subscription: 0 });
 });
 
 test('rejects invalid intents before either handler is called', async () => {
@@ -74,7 +83,16 @@ test('rejects invalid intents before either handler is called', async () => {
   ]) {
     await assert.rejects(dispatchParsedIntent(value, dependencies), ParsedIntentValidationError);
   }
-  assert.deepEqual(calls, { bill: 0, transfer: 0 });
+  assert.deepEqual(calls, { bill: 0, transfer: 0, subscription: 0 });
+});
+
+test('subscription analysis explains the flag and estimates monthly and annual savings', async () => {
+  const { createFinancialContext } = await import('../src/banking-core/repository.mjs');
+  const result = await handleSubscriptionList(intent('subscription.list', {}, [], 'ready_for_resolution'), createFinancialContext().repository);
+  assert.equal(result.kind, 'subscription_result');
+  assert.deepEqual(result.data.summary, { activeCount: 2, activeMonthlyFeeFen: 6000, potentiallyUnusedCount: 1, potentiallyUnusedMonthlyFeeFen: 3000, potentialAnnualSavingsFen: 36000 });
+  assert.equal(result.data.methodology.historicalSubscriptionState, false);
+  assert.match(result.data.subscriptions.find(item => item.isPotentiallyUnused).unusedReason, /可能闲置.*未使用.*仍每月扣费/);
 });
 
 test('handler errors become skill_error and never fall through to the other handler', async () => {

@@ -4,6 +4,7 @@ export const PARSED_INTENT_SCHEMA_VERSION = "1.0.0" as const;
 export const PARSED_INTENT_ACTIONS = [
   "transfer.create",
   "bill.summary",
+  "subscription.list",
   "card.get",
   "card.set_budget",
   "card.freeze",
@@ -11,6 +12,8 @@ export const PARSED_INTENT_ACTIONS = [
   "wealth.recommend",
   "wealth.compare",
   "wealth.assess_risk",
+  "wealth.subscribe",
+  "wealth.redeem",
   "scenario.create_rule",
   "scenario.update_rule",
   "scenario.disable_rule",
@@ -63,6 +66,19 @@ export interface CardBudgetSlots extends CardReferenceSlots {
   amount?: ParsedAmount;
 }
 
+export type WealthAction = "wealth.recommend" | "wealth.compare" | "wealth.assess_risk" | "wealth.subscribe" | "wealth.redeem";
+export type WealthSlots = {
+  goal?: { kind: "capital_preservation" | "steady_growth" | "short_term_purchase"; target_date?: string; max_risk_level?: "R1" | "R2" | "R3" };
+  constraints?: { investable_amount?: ParsedAmount; max_settlement_days?: number };
+  product_refs?: string[];
+  assessment_scope?: "investment" | "portfolio";
+  product_ref?: string;
+  amount?: ParsedAmount;
+  source_account_ref?: string;
+  holding_ref?: string;
+  quantity_or_amount?: { kind: "amount"; amount_minor: number; currency: "CNY" } | { kind: "units"; units_milli: number };
+};
+
 export type ParsedIntent = ParsedIntentBody & { choice?: { optionId: string } };
 
 type ParsedIntentBody =
@@ -82,6 +98,13 @@ type ParsedIntentBody =
     }
   | {
       schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
+      action: "subscription.list";
+      slots: Record<string, never>;
+      missingSlots: [];
+      status: "ready_for_resolution";
+    }
+  | {
+      schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
       action: "card.get" | "card.freeze" | "card.unfreeze";
       slots: CardReferenceSlots;
       missingSlots: ["card_ref"] | [];
@@ -96,9 +119,9 @@ type ParsedIntentBody =
     }
   | {
       schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
-      action: "wealth.recommend" | "wealth.compare" | "wealth.assess_risk";
+      action: WealthAction;
       slots: Record<string, unknown>;
-      missingSlots: WealthSlotName[];
+      missingSlots: string[];
       status: "ready_for_resolution" | "needs_clarification";
     }
   | {

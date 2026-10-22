@@ -9,7 +9,12 @@ const fen = (v: unknown) => Number.isSafeInteger(v) && Number(v) >= 0;
 function receipt(v: unknown, id: string): boolean {
   if (!object(v)) return false;
   const cardAction = ["card.set_budget", "card.freeze", "card.unfreeze"].includes(String(v.action));
-  return v.operationId === id && typeof v.receiptId === "string" && (v.action === "transfer_money" || cardAction) && ["succeeded", "failed", "cancelled"].includes(String(v.status)) && typeof v.message === "string" && typeof v.planId === "string" && typeof v.stepId === "string" && typeof v.executedAt === "string" && Number.isFinite(Date.parse(v.executedAt)) && v.dataSource === "synthetic_demo_only" && Array.isArray(v.transactionIds) && v.transactionIds.every(t => typeof t === "string") && Array.isArray(v.effects) && (v.status !== "succeeded" || (cardAction ? v.transactionIds.length === 0 && v.effects.length === 1 && cardEffect(v.effects[0], String(v.action)) : v.transactionIds.length === 1 && v.effects.length === 1 && effect(v.effects[0])));
+  const wealthAction = ["wealth.subscribe", "wealth.redeem"].includes(String(v.action));
+  return v.operationId === id && typeof v.receiptId === "string" && (v.action === "transfer_money" || cardAction || wealthAction) && ["succeeded", "failed", "cancelled"].includes(String(v.status)) && typeof v.message === "string" && typeof v.planId === "string" && typeof v.stepId === "string" && typeof v.executedAt === "string" && Number.isFinite(Date.parse(v.executedAt)) && v.dataSource === "synthetic_demo_only" && Array.isArray(v.transactionIds) && v.transactionIds.every(t => typeof t === "string") && Array.isArray(v.effects) && (v.status !== "succeeded" || (cardAction ? v.transactionIds.length === 0 && v.effects.length === 1 && cardEffect(v.effects[0], String(v.action)) : wealthAction ? v.transactionIds.length === 0 && v.effects.length === 1 && wealthEffect(v.effects[0], String(v.action)) : v.transactionIds.length === 1 && v.effects.length === 1 && effect(v.effects[0])));
+}
+function wealthEffect(v: unknown, action: string): boolean {
+  if (!object(v) || v.kind !== "wealth_change" || v.action !== action || typeof v.productId !== "string" || typeof v.productName !== "string" || typeof v.holdingId !== "string" || !fen(v.amountFen) || Number(v.amountFen) <= 0 || !fen(v.unitsMilli) || Number(v.unitsMilli) <= 0) return false;
+  return action === "wealth.subscribe" ? typeof v.fundingAccountId === "string" && Number.isSafeInteger(v.accountVersion) && typeof v.disclosureVersion === "string" && typeof v.assessmentId === "string" : Number.isSafeInteger(v.holdingVersion) && typeof v.settlement === "string";
 }
 function cardEffect(v: unknown, action?: string): boolean {
   if (!object(v) || v.kind !== "card_change" || !["card.set_budget", "card.freeze", "card.unfreeze"].includes(String(v.action)) || (action && v.action !== action)) return false;
@@ -74,7 +79,7 @@ export function createBankingClient(options: Options = {}) {
         if (!object(wire) || wire.schema_version !== WIRE_VERSION || typeof wire.request_id !== "string" || typeof wire.code !== "string") throw new ApiError("INVALID_RESPONSE", "Banking Core 响应协议无效", write);
         const payload = fromWire(wire) as Record<string, unknown>;
         if (!response.ok || payload.code !== "OK") {
-          const safeRejection = response.status < 500 && ["VALIDATION_ERROR", "CONFIRMATION_REQUIRED", "CONFIRMATION_INVALID", "INVALID_STATE", "CARD_NOT_FOUND", "UNAUTHORIZED", "FORBIDDEN", "PREVIEW_EXPIRED", "PREVIEW_STALE", "INSUFFICIENT_BALANCE", "LIMIT_EXCEEDED"].includes(String(payload.code));
+          const safeRejection = response.status < 500 && ["VALIDATION_ERROR", "CONFIRMATION_REQUIRED", "CONFIRMATION_INVALID", "INVALID_STATE", "CARD_NOT_FOUND", "UNAUTHORIZED", "FORBIDDEN", "PREVIEW_EXPIRED", "PREVIEW_STALE", "INSUFFICIENT_BALANCE", "LIMIT_EXCEEDED", "SUITABILITY_FAILED", "BELOW_MINIMUM_AMOUNT", "HOLDING_NOT_FOUND", "REDEMPTION_RESTRICTED", "INSUFFICIENT_HOLDING"].includes(String(payload.code));
           throw new ApiError(String(payload.code), typeof payload.message === "string" ? payload.message : "Banking Core 请求失败", write && !safeRejection, String(payload.requestId));
         }
         if (!valid(action, payload.data, input)) throw new ApiError("INVALID_RESPONSE", "回执或预览不匹配，请查询原操作", write, String(payload.requestId));

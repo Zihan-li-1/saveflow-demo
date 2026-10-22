@@ -1,4 +1,4 @@
-import { dispatchParsedIntent, handleBillSummary, handleCard, handleGoal, handleTransfer, prepareTransferPreview, transferRepository } from '../src/agent/runtime.mjs';
+import { dispatchParsedIntent, handleBillSummary, handleCard, handleGoal, handleSubscriptionList, handleTransfer, prepareTransferPreview, transferRepository } from '../src/agent/runtime.mjs';
 import { issueContinuationToken, verifyContinuationToken } from '../src/agent/clarification/continuation-token.mjs';
 import { resolveChoice } from '../src/agent/clarification/choice-resolver.mjs';
 import { buildParsedIntent, mergeSlots } from '../src/agent/clarification/merge-intent.mjs';
@@ -6,6 +6,7 @@ import { billClarificationQuestion } from '../src/lib/trueforge-routing.mjs';
 import { validateParsedIntent } from '../src/agent/validate-parsed-intent.mjs';
 import { dispatchBanking } from '../src/banking-core/dispatch.mjs';
 import { createWealthSkill } from '../src/skills/wealth/wealth-skill.mjs';
+import { handleWealth } from '../src/agent/handlers/wealth-handler.mjs';
 import { createInMemoryScenarioStore, createScenarioSkill } from '../src/skills/scenario/scenario-skill.mjs';
 
 const scenarioStores = new Map();
@@ -41,10 +42,10 @@ const clarificationQuestions = {
   source_account_ref: '要从哪个账户转出？',
   payee_ref: '要转给谁？',
   card_ref: '请选择要查看或操作的卡片。',
-  goal: '请说明理财目标。',
-  max_risk_level: '请说明可接受的最高风险等级：R1、R2 或 R3。',
-  horizon_days: '请说明计划持有多少天。',
-  liquidity_requirement: '请说明流动性要求：T+0、T+1 或持有到期。',
+  goal: '你希望这笔理财帮你实现什么？例如：未来 6 个月争取获得一些额外收益、1 年内存下 1 万元、准备应急金，或为旅行和大额购物做准备。请说说金额、用途或时间，知道多少说多少。',
+  max_risk_level: '你最多能接受多大的波动？可以只回复 R1、R2、R3，或直接说：① 尽量稳妥（R1）——用波动示例理解，短期可能约亏 0%–2%；② 能接受小幅波动（R2）——阶段亏损可能约 2%–10%；③ 能接受较大波动（R3）——亏损可能超过 10%，极端情况下可能更多。百分比只是帮助理解的演示尺度，不是实际产品的亏损上限。',
+  horizon_days: '你计划把这笔钱放多久？请尽量按月回答，例如“3 个月”“半年”或“12 个月”。',
+  liquidity_requirement: '这笔钱最快需要什么时候能取出？例如：随时可能要用、可以等到下一个工作日，或在计划结束前都不需要取。',
   product_refs: '请提供至少两个要比较的理财产品名称。',
   assessment_scope: '是否要开始投资适当性风险测评？',
   trigger: '请说明规则在什么事件或日期触发。',
@@ -127,7 +128,15 @@ export async function runBankingConversation(body, {
 }) {
   let replyContext = {};
   const reply = (httpStatus, code, message, data) => ({ httpStatus, code, message, data, replyContext });
-  const wealthHandler = raw => createWealthSkill(repository)(raw);
+  const wealthReadHandler = raw => createWealthSkill(repository)(raw);
+  const wealthHandler = raw => {
+    const extended = ['wealth.subscribe', 'wealth.redeem'].includes(raw.action) ||
+      (raw.action === 'wealth.recommend' && raw.goal && typeof raw.goal === 'object') ||
+      (raw.action === 'wealth.assess_risk' && ['investment', 'portfolio'].includes(raw.assessment_scope));
+    if (!extended) return wealthReadHandler(raw);
+    const { action, ...slots } = raw;
+    return handleWealth({ action, slots }, repository, core.wealthPorts, selections);
+  };
   const eventStore = scenarioStoreFor(scenarioScope);
   const scenarioStore = { ...eventStore, getRule: ruleId => core.getScenarioRule(ruleId) };
   const activeScenarioHandler = scenarioHandler ?? createScenarioSkill({ store: scenarioStore, contextProvider: async () => {
@@ -208,13 +217,16 @@ export async function runBankingConversation(body, {
   replyContext = { slots: parsed.slots };
   if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
   if (!continuing && parsed.choice) throw inputError('INVALID_CHOICE', '当前请求没有可选择的候选项', 400);
-  if (['subscription.list', 'product.list'].includes(parsed.action)) {
+  if (parsed.action === 'subscription.list') {
+    const result = await handleSubscriptionList(parsed, repository);
+    return reply(200, 'OK', '订阅分析已生成。', { status: 'subscription_result', action: result.action, data: result.data, evidence: result.evidence });
+  }
+  if (parsed.action === 'product.list') {
     const result = await dispatchBanking(parsed.action, {}, { repository });
     if (!result.ok) return reply(502, 'SKILL_ERROR', '只读查询失败，请稍后重试。', errorData('SKILL_ERROR', '只读查询失败，请稍后重试。'));
     const context = await repository.getContextInfo();
-    const isSubscription = parsed.action === 'subscription.list';
-    return reply(200, 'OK', '只读查询完成。', { status: isSubscription ? 'subscription_result' : 'product_result', action: parsed.action,
-      data: { [isSubscription ? 'subscriptions' : 'products']: result.data, context },
+    return reply(200, 'OK', '只读查询完成。', { status: 'product_result', action: parsed.action,
+      data: { products: result.data, context },
       evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: result.data.map(item => item.id) }] });
   }
   const dependencies = {
@@ -224,6 +236,7 @@ export async function runBankingConversation(body, {
     wealthHandler,
     scenarioHandler: activeScenarioHandler,
     goalHandler: intent => handleGoal(intent, repository),
+    subscriptionHandler: intent => handleSubscriptionList(intent, repository),
   };
   const dispatched = await dispatchParsedIntent(parsed, dependencies);
   const prepareTransfer = typeof core.prepare === 'function'
@@ -232,8 +245,15 @@ export async function runBankingConversation(body, {
   const result = await prepareTransferPreview(dispatched, prepareTransfer);
 
   if (result.ok && result.kind === 'bill_result') return reply(200, 'OK', '账单统计已生成', { status: 'bill_result', action: result.action, data: result.data, evidence: result.evidence });
+  if (result.ok && result.kind === 'subscription_result') return reply(200, 'OK', '订阅分析已生成', { status: 'subscription_result', action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && result.kind === 'card_result') return reply(200, 'OK', '卡片信息已查询', { status: 'card_result', action: result.action, data: result.data, evidence: result.evidence });
-  if (result.ok && ['wealth_recommendation', 'wealth_comparison', 'risk_assessment_required'].includes(result.kind)) return reply(200, 'OK', result.kind === 'wealth_comparison' ? '理财产品对比已生成' : result.kind === 'wealth_recommendation' ? '理财条件筛选已生成' : '需要完成风险测评', { status: result.kind, action: result.action, data: result.data, evidence: result.evidence });
+  if (result.ok && ['wealth_recommendation', 'wealth_comparison', 'risk_assessment_required'].includes(result.kind)) return reply(200, 'OK', result.kind === 'wealth_comparison' ? '理财产品对比已生成' : result.kind === 'wealth_recommendation' ? '理财条件筛选已生成' : '需要完成风险测评', { status: result.kind, action: result.action, data: result.kind === 'wealth_comparison' ? { ...result.data, kind: 'comparison' } : result.data, evidence: result.evidence });
+  if (result.ok && result.kind === 'wealth_result') return reply(200, 'OK', '模拟理财结果已生成', { status: 'wealth_result', action: result.action, data: result.data, evidence: result.data.evidence });
+  if (result.ok && result.kind === 'wealth_action_request') {
+    const prepared = await core.prepare(result.data.request);
+    if (!prepared.ok) return reply(statusFor(prepared.error.code), prepared.error.code, prepared.error.message, { status: 'core_error', action: result.action, ...(prepared.operationId ? { operationId: prepared.operationId } : {}), error: prepared.error });
+    return reply(200, 'OK', '模拟理财正式预览已生成，等待页面单独确认', { status: 'awaiting_confirmation', action: result.action, operationId: prepared.data.operationId, preview: prepared.data.preview, risk: prepared.data.risk, evidence: result.data.evidence });
+  }
   if (result.ok && result.kind === 'goal_plan') return reply(200, 'OK', '只读财务规划已生成', { status: 'goal_plan', action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && result.kind === 'scenario_event_review') return reply(200, 'OK', '可信事件复核已生成', { status: 'scenario_event_review', action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && result.kind === 'scenario_action_request') {
@@ -282,6 +302,7 @@ export async function runBankingConversation(body, {
   if (result.kind === 'unsupported') return reply(200, 'UNSUPPORTED', '暂不支持该请求', { status: result.kind });
   if (result.kind === 'skill_error') return reply(502, 'SKILL_ERROR', 'Skill 处理失败，请稍后重试。', errorData('SKILL_ERROR', 'Skill 处理失败，请稍后重试。'));
   if (result.kind === 'card_error') return reply(statusFor(result.error.code), result.error.code, result.error.message, { status: 'card_error', action: result.action, error: result.error });
+  if (result.kind === 'wealth_error') return reply(statusFor(result.error.code), result.error.code, result.error.message, { status: 'wealth_error', action: result.action, error: result.error });
   if (result.kind === 'core_error') {
     let recovery;
     let continuationToken;
