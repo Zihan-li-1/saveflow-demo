@@ -4,6 +4,7 @@ import { BankingError, assertFen, assertId, canonical } from './errors.mjs';
 import { OperationStore } from './operation-store.mjs';
 import { canTransitionAction, transitionAction } from './action-machine.mjs';
 import { createWealthMockPorts } from '../skills/wealth/mock-ports.mjs';
+import { generateCode, createChallenge, verifyChallenge, VERIFICATION_TTL_MS, VERIFICATION_MAX_ATTEMPTS } from './verification.mjs';
 
 /** @param {unknown} input @returns {import('./contracts').TransferInput} */
 function validateTransfer(input) {
@@ -69,7 +70,7 @@ function validateScenarioInput(action, input) {
 
 /** One isolated Mock banking session. Never feed model output to decide()/execute().
  * Future write actions must use this engine and a transaction adapter, not per-Skill Maps.
- * @param {{source?: Parameters<typeof createFinancialContext>[0], now?: () => number, store?: import('./contracts').BankingOperationStore, repository?: import('./contracts').FinancialContextRepository, wealthPorts?: ReturnType<typeof createWealthMockPorts>, ownerId?: string, policy?: {version: string, maxTransferFen: number, previewTtlMs: number}}} [options] */
+ * @param {{source?: Parameters<typeof createFinancialContext>[0], now?: () => number, store?: import('./contracts').BankingOperationStore, repository?: import('./contracts').FinancialContextRepository, wealthPorts?: ReturnType<typeof createWealthMockPorts>, ownerId?: string, policy?: {version: string, maxTransferFen: number, previewTtlMs: number}, deliverVerificationCode?: (args: {operationId: string, challengeId: string, code: string, expiresAt: string}) => void, demoOtpCode?: string}} [options] */
 export function createBankingCore(options = {}) {
   const context = createFinancialContext(options.source);
   const repository = options.repository ?? context.repository;
@@ -85,6 +86,8 @@ export function createBankingCore(options = {}) {
   const wealthPorts = options.wealthPorts ?? (options.repository || options.store ? undefined : createWealthMockPorts({ getHoldings: context.getWealthHoldings, now }));
   const policy = Object.freeze({ version: 'mock-transfer-v1', maxTransferFen: 10000000, previewTtlMs: 300000, largeTransferFen: 100000, ...options.policy });
   assertFen(policy.maxTransferFen); assertFen(policy.previewTtlMs); assertFen(policy.largeTransferFen);
+  /** 受控测试渠道：把明文验证码交给演示投递方（默认打印到服务端控制台），绝不写进风险响应。 */
+  const deliverVerificationCode = options.deliverVerificationCode ?? (({ operationId, code, expiresAt }) => console.warn(`[SaveFlow Demo] 转账验证码 operationId=${operationId}: ${code}（有效期至 ${expiresAt}）`));
   /** @type {import('./contracts').AuditEvent[]} */
   const audit = [];
   /** @type {Map<string, Promise<import('./contracts').ActionResult<import('./contracts').ActionReceipt>>>} */
@@ -132,8 +135,8 @@ export function createBankingCore(options = {}) {
     });
     const largeTransfer = input.amountFen > policy.largeTransferFen;
     const warnings = ['合成数据模拟转账，不接真实银行；此确认仅用于 Mock。'];
-    if (largeTransfer) warnings.push(`大额转账（>¥${(policy.largeTransferFen / 100).toFixed(2)}）需短信验证码（演示码 123456）。`);
-    return { allowed: result.ok, riskLevel: 'L3', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', requiredVerification: largeTransfer ? 'mock_sms' : 'none', ...(largeTransfer ? { verificationCode: '123456' } : {}), warnings, ...(!result.ok ? { error: result.error } : {}) };
+    if (largeTransfer) warnings.push(`大额转账（>¥${(policy.largeTransferFen / 100).toFixed(2)}）需一次性验证码（OTP）验证。`);
+    return { allowed: result.ok, riskLevel: 'L3', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', requiredVerification: largeTransfer ? 'otp' : 'none', warnings, ...(!result.ok ? { error: result.error } : {}) };
   }
   /** @param {import('./contracts').TransferInput} input @returns {Promise<import('./contracts').TransferEffect>} */
   async function effectFor(input) {
@@ -422,6 +425,49 @@ export function createBankingCore(options = {}) {
         return statusFor(record);
       }, operationId);
     },
+    /** 为已确认的高风险操作发起逐笔 OTP 挑战。明文验证码走受控测试渠道，响应不含验证码；重新发起会作废旧挑战。
+     * @param {string} operationId @param {string} previewHash */
+    async startVerification(operationId, previewHash) {
+      return guard(async () => {
+        assertId(operationId);
+        const record = await lookup(operationId);
+        if (!record.preview) throw new BankingError('INVALID_STATE', '缺少预览');
+        verifyHash(record, previewHash);
+        if (record.state !== 'confirmed' || record.decision?.decision !== 'confirm') throw new BankingError('CONFIRMATION_REQUIRED', '需要先确认当前精确预览');
+        if (record.risk?.requiredVerification !== 'otp') throw new BankingError('VERIFICATION_REQUIRED', '本笔操作无需额外验证');
+        const challengeId = `otp_${crypto.randomUUID()}`;
+        const code = options.demoOtpCode ?? generateCode(); // 演示视频可用 demoOtpCode 固定验证码，默认仍是密码学随机 6 位
+        const ttlMs = Math.max(1, Math.min(VERIFICATION_TTL_MS, Date.parse(record.preview.expiresAt) - now()));
+        const challenge = createChallenge({ challengeId, code, nowMs: now(), ttlMs, maxAttempts: VERIFICATION_MAX_ATTEMPTS });
+        record.verification = challenge.state;
+        await save(record);
+        deliverVerificationCode({ operationId, challengeId, code, expiresAt: challenge.state.expiresAt });
+        return { challengeId: challenge.state.challengeId, expiresAt: challenge.state.expiresAt, remainingAttempts: VERIFICATION_MAX_ATTEMPTS - challenge.state.attempts, deliveryHint: '验证码已通过受控测试渠道发送，本响应不返回验证码。' };
+      }, operationId);
+    },
+    /** 校验逐笔 OTP。成功后把「已验证」状态持久化到操作记录，供 execute() 最终关卡核验。
+     * @param {string} operationId @param {string} previewHash @param {import('./contracts').VerificationVerifyInput} input */
+    async verifyVerification(operationId, previewHash, input) {
+      return guard(async () => {
+        assertId(operationId);
+        const record = await lookup(operationId);
+        if (!record.preview) throw new BankingError('INVALID_STATE', '缺少预览');
+        verifyHash(record, previewHash);
+        if (record.state !== 'confirmed' || record.decision?.decision !== 'confirm') throw new BankingError('CONFIRMATION_REQUIRED', '需要先确认当前精确预览');
+        const challenge = record.verification;
+        if (!challenge) throw new BankingError('VERIFICATION_REQUIRED', '尚未发起验证，请先获取验证码');
+        if (!input || typeof input !== 'object' || Array.isArray(input)) throw new BankingError('VALIDATION_ERROR', '验证参数无效');
+        const body = /** @type {Record<string, unknown>} */ (input);
+        if (Object.keys(body).some(k => !['challengeId', 'code'].includes(k))) throw new BankingError('VALIDATION_ERROR', '验证请求包含未注册字段');
+        if (typeof body.challengeId !== 'string' || body.challengeId !== challenge.challengeId) throw new BankingError('VERIFICATION_REQUIRED', '验证码挑战编号不匹配，请重新发起验证');
+        if (typeof body.code !== 'string' || !/^\d{6}$/.test(body.code)) throw new BankingError('VALIDATION_ERROR', '验证码必须是 6 位数字');
+        const result = verifyChallenge(challenge, body.code, now());
+        record.verification = result.state;
+        await save(record);
+        if (!result.ok) throw new BankingError(result.error.code, result.error.message);
+        return { verified: true, operationId };
+      }, operationId);
+    },
     /** Only stored, confirmed parameters execute. There is deliberately no input/amount argument.
      * @param {string} operationId @param {string} previewHash */
     execute(operationId, previewHash) {
@@ -436,6 +482,7 @@ export function createBankingCore(options = {}) {
         if (record.receipt) return record.receipt;
         if (['executing', 'unknown', 'checking'].includes(record.state)) throw new BankingError('INVALID_STATE', '操作结果待核实，只能查询原编号', true);
         if (record.state !== 'confirmed' || record.decision?.decision !== 'confirm') throw new BankingError('CONFIRMATION_REQUIRED', '需要先确认当前精确预览');
+        if (record.risk?.requiredVerification === 'otp' && record.verification?.status !== 'verified') throw new BankingError('VERIFICATION_REQUIRED', '本笔操作需要先完成一次性验证码验证');
         try {
           await recheck(record); await move(record, 'EXECUTE');
           const at = new Date(now()).toISOString();
