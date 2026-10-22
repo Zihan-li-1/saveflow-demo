@@ -566,11 +566,44 @@ export function createBankingCore(options = {}) {
       const record = recordResult.data;
       const origin = record.request && 'origin' in record.request ? record.request.origin : undefined;
       if (origin !== 'agent_suggested') return { ok: false, error: errorData(new BankingError('FORBIDDEN', '该操作不是试点建议，请通过普通执行入口')), operationId };
+      if (record.risk?.requiredVerification === 'otp' && record.verification?.status !== 'verified') return { ok: false, error: errorData(new BankingError('VERIFICATION_REQUIRED', '本笔操作需要先完成一次性验证码验证')), operationId };
       trialAuthorized.add(operationId);
       try {
         const decided = await core.decide(operationId, { previewHash, decision: 'confirm', confirmedStepIds: record.preview?.stepIds ?? [] });
         if (!decided.ok) return decided;
         return await core.execute(operationId, previewHash);
+      } finally {
+        trialAuthorized.delete(operationId);
+      }
+    },
+    /** 试点建议操作发起 OTP 验证：与 executeTrial 同源授权，先确认当前预览再发起挑战，响应不含验证码。仅供执行桥调用。
+     * @param {string} operationId @param {string} previewHash */
+    async startTrialVerification(operationId, previewHash) {
+      const recordResult = await guard(async () => lookup(operationId), operationId);
+      if (!recordResult.ok) return recordResult;
+      const record = recordResult.data;
+      const origin = record.request && 'origin' in record.request ? record.request.origin : undefined;
+      if (origin !== 'agent_suggested') return { ok: false, error: errorData(new BankingError('FORBIDDEN', '该操作不是试点建议，请通过普通验证入口')), operationId };
+      trialAuthorized.add(operationId);
+      try {
+        const decided = await core.decide(operationId, { previewHash, decision: 'confirm', confirmedStepIds: record.preview?.stepIds ?? [] });
+        if (!decided.ok) return decided;
+        return await core.startVerification(operationId, previewHash);
+      } finally {
+        trialAuthorized.delete(operationId);
+      }
+    },
+    /** 试点建议操作校验 OTP：与 executeTrial 同源授权，校验成功后持久化已验证状态，供执行桥最终关卡核验。
+     * @param {string} operationId @param {string} previewHash @param {import('./contracts').VerificationVerifyInput} input */
+    async verifyTrialVerification(operationId, previewHash, input) {
+      const recordResult = await guard(async () => lookup(operationId), operationId);
+      if (!recordResult.ok) return recordResult;
+      const record = recordResult.data;
+      const origin = record.request && 'origin' in record.request ? record.request.origin : undefined;
+      if (origin !== 'agent_suggested') return { ok: false, error: errorData(new BankingError('FORBIDDEN', '该操作不是试点建议，请通过普通验证入口')), operationId };
+      trialAuthorized.add(operationId);
+      try {
+        return await core.verifyVerification(operationId, previewHash, input);
       } finally {
         trialAuthorized.delete(operationId);
       }
