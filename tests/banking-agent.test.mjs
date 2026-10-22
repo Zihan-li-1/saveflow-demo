@@ -51,7 +51,7 @@ test('转账预览返回「会算账」上下文：占月收入%、本月第N笔
   assert.equal(payload.data.risk.requiredVerification, 'none'); // 500 元 ≤ 1000 元，仅需确认
 });
 
-test('大额转账（>1000元）触发短信验证码强验证', async () => {
+test('大额转账（>1000元）触发一次性验证码（OTP）', async () => {
   const core = createBankingCore();
   const response = await handleBankingAgent(request('给张三转 2000 元'), {
     env, core, parseIntent: async () => transferIntent(200000),
@@ -60,6 +60,6 @@ test('大额转账（>1000元）触发短信验证码强验证', async () => {
 
   assert.equal(payload.code, 'OK');
   assert.equal(payload.data.status, 'awaiting_confirmation');
-  assert.equal(payload.data.risk.requiredVerification, 'mock_sms');
-  assert.equal(payload.data.risk.verificationCode, '123456');
+  assert.equal(payload.data.risk.requiredVerification, 'otp');
+  assert.equal(payload.data.risk.verificationCode, undefined); // 验证码走受控测试渠道，不入风险响应
 });

@@ -19,6 +19,8 @@ export async function dispatchBanking(action, value, core = bankingCore) {
       'scenario.update_rule': ['ruleRef', 'changes'], 'scenario.disable_rule': ['ruleRef'],
       'action.decide': ['operationId', 'previewHash', 'decision', 'confirmedStepIds'],
       'action.execute': ['operationId', 'previewHash'], 'action.status': ['operationId'],
+      'verification.start': ['operationId', 'previewHash'],
+      'verification.verify': ['operationId', 'previewHash', 'challengeId', 'code'],
     };
     if (!Object.hasOwn(fields, action)) throw new BankingError('UNKNOWN_ACTION', '未注册的 Banking Core 动作');
     if (Object.keys(input).some(k => !fields[action].includes(k))) throw new BankingError('VALIDATION_ERROR', '请求包含未注册字段');
@@ -56,6 +58,8 @@ export async function dispatchBanking(action, value, core = bankingCore) {
       case 'action.decide': return core.decide(/** @type {string} */(input.operationId), /** @type {import('./contracts').DecisionInput} */({ previewHash: input.previewHash, decision: input.decision, confirmedStepIds: input.confirmedStepIds }));
       case 'action.execute': return core.execute(/** @type {string} */(input.operationId), /** @type {string} */(input.previewHash));
       case 'action.status': return core.getOperation(/** @type {string} */(input.operationId));
+      case 'verification.start': return core.startVerification(/** @type {string} */(input.operationId), /** @type {string} */(input.previewHash));
+      case 'verification.verify': return core.verifyVerification(/** @type {string} */(input.operationId), /** @type {string} */(input.previewHash), { challengeId: /** @type {string} */(input.challengeId), code: /** @type {string} */(input.code) });
     }
     return { ok: true, data };
   } catch (error) {
