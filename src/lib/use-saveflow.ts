@@ -146,13 +146,13 @@ export function useSaveflow() {
         setBankingContinuation(null);
         addMessage({ role: "agent", kind: "banking_card", text: "卡片信息已查询。", banking: answer });
         send("ANSWER");
-      } else if (["subscription_result", "product_result"].includes(answer.status)) {
-        setBankingContinuation(null);
-        addMessage({ role: "agent", kind: "banking_read", text: "只读查询完成。", banking: answer });
+      } else if (["subscription_result", "product_result", "wealth_recommendation", "wealth_comparison", "risk_assessment_required", "goal_plan", "scenario_rule_preview", "scenario_rule", "scenario_event_review"].includes(answer.status)) {
+        if (answer.status !== "scenario_rule_preview") setBankingContinuation(null);
+        addMessage({ role: "agent", kind: "banking_read", text: answer.status === "scenario_rule_preview" ? "规则变更预览已生成。请回复“确认保存”或“取消”。" : "只读分析或规则结果已生成。", banking: answer });
         send("ANSWER");
       } else if (answer.status === "cancelled") {
         setBankingContinuation(null);
-        addMessage({ role: "agent", text: "本次预览会话已取消，未执行资金或卡片操作。" });
+        addMessage({ role: "agent", text: answer.action?.startsWith("scenario.") ? "场景规则变更已取消，规则未修改。" : "本次预览会话已取消，未执行资金或卡片操作。" });
         send("ANSWER");
       } else if (answer.status === "awaiting_confirmation") {
         if (answer.action?.startsWith("card.") && isTrialPreview(answer)) {

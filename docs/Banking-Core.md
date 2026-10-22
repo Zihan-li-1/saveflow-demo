@@ -154,7 +154,7 @@ npm run demo:banking
 
 Netlify 的 `/api/banking`、`/api/saveflow` 与 `/api/banking-agent` 在配置 `DATABASE_URL` 后共用 PostgreSQL 持久层。首次部署前运行 `npm run db:migrate`；连接串仅配置为服务端环境变量。Netlify 未配置数据库时写接口返回 `DATABASE_NOT_CONFIGURED`，不会静默退回实例内存。浏览器 `mock` 模式仍是单标签页内存演示，不与 PostgreSQL HTTP 模式共享状态。
 
-跨实例验收：将独立测试数据库连接串设为 `BANKING_TEST_DATABASE_URL`，先运行迁移，再执行 `npm test`。PostgreSQL 测试创建独立测试用户，检查转账和卡片操作在两个 Core 实例之间共享状态、重复执行只修改一次，且新实例启动后仍读到回执和已修改的卡片数据，最后清理该测试用户数据。
+跨实例验收：将独立测试数据库连接串设为 `BANKING_TEST_DATABASE_URL`，先运行迁移，再执行 `npm test`。PostgreSQL 测试创建独立测试用户，检查转账、卡片操作和场景规则在两个 Core 实例之间共享状态、重复执行只修改一次，且新实例启动后仍读到回执和已修改的数据，最后清理该测试用户数据。场景规则使用 `migrations/003_scenario_rules.sql`，创建、修改和停用都必须经过同一套正式预览、精确确认、幂等执行与回执流程；规则版本和 `preview_generation` 会拒绝旧预览。
 
 默认 `NEXT_PUBLIC_SAVEFLOW_API_MODE=mock` 使用浏览器内存底座。HTTP 本地联调设置 `NEXT_PUBLIC_SAVEFLOW_API_MODE=http`、`NEXT_PUBLIC_SAVEFLOW_API_BASE_URL=`（留空，同源），运行 `npm run dev:qwen`。该命令同时提供 Next、`/api/agent`、`/api/banking`、旧 POST `/api/saveflow`；只有主动请求 `/api/agent` 才可能调用 Qwen。普通 `next dev` 不提供这些 POST 服务。
 

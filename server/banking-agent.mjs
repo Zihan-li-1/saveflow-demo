@@ -123,7 +123,8 @@ export async function handleBankingAgent(
     }
     const core = options.core ?? await getConfiguredBankingCore(env);
     const repository = options.repository ?? core.repository;
-    const result = await runBankingConversation(body, { core, repository, env, now, parseIntent, fetchImpl, requestId });
+    const scenarioScope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
+    const result = await runBankingConversation(body, { core, repository, env, now, parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope });
     return reply(result.httpStatus, result.code, result.message, result.data);
   } catch (error) {
     const code = typeof error?.code === 'string' ? error.code : error instanceof BankingIntentParserError || error instanceof ParsedIntentValidationError ? 'MODEL_FORMAT_ERROR' : error?.message?.includes('DATABASE_URL') ? 'DATABASE_NOT_CONFIGURED' : 'MODEL_UNAVAILABLE';
