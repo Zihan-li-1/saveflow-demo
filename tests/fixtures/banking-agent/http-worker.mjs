@@ -1,4 +1,5 @@
 // Test-only HTTP host. No real provider requests or production credentials.
+import { continuationModel } from '../continuation-model.mjs';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -13,8 +14,10 @@ process.env.CONTINUATION_TOKEN_SECRET = 'integration-continuation-secret-1234';
 process.env.SAVEFLOW_BANKING_RUNTIME = 'legacy-qwen';
 process.env.DASHSCOPE_API_KEY = 'test-only-provider-secret';
 globalThis.fetch = async (_url, options) => {
-  const message = JSON.parse(options.body).messages.at(-1).content;
-  const intent = message.includes('账单') ? buildParsedIntent('bill.summary', {}) : buildParsedIntent('transfer.create', {
+  const body = JSON.parse(options.body);
+  const message = body.messages.at(-1).content;
+  const { context } = JSON.parse(body.messages[0].content.split('服务端上下文：').at(-1));
+  const intent = context ? continuationModel(message, { context }) : message.includes('账单') ? buildParsedIntent('bill.summary', {}) : buildParsedIntent('transfer.create', {
     payee_ref: message.includes('王先生') ? '王先生' : '张三',
     amount: { amount_minor: 50000, currency: 'CNY' },
     ...(message.includes('活期') ? { source_account_ref: '活期账户' } : {}),

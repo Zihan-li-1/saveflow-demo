@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { continuationModel } from './fixtures/continuation-model.mjs';
 import assert from 'node:assert/strict';
 import { createBankingCore } from '../src/banking-core/core.mjs';
 import { handleBankingAgent } from '../server/banking-agent.mjs';
@@ -17,7 +18,7 @@ const card = (action, slots = {}) => {
 const request = body => new Request('http://localhost/api/banking-agent', {
   method: 'POST', headers: { 'content-type': 'application/json', 'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'x-forwarded-for': `card-agent-${++requestNumber}` }, body: JSON.stringify(body),
 });
-const send = async (body, options) => (await handleBankingAgent(request(body), { env, now: () => 1000, ...options })).json();
+const send = async (body, options) => (await handleBankingAgent(request(body), { env, now: () => 1000, parseIntent: continuationModel, ...options })).json();
 
 test('all card actions have strict matching parser and runtime contracts', async () => {
   assert.match(bankingIntentSystemPrompt, /card\.get、card\.set_budget、card\.set_controls、card\.security_review、card\.freeze、card\.unfreeze/);

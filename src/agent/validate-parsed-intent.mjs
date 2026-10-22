@@ -1,3 +1,4 @@
+import { validCalendarDate, validTimezone } from '../lib/calendar.mjs';
 import { validateWealthIntent } from '../skills/wealth/wealth-action-skill.mjs';
 
 export const PARSED_INTENT_SCHEMA_VERSION = '1.0.0';
@@ -26,7 +27,7 @@ export const PARSED_INTENT_ACTIONS = Object.freeze([
   'unsupported',
 ]);
 
-const TOP_LEVEL_KEYS = ['schemaVersion', 'action', 'slots', 'missingSlots', 'status'];
+const TOP_LEVEL_KEYS = ['schemaVersion', 'action', 'slots', 'missingSlots', 'status', 'choice'];
 const TRANSFER_SLOT_KEYS = ['payee_ref', 'amount', 'source_account_ref'];
 const BILL_SLOT_KEYS = ['month', 'period', 'year', 'monthNumber'];
 const CARD_SLOT_KEYS = ['card_ref', 'amount'];
@@ -160,19 +161,14 @@ function validateBill(input, slots) {
   if ('month' in slots && 'period' in slots) fail('slots must contain either month or period, not both');
   if ('month' in slots) {
     const month = requireNonEmptyString(slots.month, 'slots.month');
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) fail('slots.month must use YYYY-MM format');
+    if (!validCalendarDate(`${month}-01`)) fail('slots.month must use supported YYYY-MM format');
   }
   if ('period' in slots) {
     const period = requireRecord(slots.period, 'slots.period');
     rejectUnknownKeys(period, ['start_date', 'end_date', 'timezone', 'label'], 'slots.period');
     for (const field of ['start_date', 'end_date', 'label']) requireNonEmptyString(period[field], `slots.period.${field}`);
-    if (period.timezone !== 'Asia/Shanghai') fail('slots.period.timezone must be Asia/Shanghai');
-    const calendarDate = value => {
-      if (typeof value !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/.test(value)) return false;
-      const [year, month, day] = value.split('-').map(Number); const parsed = new Date(Date.UTC(year, month - 1, day));
-      return parsed.getUTCFullYear() === year && parsed.getUTCMonth() + 1 === month && parsed.getUTCDate() === day;
-    };
-    if (!calendarDate(period.start_date) || !calendarDate(period.end_date) || period.start_date > period.end_date) fail('slots.period date range is invalid');
+    if (!validTimezone(period.timezone)) fail('slots.period.timezone must be a valid timezone');
+    if (!validCalendarDate(period.start_date) || !validCalendarDate(period.end_date) || period.start_date > period.end_date) fail('slots.period date range is invalid');
     const days = (Date.parse(`${period.end_date}T00:00:00Z`) - Date.parse(`${period.start_date}T00:00:00Z`)) / 86_400_000;
     if (days >= 366 || period.label.length > 80) fail('slots.period exceeds the supported range');
   }
@@ -261,9 +257,16 @@ function validateScenario(input, slots) {
 }
 
 function validateGoal(input, slots) {
-  rejectUnknownKeys(slots, ['goal_text', 'horizon', 'constraints'], 'slots');
+  rejectUnknownKeys(slots, ['goal_text', 'horizon', 'constraints', 'amount', 'deadline'], 'slots');
   if ('goal_text' in slots) requireNonEmptyString(slots.goal_text, 'slots.goal_text');
+  if ('amount' in slots) validateAmount(slots.amount, { maximum: 100_000_000 });
+  if ('deadline' in slots && !validCalendarDate(slots.deadline)) fail('slots.deadline must be a real supported date');
   const missing = 'goal_text' in slots ? [] : ['goal_text'];
+  // Goal details are optional for general read-only advice. A model can still
+  // explicitly request a precise amount/date while retaining known details.
+  if (Array.isArray(input.missingSlots)) for (const slot of input.missingSlots) {
+    if (['amount', 'deadline'].includes(slot) && !(slot in slots)) missing.push(slot);
+  }
   requireMissingSlots(input.missingSlots, missing); requireStatus(input.status, missing.length ? 'needs_clarification' : 'ready_for_resolution');
 
 }
@@ -295,6 +298,12 @@ function validateWealthExtended(input, slots) {
 export function validateParsedIntent(value) {
   const input = requireRecord(value, 'ParsedIntent');
   rejectUnknownKeys(input, TOP_LEVEL_KEYS, 'ParsedIntent');
+  if ('choice' in input) {
+    const choice = requireRecord(input.choice, 'choice');
+    rejectUnknownKeys(choice, ['optionId'], 'choice');
+    requireNonEmptyString(choice.optionId, 'choice.optionId');
+    if (choice.optionId.length > 128) fail('choice.optionId is too long');
+  }
   if (input.schemaVersion !== PARSED_INTENT_SCHEMA_VERSION) {
     fail(`schemaVersion must be ${PARSED_INTENT_SCHEMA_VERSION}`);
   }

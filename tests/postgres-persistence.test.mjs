@@ -25,6 +25,19 @@ async function fixture(t) {
   return { sql, owner: source.user.id, open, core: await open() };
 }
 
+test('Postgres range and month queries share inclusive local-day boundaries and honor timezone', { skip: !connectionString }, async t => {
+  const { core, sql, owner } = await fixture(t);
+  const instants = ['2026-08-31T15:59:59Z', '2026-08-31T16:00:00Z', '2026-09-30T15:59:59.999Z', '2026-09-30T16:00:00Z'];
+  for (const [index, occurredAt] of instants.entries()) {
+    const record = { id: `boundary-${index}`, accountId: 'ACC-CHECKING', occurredAt, type: 'expense', category: '测试', merchant: 'synthetic', amountFen: 123, currency: 'CNY', status: 'posted', source: 'synthetic_seed' };
+    await sql.unsafe('INSERT INTO banking_transactions (owner_id, transaction_id, account_id, occurred_at, amount_fen, record) VALUES ($1, $2, $3, $4, $5, $6)', [owner, record.id, record.accountId, occurredAt, record.amountFen, sql.json(record)]);
+  }
+  const ids = records => records.map(item => item.id).sort();
+  assert.deepEqual(ids(await core.repository.getTransactions({ month: '2026-09' })), ['boundary-1', 'boundary-2']);
+  assert.deepEqual(ids(await core.repository.getTransactions({ startDate: '2026-09-01', endDate: '2026-09-30', timezone: 'Asia/Shanghai' })), ['boundary-1', 'boundary-2']);
+  assert.deepEqual(ids(await core.repository.getTransactions({ startDate: '2026-09-01', endDate: '2026-09-30', timezone: 'America/New_York' })), ['boundary-2', 'boundary-3']);
+});
+
 test('Postgres JSONB: driver serializes once; operation fields and seeded/executed transactions are objects', { skip: !connectionString }, async t => {
   const { sql, owner, core } = await fixture(t);
   const [driver] = await sql.unsafe('SELECT jsonb_typeof($1::jsonb) AS kind, $1::jsonb AS record', [sql.json({ nested: { amountFen: 100 } })]);

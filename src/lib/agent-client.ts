@@ -1,7 +1,8 @@
 import { ApiError, type Analysis } from './api/contracts';
+import { validCalendarDate } from './calendar.mjs';
 
-export type AgentPlan = { monthlySavingFen: number; targetAmountFen: number | null };
-export type AgentReply = { intent: string; reply: string; needsClarification: boolean; plan: AgentPlan | null; analysis: Analysis; model: string; usage: { inputTokens: number; outputTokens: number } };
+export type AgentPlan = { monthlySavingFen: number; targetAmountFen: number | null; deadline?: string | null };
+export type AgentReply = { intent: string; reply: string; needsClarification: boolean; plan: AgentPlan | null; goal?: { targetAmountFen: number | null; deadline: string | null }; analysis: Analysis; model: string; usage: { inputTokens: number; outputTokens: number } };
 export type AgentTurn = { role: 'user' | 'assistant'; content: string };
 export async function askQwen(message: string, history: AgentTurn[], accessCode: string, signal: AbortSignal): Promise<AgentReply> {
   let response: Response;
@@ -13,6 +14,7 @@ export async function askQwen(message: string, history: AgentTurn[], accessCode:
   try { payload = await response.json(); } catch { throw new ApiError('MODEL_RESPONSE_ERROR', response.status === 429 ? '请求过于频繁，请一分钟后重试。' : '模型接口返回格式异常。'); }
   if (!response.ok || payload.code !== 'OK') throw new ApiError(payload.code || 'MODEL_ERROR', payload.message || '模型请求失败');
   const data = payload.data;
+  if (data?.plan?.deadline != null && !validCalendarDate(data.plan.deadline)) throw new ApiError('MODEL_RESPONSE_ERROR', '模型目标截止日期无效。');
   if (!data || typeof data.reply !== 'string' || typeof data.needsClarification !== 'boolean' || !data.analysis || !data.usage ||
     !Number.isSafeInteger(data.analysis.totalExpenseFen) || !Number.isInteger(data.analysis.subscriptionCount) ||
     (data.plan !== null && (!data.plan || !Number.isSafeInteger(data.plan.monthlySavingFen) || data.plan.monthlySavingFen <= 0 || data.plan.monthlySavingFen > 300000 || (data.plan.targetAmountFen !== null && (!Number.isSafeInteger(data.plan.targetAmountFen) || data.plan.targetAmountFen <= 0)) || 'saveRateBps' in data.plan || 'category' in data.plan))) {

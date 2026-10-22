@@ -83,7 +83,9 @@ export type WealthSlots = {
   quantity_or_amount?: { kind: "amount"; amount_minor: number; currency: "CNY" } | { kind: "units"; units_milli: number };
 };
 
-export type ParsedIntent =
+export type ParsedIntent = ParsedIntentBody & { choice?: { optionId: string } };
+
+type ParsedIntentBody =
   | {
       schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
       action: "transfer.create";
@@ -150,8 +152,8 @@ export type ParsedIntent =
   | {
       schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
       action: "orchestrator.goal";
-      slots: { goal_text?: string; horizon?: unknown; constraints?: unknown };
-      missingSlots: ["goal_text"] | [];
+      slots: { goal_text?: string; horizon?: unknown; constraints?: unknown; amount?: { amount_minor: number; currency: "CNY" }; deadline?: string };
+      missingSlots: Array<"goal_text" | "amount" | "deadline">;
       status: "ready_for_resolution" | "needs_clarification";
     }
   | {

@@ -23,7 +23,8 @@ const transfer = slots => ({
 });
 const bill = slots => ({ schemaVersion: '1.0.0', action: 'bill.summary', slots, missingSlots: slots.month ? [] : ['month'], status: slots.month ? 'ready_for_resolution' : 'needs_clarification' });
 
-function parseIntent(message) {
+function parseIntent(message, options) {
+  if (options?.context && !/账单|转账/.test(message)) return require('./fixtures/continuation-model.mjs').continuationModel(message, options);
   if (/账单/.test(message)) return bill(/8月/.test(message) ? { month: '2026-08' } : {});
   if (/重名/.test(message)) return transfer({ payee_ref: '王先生', amount: { amount_minor: 50000, currency: 'CNY' }, source_account_ref: '活期账户' });
   if (/缺金额/.test(message)) return transfer({ payee_ref: '张三', source_account_ref: '活期账户' });
@@ -40,11 +41,17 @@ test('理财澄清使用普通用户语言，并能理解风险、月份和取�
   assert.deepEqual(parseClarificationAnswer('计划结束前都不需要取', { action: 'wealth.recommend', slot: 'liquidity_requirement', slots: {} }), { kind: 'slot', updates: { liquidity_requirement: 'AT_MATURITY' } });
 });
 
-test('统一 Agent 续接时只回复 R2 也会被直接识别，不要求复述完整句子', async () => {
+test('统一 Agent 续接时模型结合草稿理解 R2，不要求复述完整句子', async () => {
   const core = createBankingCore();
   let modelCalls = 0;
-  const parseWealth = async () => {
+  const parseWealth = async (message, options) => {
     modelCalls++;
+    if (options.context) {
+      assert.equal(message, 'R2');
+      assert.equal(options.context.pendingSlot, 'max_risk_level');
+      assert.equal(options.context.slots.goal, '准备应急金');
+      return { schemaVersion: '1.0.0', action: 'wealth.recommend', slots: { ...options.context.slots, max_risk_level: 'R2' }, missingSlots: ['horizon_days', 'liquidity_requirement'], status: 'needs_clarification' };
+    }
     return { schemaVersion: '1.0.0', action: 'wealth.recommend', slots: { goal: '准备应急金' }, missingSlots: ['max_risk_level', 'horizon_days', 'liquidity_requirement'], status: 'needs_clarification' };
   };
   const first = await json(await handleBankingAgent(request({ message: '推荐理财产品' }), { env, core, parseIntent: parseWealth, now: () => 6000 }));
@@ -53,7 +60,7 @@ test('统一 Agent 续接时只回复 R2 也会被直接识别，不要求复述
   const second = await json(await handleBankingAgent(request({ continuationToken: first.data.continuationToken, message: 'R2' }), { env, core, parseIntent: parseWealth, now: () => 6000 }));
   assert.equal(second.data.slot, 'horizon_days');
   assert.match(second.data.question, /按月回答/);
-  assert.equal(modelCalls, 1);
+  assert.equal(modelCalls, 2);
 });
 
 test('缺账户先展示真实账户选项，选择后返回 Core 正式预览', async () => {

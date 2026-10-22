@@ -1,4 +1,5 @@
 import { validateParsedIntent } from './validate-parsed-intent.mjs';
+import { localDate as calendarLocalDate } from '../lib/calendar.mjs';
 import { transferFromResolvedIntent } from '../banking-core/wire.mjs';
 import { handleCard } from './handlers/card-handler.mjs';
 
@@ -56,11 +57,7 @@ export async function handleBillSummary(intent, repository) {
   const month = intent.slots.month;
   const period = intent.slots.period;
   if (!month && !period) throw new Error('bill.summary requires a resolved time period before dispatch');
-  const localDate = occurredAt => {
-    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(occurredAt));
-    const value = type => parts.find(item => item.type === type)?.value ?? '';
-    return `${value('year')}-${value('month')}-${value('day')}`;
-  };
+  const localDate = occurredAt => calendarLocalDate(occurredAt, period?.timezone ?? 'Asia/Shanghai');
   const summarize = items => items.reduce((result, transaction) => {
     if (transaction.type === 'income') result.totalIncomeFen += transaction.amountFen;
     if (transaction.type === 'expense') {
@@ -71,10 +68,7 @@ export async function handleBillSummary(intent, repository) {
   }, { totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: items.length, categoryTotals: {} });
   const transactions = month
     ? await repository.getTransactions({ month })
-    : (await repository.getTransactions()).filter(transaction => {
-        const value = localDate(transaction.occurredAt);
-        return value >= period.start_date && value <= period.end_date;
-      });
+    : await repository.getTransactions({ startDate: period.start_date, endDate: period.end_date, timezone: period.timezone });
   const summary = summarize(transactions);
   const context = await repository.getContextInfo();
   const asOfDate = localDate(context.asOf);
@@ -95,7 +89,7 @@ export async function handleBillSummary(intent, repository) {
       const monthStart = `${value}-01`;
       const monthEnd = new Date(Date.UTC(year, oneBasedMonth, 0)).toISOString().slice(0, 10);
       const isPartialSelection = !!period && (period.start_date > monthStart || period.end_date < monthEnd);
-      return monthStart > asOfDate ? 'future' : monthEnd >= asOfDate || isPartialSelection ? 'partial' : 'complete';
+      return !(context.availableMonths ?? []).includes(value) ? 'unavailable' : monthStart > asOfDate ? 'future' : monthEnd >= asOfDate || isPartialSelection ? 'partial' : 'complete';
     })(),
     ...summarize(transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(value))),
   }));
@@ -105,6 +99,7 @@ export async function handleBillSummary(intent, repository) {
     action: 'bill.summary',
     data: {
       ...summary,
+      coverage: { status: 'unverified', asOf: context.asOf, availableMonths: context.availableMonths ?? [], warning: '仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。' },
       ...(month ? { month } : { period: { startDate: period.start_date, endDate: period.end_date, timezone: period.timezone, label: period.label } }),
       ...(!month ? { monthlyBreakdown } : {}),
     },
@@ -187,7 +182,7 @@ export async function handleGoal(intent, repository) {
     ...(cards.length ? [{ action: 'card.get', origin: 'agent_suggested', reason: '查看现有卡片预算和消费情况；不会自动调整预算。', requires_confirmation: false }] : []),
     ...(products.length && availableBalanceFen > 0 ? [{ action: 'wealth.recommend', origin: 'agent_suggested', reason: '如有明确风险、期限和流动性约束，可进行只读产品筛选。', requires_confirmation: false }] : []),
   ];
-  return { ok: true, kind: 'goal_plan', action: 'orchestrator.goal', data: { goal_text: intent.slots.goal_text, horizon: intent.slots.horizon ?? null, constraints: intent.slots.constraints ?? null, steps, snapshot: { available_balance_minor: availableBalanceFen, active_subscription_count: activeSubscriptions.length, potentially_unused_subscription_count: potentiallyUnused.length, card_count: cards.length }, execution_allowed: false }, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: [...accounts.map(item => item.id), ...activeSubscriptions.map(item => item.id), ...cards.map(item => item.id), ...products.map(item => item.id)] }] };
+  return { ok: true, kind: 'goal_plan', action: 'orchestrator.goal', data: { goal_text: intent.slots.goal_text, horizon: intent.slots.horizon ?? null, targetAmountFen: intent.slots.amount?.amount_minor ?? null, deadline: intent.slots.deadline ?? null, constraints: intent.slots.constraints ?? null, steps, snapshot: { available_balance_minor: availableBalanceFen, active_subscription_count: activeSubscriptions.length, potentially_unused_subscription_count: potentiallyUnused.length, card_count: cards.length }, execution_allowed: false }, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: [...accounts.map(item => item.id), ...activeSubscriptions.map(item => item.id), ...cards.map(item => item.id), ...products.map(item => item.id)] }] };
 }
 
 function orchestratorError(error) {

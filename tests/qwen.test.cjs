@@ -7,6 +7,34 @@ function request(body = { message: '每月存2000元', consent: true, history: [
   return new Request('https://demo.example/api/agent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Saveflow-Access': access, Origin: 'https://demo.example' }, body: JSON.stringify(body) });
 }
 const upstream = (value = decision, finish = 'stop') => Response.json({ choices: [{ finish_reason: finish, message: { content: JSON.stringify(value) } }], usage: { prompt_tokens: 100, completion_tokens: 50 } });
+
+test('Qwen goal deadline uses injected local date, is returned separately, and survives confirmed plan parameters', async () => {
+  const { handleAgent, interpret, context } = await import('../server/qwen.mjs');
+  const { createBankingCore } = await import('../src/banking-core/core.mjs');
+  const now = () => Date.parse('2026-10-21T16:10:00Z');
+  const output = { ...decision, targetAmountFen: 1000000, monthlySavingFen: null, months: null, deadline: '2026-12-31' };
+  const response = await handleAgent(request({ message: '我要在年底存够一万', consent: true, history: [] }), { env, now, fetchImpl: async (_url, options) => {
+    const prompt = JSON.parse(options.body).messages[0].content;
+    assert.ok(prompt.includes('"currentDate":"2026-10-22"'));
+    assert.ok(prompt.includes('"timezone":"Asia/Shanghai"'));
+    assert.ok(prompt.includes(context.currentMonth));
+    return upstream(output);
+  } });
+  const { data } = await response.json();
+  assert.equal(data.goal.targetAmountFen, 1000000);
+  assert.equal(data.goal.deadline, '2026-12-31');
+  const draft = interpret({ ...output, targetAmountFen: context.savedAmountFen + 600000 }, '', { now }).plan;
+  assert.equal(draft.deadline, '2026-12-31');
+  assert.equal(draft.monthlySavingFen, 200000);
+  const { OperationStore } = await import('../src/banking-core/operation-store.mjs');
+  const store = new OperationStore();
+  const core = createBankingCore({ store, ownerId: 'test-goal-owner' });
+  const id = crypto.randomUUID();
+  await core.createLegacyPlan(id, { ...draft, confirmed: true });
+  assert.equal(store.get('test-goal-owner', id).legacyPlan.deadline, '2026-12-31');
+  assert.throws(() => interpret({ ...output, deadline: '2026-02-30' }, '', { now }));
+  assert.equal(interpret({ ...output, deadline: '2025-12-31' }, '', { now }).needsClarification, true);
+});
 test('Qwen: server auth, consent and history validation prevent model calls', async () => {
   const { handleAgent } = await import('../server/qwen.mjs');
   const fail = async () => { throw new Error('must not call provider'); };

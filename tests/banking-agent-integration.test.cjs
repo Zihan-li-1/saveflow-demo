@@ -12,7 +12,7 @@ let ip = 0;
 const request = body => new Request('http://localhost/api/banking-agent', {
   method: 'POST', headers: { 'content-type': 'application/json', 'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'x-forwarded-for': `integration-${++ip}` }, body: JSON.stringify(body),
 });
-const parse = message => ({
+const parse = (message, options) => options?.context ? require('./fixtures/continuation-model.mjs').continuationModel(message, options) : ({
   schemaVersion: '1.0.0', action: 'transfer.create',
   slots: { payee_ref: '张三', amount: { amount_minor: 50000, currency: 'CNY' }, ...(message.includes('账户') ? { source_account_ref: '活期账户' } : {}) },
   missingSlots: message.includes('账户') ? [] : ['source_account_ref'], status: message.includes('账户') ? 'ready_for_resolution' : 'needs_clarification',

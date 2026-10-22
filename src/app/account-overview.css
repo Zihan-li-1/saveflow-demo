@@ -1,0 +1,21 @@
+.account-overview { flex: 1; min-width: 0; background: #fff; display: flex; flex-direction: column; padding: 32px 8%; overflow: auto; }
+.account-overview-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
+.account-overview-header .eyebrow { color: #acb4bd; font-size: 9px; letter-spacing: .11em; }
+.account-overview-header h2 { color: #33404d; font-size: 20px; margin: 5px 0 0; }
+.account-chip { color: #2f6ec7; background: #eaf2ff; font-size: 11px; padding: 5px 10px; border-radius: 99px; }
+.account-balance-card { border: 1px solid #e9edf1; background: #fff; border-radius: 10px; padding: 16px; }
+.account-balance-card span { color: #a2abb4; font-size: 10px; display: block; }
+.account-balance-card strong { color: #2a3948; font-size: 28px; display: block; margin: 8px 0 4px; }
+.account-balance-card small { color: #a0a9b3; font-size: 10px; }
+.voucher-section { margin-top: 24px; }
+.voucher-section-title { font-size: 12px; color: #53606d; margin-bottom: 12px; font-weight: 600; }
+.voucher-empty { color: #a2abb4; font-size: 11px; }
+.expense-voucher { border: 1px solid #e4eaf1; border-radius: 10px; background: #fbfcfe; padding: 14px; margin-bottom: 12px; text-align: left; }
+.expense-voucher-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid #eef1f4; }
+.expense-voucher-parties { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #47525f; flex-wrap: wrap; }
+.expense-voucher-arrow { color: #b9c1c8; }
+.expense-voucher-head strong { color: #2e4050; font-size: 22px; }
+.expense-voucher-body { display: grid; gap: 8px; padding-top: 12px; }
+.expense-voucher-row { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; color: #8e9aa6; }
+.expense-voucher-row b { color: #586675; font-weight: 500; text-align: right; }
+.expense-voucher small { display: block; color: #a0a9b3; font-size: 9px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #eef1f4; }

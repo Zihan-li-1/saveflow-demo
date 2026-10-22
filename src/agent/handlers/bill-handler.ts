@@ -1,3 +1,4 @@
+import { localDate as calendarLocalDate } from "../../lib/calendar.mjs";
 import type { FinancialContextRepository } from "../../banking-core/contracts";
 import { summarizeBills } from "../../skills/bill/bill-skill";
 import type { DispatchResult } from "../dispatch-result";
@@ -11,17 +12,10 @@ export async function handleBillSummary(
   const period = intent.slots.period;
   if (!month && !period) throw new Error("bill.summary requires a resolved time period before dispatch");
 
-  const localDate = (occurredAt: string): string => {
-    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(occurredAt));
-    const value = (type: Intl.DateTimeFormatPartTypes) => parts.find(item => item.type === type)?.value ?? "";
-    return `${value("year")}-${value("month")}-${value("day")}`;
-  };
+  const localDate = (occurredAt: string): string => calendarLocalDate(occurredAt, period?.timezone ?? "Asia/Shanghai");
   const transactions = month
     ? await repository.getTransactions({ month })
-    : (await repository.getTransactions()).filter(transaction => {
-        const value = localDate(transaction.occurredAt);
-        return value >= period!.start_date && value <= period!.end_date;
-      });
+    : await repository.getTransactions({ startDate: period!.start_date, endDate: period!.end_date, timezone: period!.timezone });
   const summary = summarizeBills(transactions);
   const context = await repository.getContextInfo();
   const asOfDate = localDate(context.asOf);
@@ -41,7 +35,7 @@ export async function handleBillSummary(
     const monthStart = `${value}-01`;
     const monthEnd = new Date(Date.UTC(year, oneBasedMonth, 0)).toISOString().slice(0, 10);
     const isPartialSelection = !!period && (period.start_date > monthStart || period.end_date < monthEnd);
-    const status = monthStart > asOfDate ? "future" : monthEnd >= asOfDate || isPartialSelection ? "partial" : "complete";
+    const status = !(context.availableMonths ?? []).includes(value) ? "unavailable" : monthStart > asOfDate ? "future" : monthEnd >= asOfDate || isPartialSelection ? "partial" : "complete";
     return { month: value, status, ...summarizeBills(items) };
   });
 
@@ -51,6 +45,7 @@ export async function handleBillSummary(
     action: "bill.summary",
     data: {
       ...summary,
+      coverage: { status: "unverified", asOf: context.asOf, availableMonths: context.availableMonths ?? [], warning: "仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。" },
       ...(month ? { month } : { period: { startDate: period!.start_date, endDate: period!.end_date, timezone: period!.timezone, label: period!.label } }),
       ...(!month ? { monthlyBreakdown } : {}),
     },

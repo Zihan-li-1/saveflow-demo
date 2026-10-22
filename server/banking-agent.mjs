@@ -113,7 +113,7 @@ export async function handleBankingAgent(
     const core = options.core ?? await getConfiguredBankingCore(env);
     const repository = options.repository ?? core.repository;
     const scenarioScope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
-    const result = await runBankingConversation(body, { core, repository, env, now, parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope, understandContinuation: implementation === 'trueforge' });
+    const result = await runBankingConversation(body, { core, repository, env, now, timezone: options.timezone ?? 'Asia/Shanghai', parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope });
     const data = result.data?.recovery ? { ...result.data, recovery: { ...result.data.recovery, continuationToken: result.data.continuationToken } } : result.data;
     return reply(result.httpStatus, result.code, result.message, data, result.replyContext);
   } catch (error) {

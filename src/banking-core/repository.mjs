@@ -1,4 +1,5 @@
 // @ts-check
+import { transactionMatchesPeriod } from '../lib/calendar.mjs';
 import seed from '../data/saveflow_mock_data.json' with { type: 'json' };
 import { assertFen, BankingError, seedYuanToFen } from './errors.mjs';
 
@@ -33,12 +34,12 @@ export function createFinancialContext(source = seed) {
   let revision = 0;
   /** @type {import('./contracts').SyncFinancialContextRepository} */
   const repository = {
-    getContextInfo: () => ({ datasetId: raw.datasetId, asOf: `${raw.snapshotDate}T00:00:00+08:00`, currentMonth: raw.analysisFixtures.currentMonth, previousMonth: raw.analysisFixtures.previousMonth, snapshotId: `${raw.datasetId}:${revision}`, dataSource: 'synthetic_demo_only', currency: 'CNY' }),
+    getContextInfo: () => ({ datasetId: raw.datasetId, asOf: `${raw.snapshotDate}T00:00:00+08:00`, currentMonth: raw.analysisFixtures.currentMonth, previousMonth: raw.analysisFixtures.previousMonth, snapshotId: `${raw.datasetId}:${revision}`, dataSource: 'synthetic_demo_only', currency: 'CNY', availableMonths: [...raw.historicalMonths] }),
     getAccounts: () => structuredClone(accounts),
     getAccount: id => structuredClone(accounts.find(a => a.id === id)),
     getPayees: () => structuredClone(payees),
     getPayee: id => structuredClone(payees.find(p => p.id === id)),
-    getTransactions: (filter = {}) => structuredClone(transactions.filter(t => (!filter.accountId || t.accountId === filter.accountId) && (!filter.month || t.occurredAt.startsWith(`${filter.month}-`)))),
+    getTransactions: (filter = {}) => structuredClone(transactions.filter(t => (!filter.accountId || t.accountId === filter.accountId) && transactionMatchesPeriod(t.occurredAt, filter))),
     getCards: () => structuredClone(cards),
     getCard: id => structuredClone(cards.find(c => c.id === id)),
     getSubscriptions: () => raw.subscriptions.map(s => ({ id: s.id, name: s.name, monthlyFeeFen: seedYuanToFen(s.monthlyFee), status: s.status === 'active' ? 'active' : 'cancelled', lastUsedDate: s.lastUsedDate, isPotentiallyUnused: s.isPotentiallyUnused, mandateId: null })),

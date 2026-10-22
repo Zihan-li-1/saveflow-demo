@@ -1,3 +1,4 @@
+import { continuationModel } from './fixtures/continuation-model.mjs';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { test } from 'node:test';
@@ -11,7 +12,7 @@ import seed from '../src/data/saveflow_mock_data.json' with { type: 'json' };
 import { startTrialMcpServer } from '../server/mcp/saveflow-trial.mjs';
 
 async function withClient(repository, verify, options = {}) {
-  const server = startTrialMcpServer({ host: '127.0.0.1', port: 0, repository, ...options });
+  const server = startTrialMcpServer({ host: '127.0.0.1', port: 0, repository, parseIntent: continuationModel, ...options });
   const client = new Client({ name: 'saveflow-trial-test', version: '0.1.0' });
   try {
     await once(server, 'listening');
@@ -102,7 +103,9 @@ test('month filtering returns different months and an honest empty result', asyn
     assert.notEqual(july.data.totalExpenseFen, 846000);
     const empty = (await call(client, { month: '2026-10' })).structuredContent;
     assert.equal(empty.ok, true);
-    assert.deepEqual(empty.data, { month: '2026-10', totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: 0, categoryTotals: {} });
+    const { coverage, ...emptySummary } = empty.data;
+    assert.match(coverage.warning, /无记录不代表/);
+    assert.deepEqual(emptySummary, { month: '2026-10', totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: 0, categoryTotals: {} });
     assert.deepEqual(empty.evidence[0].entityIds, []);
   });
 });
@@ -246,7 +249,7 @@ test('HTTP and MCP can resume the same shared clarification rules in both direct
       const response = await handleBankingAgent(new Request('http://localhost/api/banking-agent', {
         method: 'POST', headers: { 'content-type': 'application/json', 'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'x-forwarded-for': `mcp-parity-${++requestNumber}` },
         body: JSON.stringify(body),
-      }), { env, core, now: () => 1000, parseIntent: async () => buildParsedIntent('transfer.create', { payee_ref: '张三', amount: { amount_minor: 50000, currency: 'CNY' } }) });
+      }), { env, core, now: () => 1000, parseIntent: async (message, options) => options.context ? continuationModel(message, options) : buildParsedIntent('transfer.create', { payee_ref: '张三', amount: { amount_minor: 50000, currency: 'CNY' } }) });
       assert.equal(response.status, 200);
       return (await response.json()).data;
     };

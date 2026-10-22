@@ -212,7 +212,7 @@ test('retired phrase flags cannot override an explicitly configured legacy runti
   assert.equal(parsed, 4);
   const legacy = await handleBankingAgent(request(body('anything')), { env: { ...env, SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen' }, core, parseIntent: async () => ({ schemaVersion: '1.0.0', action: 'bill.summary', slots: {}, missingSlots: ['month'], status: 'needs_clarification' }), trueforgeBillAdapter: never });
   const token = (await legacy.json()).data.continuationToken;
-  const resumed = await handleBankingAgent(request({ ...body('2026 年 8 月'), continuationToken: token }), { env: { ...env, SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen' }, core, trueforgeBillAdapter: never }); assert.equal(resumed.status, 200);
+  const resumed = await handleBankingAgent(request({ ...body('2026 年 8 月'), continuationToken: token }), { env: { ...env, SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen' }, core, parseIntent, trueforgeBillAdapter: never }); assert.equal(resumed.status, 200);
 });
 
 test('retired bill pilot tokens cannot cross the unified Banking boundary', async () => {

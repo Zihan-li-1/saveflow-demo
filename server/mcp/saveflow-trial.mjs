@@ -12,6 +12,8 @@ import { handleBillSummary } from '../../src/agent/runtime.mjs';
 import { buildParsedIntent } from '../../src/agent/clarification/merge-intent.mjs';
 import { ParsedIntentValidationError } from '../../src/agent/validate-parsed-intent.mjs';
 import { runBankingConversation } from '../banking-orchestrator.mjs';
+import { parseTrueforgeBankingIntent } from '../trueforge-banking-runtime.mjs';
+import { parseBankingIntent } from '../banking-intent-parser.mjs';
 
 // Always use the seed's fixed Mock owner, regardless of DATABASE_URL or model input.
 const mockContext = createFinancialContext();
@@ -20,7 +22,7 @@ if (mockContext.ownerId !== 'USR-DEMO-001') {
 }
 const mockCore = createBankingCore();
 // A process-local secret permits offline trials; restart invalidates old tokens.
-const trialEnv = { CONTINUATION_TOKEN_SECRET: process.env.CONTINUATION_TOKEN_SECRET ?? randomBytes(32).toString('hex') };
+const trialEnv = { ...process.env, CONTINUATION_TOKEN_SECRET: process.env.CONTINUATION_TOKEN_SECRET ?? randomBytes(32).toString('hex') };
 
 const continuationFields = {
   continuationToken: z.string().max(10000).optional().describe('上一次同名工具返回的续接凭据'),
@@ -39,7 +41,7 @@ function toolResult(result) {
 }
 
 // Repository injection is for local verification only; it is never an MCP argument.
-export function createTrialMcpServer(repository, { core = mockCore, env = trialEnv, now = Date.now } = {}) {
+export function createTrialMcpServer(repository, { core = mockCore, env = trialEnv, now = Date.now, timezone = 'Asia/Shanghai', parseIntent } = {}) {
   repository ??= core.repository;
   const server = new McpServer({ name: 'saveflow-trial', version: '0.2.0' });
   server.registerTool('bill_summary', {
@@ -93,7 +95,8 @@ export function createTrialMcpServer(repository, { core = mockCore, env = trialE
         const initialIntent = continuing ? undefined : buildParsedIntent(action, slots);
         const result = await runBankingConversation(body, {
           // Only expose prepare to the shared workflow; no decision or execution capability.
-          core: { prepare: core.prepare.bind(core) }, repository, env, now, initialIntent, expectedAction: action, origin: 'agent_suggested',
+          core: { prepare: core.prepare.bind(core) }, repository, env, now, timezone, initialIntent, expectedAction: action, origin: 'agent_suggested',
+          parseIntent: parseIntent ?? (env.SAVEFLOW_BANKING_RUNTIME === 'legacy-qwen' ? parseBankingIntent : parseTrueforgeBankingIntent),
         });
         const clarification = result.code === 'NEEDS_CLARIFICATION';
         return toolResult({
@@ -150,7 +153,7 @@ export function startTrialMcpServer({
   core = mockCore,
   repository = core.repository,
   env = trialEnv,
-  now = Date.now,
+  now = Date.now, timezone = 'Asia/Shanghai', parseIntent,
 } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid MCP port');
   const httpServer = createServer(async (request, response) => {
@@ -163,7 +166,7 @@ export function startTrialMcpServer({
       response.writeHead(405, { Allow: 'POST' }).end();
       return;
     }
-    const server = createTrialMcpServer(repository, { core, env, now });
+    const server = createTrialMcpServer(repository, { core, env, now, timezone, parseIntent });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

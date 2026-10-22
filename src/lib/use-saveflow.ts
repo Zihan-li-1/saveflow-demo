@@ -23,6 +23,7 @@ export function useSaveflow() {
   const [replyStyle, setReplyStyle] = useState<"concise" | "friendly" | "professional">("concise");
   const [accessCode, setAccessCode] = useState("");
   const [targetAmountFen, setTargetAmountFen] = useState<number | null>(saveflowMock.goal.targetAmount * 100);
+  const targetDeadline = useRef<string | null>(null);
   const [usage, setUsage] = useState<{ inputTokens: number; outputTokens: number } | null>(null);
   const conversation = useRef<AgentTurn[]>([]);
   const stageRef = useRef<Stage>("welcome");
@@ -122,7 +123,8 @@ export function useSaveflow() {
       const body = choice
         ? { continuationToken: requestToken, choice: { optionId: choice.optionId }, replyStyle }
         : { message: text, continuationToken: requestToken, replyStyle };
-      const answer = await askBankingAgent(body, accessCode, active.current.signal);
+      const history = messages.slice(-8).map(message => ({ role: message.role === "user" ? "user" as const : "assistant" as const, content: message.text.slice(0, 2000) })).filter(message => message.content.trim());
+      const answer = await askBankingAgent({ ...body, history }, accessCode, active.current.signal);
       if (generation.current !== version) return;
       const replyText = [answer.reply!.text, ...answer.reply!.safetyNotices].join("\n");
       continuationIssuedAt.current = Date.now();
@@ -280,7 +282,7 @@ export function useSaveflow() {
         setFocusedFlowId(current => current && bankingFlows[current]?.previewOperationId === data.operationId ? null : current);
       }
     }
-    addMessage({ role: "agent", kind: "banking_receipt", text: `转账已完成，已从同一后端核对余额与交易记录：余额 ¥${(account.availableBalanceFen / 100).toFixed(2)}，交易 ${booked.id} 已记账。`, receipt,
+    addMessage({ role: "agent", kind: "banking_receipt", text: "转账已完成，凭证可在账户概览中查看。", receipt,
       verification: { availableBalanceFen: account.availableBalanceFen, transactionId: booked.id, occurredAt: booked.occurredAt, amountFen: booked.amountFen, status: booked.status } });
     setActiveTransferOperationId(current => current === data.operationId ? null : current);
   };
@@ -355,6 +357,7 @@ export function useSaveflow() {
         setUsage(answer.usage);
         addMessage({ role: "agent", text: answer.reply, ...(answer.intent === "analyze_bills" || answer.intent === "subscriptions" ? { kind: "analysis" as const, analysis: answer.analysis } : {}) });
         if (answer.plan) {
+          targetDeadline.current = answer.plan.deadline ?? null;
           setMonthlySaving(answer.plan.monthlySavingFen / 100);
           setTargetAmountFen(answer.plan.targetAmountFen);
           send("ANALYZED");
@@ -379,13 +382,13 @@ export function useSaveflow() {
     addMessage({ role: "agent", kind: receipt.status === "succeeded" ? "result" : "error", text: receipt.message });
   };
   const confirmPlan = async () => {
-    const draft = { monthlySavingFen: Math.round(monthlySaving * 100), targetAmountFen, confirmed: true as const };
+    const draft = { monthlySavingFen: Math.round(monthlySaving * 100), targetAmountFen, ...(targetDeadline.current ? { deadline: targetDeadline.current } : {}), confirmed: true as const };
     const invalid = validatePlan(draft) || (Math.abs(monthlySaving * 100 - draft.monthlySavingFen) > 0.000001 ? "金额最多保留两位小数。" : null);
     if (invalid) { setValidation(invalid); return; }
     if (!send("CONFIRM")) return;
     setValidation(""); setFailure("plan");
     const id = crypto.randomUUID(); setOperationId(id);
-    addMessage({ role: "user", text: `确认创建目标计划：每月 ¥${monthlySaving}。本次不发起支付。` });
+    addMessage({ role: "user", text: `确认创建目标计划：每月 ¥${monthlySaving}${targetDeadline.current ? `，截止 ${targetDeadline.current}` : ""}。本次不发起支付。` });
     try {
       if (apiConfig.mode === "http") sessionStorage.setItem(pendingKey, id);
       settle(await request("create-plan", draft, { operationId: id, accessCode }));
@@ -411,6 +414,7 @@ export function useSaveflow() {
   const cancelPlan = () => { if (send("CANCEL")) { setValidation(""); addMessage({ role: "agent", text: "本次计划已取消，未提交执行。" }); } };
   const restart = () => {
     if (!send("RESET")) return;
+    targetDeadline.current = null;
     generation.current++; active.current?.abort(); setMessages(initialMessages); setInput("");
     setMonthlySaving(saveflowMock.goal.monthlySaving); setValidation(""); setOperationId(""); setConsent(false);
     setTargetAmountFen(saveflowMock.goal.targetAmount * 100); setUsage(null); conversation.current = []; setBankingContinuation(null); lastBankingRequest.current = null;
@@ -426,9 +430,14 @@ export function useSaveflow() {
     void startBanking("", { optionId, label });
   };
   const editTransferPreview = (data: BankingAgentData, message: string) => {
-    const flow = transferFlow(bankingFlows, data);
-    if (modelMode !== "banking" || !isTrialPreview(data) || !flow || !canTransition(stageRef.current, "START")) return;
-    void startBanking(message, undefined, flow.id);
+    if (modelMode !== "banking" || !canTransition(stageRef.current, "START")) return;
+    if (isTrialPreview(data)) {
+      const flow = transferFlow(bankingFlows, data);
+      if (!flow) return;
+      void startBanking(message, undefined, flow.id);
+    } else {
+      void startBanking(message);
+    }
   };
   return { stage, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId) : startDemo(goal.current), canStart: ["welcome", "success", "cancelled", "clarifying", "answered"].includes(stage), canReset: canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
 }

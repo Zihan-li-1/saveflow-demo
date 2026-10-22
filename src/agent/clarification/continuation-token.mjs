@@ -26,6 +26,7 @@ export function issueContinuationToken(input, secret, now = Date.now(), ttlMs = 
     action: input.action,
     slots: input.slots ?? {},
     pendingSlot: input.pendingSlot,
+    ...(input.question ? { question: input.question } : {}),
     choices: input.choices ?? [],
     selections: input.selections ?? {},
     ...(input.operation ? { operation: input.operation } : {}),
@@ -40,6 +41,7 @@ export function verifyContinuationToken(token, secret, now = Date.now()) {
   const parts = token.split('.');
   if (parts.length !== 3 || parts.some(part => !part || !/^[A-Za-z0-9_-]+$/.test(part))) throw new Error('续接凭据无效');
   const [ivEncoded, tagEncoded, ciphertextEncoded] = parts;
+  if (parts.some(part => Buffer.from(part, 'base64url').toString('base64url') !== part)) throw new Error('续接凭据无效');
   let payload;
   try {
     const iv = Buffer.from(ivEncoded, 'base64url');
