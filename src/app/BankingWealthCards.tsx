@@ -1,5 +1,6 @@
 "use client";
 
+import { stageCopy } from "@/lib/flow-machine";
 import type { BankingAgentData } from "@/lib/banking-agent-client";
 
 const riskText = (level: string) => level === "R1" ? "较低风险，短期可能约亏 0%–2%" : level === "R2" ? "中等风险，阶段亏损可能约 2%–10%" : level === "R3" ? "较高风险，亏损可能超过 10%" : "风险情况待确认";
@@ -25,7 +26,7 @@ export function BankingWealthPreview({ data, active, busy, onConfirm, onReject, 
   const preview = data?.preview;
   if (!data || !preview) return null;
   return <div className="banking-preview-card card-action-preview">
-    <div><b>模拟理财操作预览</b><span>{active ? "等待单独确认" : "已失效"}</span></div>
+    <div><b>模拟理财操作预览</b><span>{data.coreStage && data.coreStage !== "plan" ? stageCopy[data.coreStage] : active ? "等待单独确认" : "已失效"}</span></div>
     <strong>{data.action === "wealth.subscribe" ? "申购" : "赎回"}</strong>
     <p>{String(preview.summary || "")}</p>
     {data.disclosure && <small>{String(data.disclosure.risk_disclosure || "")}</small>}

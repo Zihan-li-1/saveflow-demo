@@ -1,6 +1,9 @@
 import { writeOutcomeTransitions } from "../banking-core/action-machine.mjs";
 
 export type Stage = "welcome" | "analyzing" | "plan" | "edit" | "executing" | "success" | "cancelled" | "error" | "unknown" | "checking" | "clarifying" | "answered";
+// Agent request completion and Core operation completion are independent.
+export type CoreOperationStage = Extract<Stage, "plan" | "executing" | "checking" | "unknown" | "success" | "error" | "cancelled">;
+export const coreOperationBlocksInput = (stage: CoreOperationStage) => ["executing", "checking", "unknown"].includes(stage);
 export type FlowEvent = "START" | "ANALYZED" | "EDIT" | "SAVE" | "CONFIRM" | "SUCCEEDED" | "FAILED" | "UNCERTAIN" | "CHECK" | "CANCEL" | "RESET" | "CLARIFY" | "ANSWER";
 
 // No write retry or reset is permitted while the outcome is unknown.
