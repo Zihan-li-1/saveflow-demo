@@ -77,7 +77,7 @@ export async function handleBankingAgent(
   const requestId = crypto.randomUUID();
   const reply = (status, code, message, data, replyContext) => Response.json(
     responseEnvelope(requestId, code, message, data, style, replyContext),
-    { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } },
+    { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Request-ID': requestId } },
   );
   const authFailure = (category, status, code, message) => {
     const diagnostic = { event: 'banking_auth_failure', category, requestId };

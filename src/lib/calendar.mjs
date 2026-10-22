@@ -1,5 +1,5 @@
 export function validTimezone(value) {
-  if (typeof value !== 'string' || !value) return false;
+  if (typeof value !== 'string' || !value || value.trim() !== value || /^[+-]/.test(value)) return false;
   try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; } catch { return false; }
 }
 

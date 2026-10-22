@@ -1,0 +1,66 @@
+{
+  "code": "OK",
+  "requestId": "5b7d6e6d-4489-492a-847c-e9bfd3473fc6",
+  "data": {
+    "status": "bill_result",
+    "action": "bill.summary",
+    "data": {
+      "period": {
+        "startDate": "2026-06-01",
+        "endDate": "2026-09-30",
+        "timezone": "Asia/Shanghai",
+        "label": "2026年6月至9月"
+      },
+      "totalExpenseFen": 2232000,
+      "totalIncomeFen": 3600000,
+      "transactionCount": 36,
+      "monthlyBreakdown": [
+        {
+          "month": "2026-06",
+          "status": "complete",
+          "totalExpenseFen": 668000,
+          "totalIncomeFen": 1200000,
+          "transactionCount": 12
+        },
+        {
+          "month": "2026-07",
+          "status": "complete",
+          "totalExpenseFen": 718000,
+          "totalIncomeFen": 1200000,
+          "transactionCount": 12
+        },
+        {
+          "month": "2026-08",
+          "status": "complete",
+          "totalExpenseFen": 846000,
+          "totalIncomeFen": 1200000,
+          "transactionCount": 12
+        },
+        {
+          "month": "2026-09",
+          "status": "unavailable",
+          "totalExpenseFen": 0,
+          "totalIncomeFen": 0,
+          "transactionCount": 0
+        }
+      ],
+      "coverage": {
+        "status": "unverified",
+        "asOf": "2026-09-01T00:00:00+08:00",
+        "availableMonths": [
+          "2026-06",
+          "2026-07",
+          "2026-08"
+        ],
+        "warning": "仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。"
+      }
+    },
+    "evidence": [
+      {
+        "source": "synthetic_demo_only",
+        "asOf": "2026-09-01T00:00:00+08:00",
+        "entityCount": 36
+      }
+    ]
+  }
+}
