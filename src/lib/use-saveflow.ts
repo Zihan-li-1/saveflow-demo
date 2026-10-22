@@ -5,7 +5,7 @@ import { saveflowMock } from "./saveflow-mock";
 import { request } from "./api/client";
 import { apiConfig } from "./api/config";
 import { askQwen, type AgentTurn } from "./agent-client";
-import { askBankingAgent, BankingAgentError, executeTrialTransfer, type BankingAgentData, type SavingsPlanInputs } from "./banking-agent-client";
+import { askBankingAgent, BankingAgentError, executeTrialTransfer, startTrialVerification, verifyTrialVerification, type BankingAgentData, type SavingsPlanInputs } from "./banking-agent-client";
 import { createBankingClient } from "./api/banking-client";
 import type { ActionReceipt } from "../banking-core/contracts";
 import { ApiError, validatePlan, type Analysis, type Receipt } from "./api/contracts";
@@ -69,6 +69,8 @@ export function useSaveflow() {
     setMessages(current => current.map(message => message.banking?.operationId === id
       ? { ...message, banking: { ...message.banking, coreStage: state, outcomePending: ["executing", "checking", "unknown"].includes(state) } } : message));
   };
+  const [otpChallenge, setOtpChallenge] = useState<{ operationId: string; challengeId: string; expiresAt: string } | null>(null);
+  const [otpError, setOtpError] = useState<string | null>(null);
   const lastBankingRequest = useRef<{ text: string; choice?: { optionId: string; label: string }; resumeFlowId?: string; savings?: { token: string; inputs: SavingsPlanInputs }; syncOnly?: boolean } | null>(null);
   const active = useRef<AbortController | null>(null);
   const generation = useRef(0);
@@ -390,6 +392,18 @@ export function useSaveflow() {
     const previewHash = data.preview?.previewHash;
     const stepIds = data.preview?.stepIds;
     if (mode !== "check" && (typeof previewHash !== "string" || (!trial && (!Array.isArray(stepIds) || stepIds.some(step => typeof step !== "string"))))) return;
+    // 高风险试点转账先发起一次性验证码，进入 OTP 输入态；验证通过后才执行，绝不未验证直接扣款。
+    if (mode === "confirm" && trial && kind === "transfer" && typeof previewHash === "string" && data.risk?.requiredVerification === "otp") {
+      transferBusyRef.current = true; setTransferBusy(true);
+      try {
+        const started = await startTrialVerification(id, previewHash, accessCode, active.current?.signal ?? new AbortController().signal);
+        setOtpChallenge({ operationId: id, challengeId: started.challengeId, expiresAt: started.expiresAt });
+        setOtpError(null);
+      } catch (error) {
+        addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "验证码发起失败", errorHint: "验证码未发出；可重新点击确认转账。" });
+      } finally { transferBusyRef.current = false; setTransferBusy(false); }
+      return;
+    }
     const busyRef = kind === "card" ? cardBusyRef : transferBusyRef;
     const setBusy = kind === "card" ? setCardBusy : setTransferBusy;
     busyRef.current = true; setBusy(true);
@@ -455,6 +469,28 @@ export function useSaveflow() {
   const checkTransferOperation = (data: BankingAgentData) => runCoreOperation(data, "transfer", "check");
   const confirmTransferOperation = (data: BankingAgentData) => runCoreOperation(data, "transfer", "confirm");
   const rejectTransferOperation = (data: BankingAgentData) => runCoreOperation(data, "transfer", "reject");
+  const verifyTransferOperation = async (data: BankingAgentData, code: string) => {
+    const challenge = otpChallenge;
+    if (!challenge || challenge.operationId !== data.operationId || transferBusyRef.current) return;
+    const previewHash = data.preview?.previewHash;
+    if (!data.operationId || typeof previewHash !== "string") return;
+    transferBusyRef.current = true; setTransferBusy(true); setOtpError(null);
+    const version = generation.current;
+    try {
+      await verifyTrialVerification(data.operationId, previewHash, challenge.challengeId, code, accessCode, active.current?.signal ?? new AbortController().signal);
+      const receipt = await executeTrialTransfer(data.operationId, previewHash, accessCode, active.current?.signal ?? new AbortController().signal);
+      setOtpChallenge(null);
+      const outcome = await showTransferOutcome(data, receipt, version);
+      if (outcome) {
+        submittedOperations.current.add(data.operationId);
+        retirePreview(data, "transfer");
+        setCoreOperation(data.operationId, outcome);
+      }
+    } catch (error) {
+      setOtpError(error instanceof Error ? error.message : "验证码校验失败");
+    } finally { transferBusyRef.current = false; setTransferBusy(false); }
+  };
+  const cancelTransferVerification = () => { setOtpChallenge(null); setOtpError(null); };
   const startDemo = async (text = input.trim() || "我想在年底存下 2 万元") => {
     if (coreBlocked()) return;
     if (!consent) { setValidation("请先勾选账单分析授权。"); return; }
@@ -589,6 +625,6 @@ export function useSaveflow() {
     .filter(task => ['ready', 'awaiting_input', 'awaiting_confirmation', 'suspended'].includes(task.status))
     .map(task => ({ ...task, canResume: !!bankingFlows[task.taskId], blocked: sessionView.operationReferences.some(ref => ref.taskId === task.taskId && ['confirmed', 'executing', 'checking', 'unknown'].includes(ref.coreState)) ||
       (unresolvedWrite && ['transfer.create', 'card.freeze', 'card.unfreeze', 'card.set_budget', 'card.set_controls', 'wealth.subscribe', 'wealth.redeem', 'scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule'].includes(task.action)) })) : [];
-  return { sessionPhase, sessionTasks, resumeBankingTask, verifyBankingSession: () => startBanking('', undefined, undefined, undefined, true), bankingFailure, restartBankingFlow, stage, coreOperations, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, submitSavingsInputs, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => !flow.taskId && flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" ? bankingFailure?.retryable && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId, lastBankingRequest.current.savings, lastBankingRequest.current.syncOnly) : undefined : startDemo(goal.current), canStart: !coreLocked && canTransition(stage, "START"), canReset: !coreLocked && canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
+  return { sessionPhase, sessionTasks, resumeBankingTask, verifyBankingSession: () => startBanking('', undefined, undefined, undefined, true), bankingFailure, restartBankingFlow, stage, coreOperations, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, submitSavingsInputs, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => !flow.taskId && flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, otpChallenge, otpError, verifyTransferOperation, cancelTransferVerification, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" ? bankingFailure?.retryable && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId, lastBankingRequest.current.savings, lastBankingRequest.current.syncOnly) : undefined : startDemo(goal.current), canStart: !coreLocked && canTransition(stage, "START"), canReset: !coreLocked && canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
 }
 
