@@ -257,7 +257,7 @@ export async function runResolvedWealthIntent(repository, ports, value) {
         if (LIQUIDITY_DAYS[product.liquidity] > maxSettlement) reasons.push('LIQUIDITY_TOO_SLOW');
         if (product.durationDays > targetDays) reasons.push('TERM_TOO_LONG');
         if (product.minimumAmountFen > investable) reasons.push('BELOW_MINIMUM_AMOUNT');
-        if (reasons.length) excluded.push({ product_id: product.id, reason_codes: reasons });
+        if (reasons.length) excluded.push({ product_id: product.id, product_name: product.name, reason_codes: reasons });
         else matches.push(productView(product));
       }
       if (!matches.length) throw new WealthSkillError('NO_MATCHING_PRODUCT', '没有产品同时满足风险、金额、期限和流动性约束');

@@ -64,7 +64,7 @@ test('recommendation uses deterministic suitability and explains exclusions', as
   const result = await runResolvedWealthIntent(repository, ports(), intent);
   assert.equal(result.ok, true);
   assert.deepEqual(result.data.matches.map(item => item.product_id), ['product_001', 'product_002']);
-  assert.deepEqual(result.data.excluded[0], { product_id: 'product_003', reason_codes: ['RISK_TOO_HIGH', 'LIQUIDITY_TOO_SLOW', 'TERM_TOO_LONG'] });
+  assert.deepEqual(result.data.excluded[0], { product_id: 'product_003', product_name: '模拟定期组合 C', reason_codes: ['RISK_TOO_HIGH', 'LIQUIDITY_TOO_SLOW', 'TERM_TOO_LONG'] });
   assert.equal(result.data.synthetic_demo_only, true);
   assert.match(result.data.disclaimer, /not guaranteed/i);
   assert.ok(result.data.evidence.some(item => item.source === 'trusted_ui'));
