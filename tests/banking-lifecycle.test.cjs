@@ -99,6 +99,24 @@ test('savings form resumes the goal and displays only a verified card', async ()
   assert.equal(flow.messages.findLast(message => message.banking?.status === 'goal_plan')?.banking?.data?.verification_status, 'verified');
   assert.ok(root.root.findAll(node => node.props['aria-label'] === '储蓄计划卡片').length);
   assert.equal(flow.canStart, true);
+  const plan = flow.messages.findLast(message => message.banking?.status === 'goal_plan').banking;
+  const beforeScreening = (await core.repository.getAccounts())[0].availableBalanceFen;
+  const wealthForm = root.root.findAll(node => node.type === 'form' && node.props['aria-label'] === '储蓄目标理财筛选条件')[0];
+  assert.ok(wealthForm);
+  await act(async () => {
+    wealthForm.findAllByType('input')[0].props.onChange({ target: { value: '1000' } });
+    const selects = wealthForm.findAllByType('select');
+    selects[0].props.onChange({ target: { value: 'R2' } });
+    selects[1].props.onChange({ target: { value: 'T+1' } });
+  });
+  let submitted;
+  intercept = (body, run) => { if (body.wealthInputs) submitted = body; return run(); };
+  const filledWealth = root.root.findAll(node => node.type === 'form' && node.props['aria-label'] === '储蓄目标理财筛选条件')[0];
+  await act(async () => { filledWealth.props.onSubmit({ preventDefault() {} }); await new Promise(resolve => setTimeout(resolve, 10)); });
+  assert.equal(submitted.continuationToken, plan.wealthHandoffToken);
+  assert.deepEqual(submitted.wealthInputs, { investable_amount_minor: 100000, max_risk_level: 'R2', liquidity_requirement: 'T+1' });
+  assert.equal(flow.messages.findLast(message => message.banking?.status === 'wealth_result')?.banking?.data?.kind, 'recommendation');
+  assert.equal((await core.repository.getAccounts())[0].availableBalanceFen, beforeScreening);
 });
 
 test('same page: card query → freeze → verify → bill → unfreeze → query → budget and controls', async () => {

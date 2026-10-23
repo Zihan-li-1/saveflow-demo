@@ -12,6 +12,7 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { BankingReadCard } = require('../src/app/BankingReadCards.tsx');
 const { BankingSavingsInputsCard, BankingSavingsPlanCard } = require('../src/app/BankingSavingsCards.tsx');
+const { BankingWealthResult } = require('../src/app/BankingWealthCards.tsx');
 const { askBankingAgent } = require('../src/lib/banking-agent-client.ts');
 const { saveBankingChat, restoreBankingChat } = require('../src/lib/banking-chat-storage.ts');
 const render = (Component, data) => renderToStaticMarkup(React.createElement(Component, { data, onSubmit: () => {} }));
@@ -41,6 +42,18 @@ test('verified plan card shows target math, category comparison and data provena
   for (const label of ['¥10,000.00', '¥5,000.00', '¥1,460.00', '购物', '用户填写', '2026-09', '消费习惯观察', '历史演示数据', '类别依据', '建议能否执行', '分类建议支出合计', '¥1,000.00']) assert.ok(html.includes(label), label);
 });
 
+test('verified plan offers separate Wealth inputs without pre-filling goal money as investable cash', () => {
+  const data = { status: 'goal_plan', wealthHandoffToken: 'signed-handoff', data: { verification_status: 'verified', recent: { month: '2026-09', category_expenses_minor: {} }, calculation: { target_amount_minor: 1000000, saved_amount_minor: 0, remaining_minor: 1000000, deadline: '2026-12-31', opportunity_dates: ['2026-11-01', '2026-12-01'], required_monthly_minor: 500000, observed_income_minor: 1000000, observed_expense_minor: 0, observed_surplus_minor: 1000000, monthly_gap_minor: 0 }, advice: { feasible: true, proposed_expense_minor: 0, remaining_gap_minor: 0, observations: [], category_budgets: [], caveats: [] } } };
+  const html = renderToStaticMarkup(React.createElement(BankingSavingsPlanCard, { data, onWealth: () => {} }));
+  for (const label of ['目标日 2026-12-31', '独立可投资金额', '风险上限', '资金取用要求', '只读筛选']) assert.match(html, new RegExp(label));
+  assert.match(html, /name="investable_amount"[^>]*value=""/);
+});
+
+test('Wealth result tells the user which savings deadline and separate cash amount were screened', () => {
+  const html = renderToStaticMarkup(React.createElement(BankingWealthResult, { data: { status: 'wealth_result', data: { kind: 'recommendation', matches: [], as_of: '2026-10-23T00:00:00+08:00', screening_context: { target_date: '2026-12-31', investable_amount_minor: 100000, max_risk_level: 'R2', liquidity_requirement: 'T+1', source: 'verified_savings_plan' } } } }));
+  for (const value of ['2026-12-31', '¥1,000.00', 'R2', '下一个工作日']) assert.match(html, new RegExp(value));
+});
+
 test('plan form continuation survives a short pause but expires within its bounded window', () => {
   const token = `${'a'.repeat(16)}.${'b'.repeat(22)}.${'c'.repeat(30)}`;
   const messages = [{ id: 1, role: 'agent', kind: 'banking_savings_inputs', text: '请补充', banking: { status: 'needs_plan_inputs', action: 'orchestrator.goal', continuationToken: token } }];
@@ -59,6 +72,22 @@ test('browser accepts plan-input request and rejects a forged calculation', asyn
     await assert.rejects(() => askBankingAgent({ message: '年底存一万' }, 'access', new AbortController().signal), { code: 'BANKING_AGENT_RESPONSE_ERROR' });
     global.fetch = async () => wrap({ status: 'goal_plan', action: 'orchestrator.goal', data: { targetAmountFen: 1000000, deadline: '2026-12-31', steps: [], execution_allowed: false }, evidence: [] });
     await assert.rejects(() => askBankingAgent({ message: '年底存一万' }, 'access', new AbortController().signal), { code: 'BANKING_AGENT_RESPONSE_ERROR' });
+  } finally { global.fetch = oldFetch; }
+});
+
+test('browser rejects forged Wealth screening context', async () => {
+  const oldFetch = global.fetch;
+  try {
+    global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ code: 'OK', requestId: 'request-wealth', message: 'wealth', reply: { text: 'wealth', style: 'concise', safetyNotices: [] }, data: { status: 'wealth_result', action: 'wealth.recommend', data: { kind: 'recommendation', synthetic_demo_only: true, as_of: '2026-10-23T00:00:00+08:00', context_snapshot_id: 'snapshot', evidence: [], matches: [], screening_context: { source: 'verified_savings_plan', target_date: '2026-12-31', investable_amount_minor: 100000, max_risk_level: 'R4', liquidity_requirement: 'T+1' } } } }) });
+    await assert.rejects(() => askBankingAgent({ message: '筛选' }, 'access', new AbortController().signal), { code: 'BANKING_AGENT_RESPONSE_ERROR' });
+  } finally { global.fetch = oldFetch; }
+});
+
+test('browser accepts the trusted questionnaire step when screening cannot proceed', async () => {
+  const oldFetch = global.fetch;
+  try {
+    global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ code: 'OK', requestId: 'request-risk', message: '先测评', reply: { text: '请先测评', style: 'concise', safetyNotices: [] }, data: { status: 'wealth_result', action: 'wealth.recommend', data: { kind: 'questionnaire_required', questionnaire: { source: 'trusted_ui', route: '/wealth/risk-assessment' }, synthetic_demo_only: true, as_of: '2026-10-23T00:00:00+08:00', context_snapshot_id: 'snapshot', evidence: [] } } }) });
+    assert.equal((await askBankingAgent({ message: '筛选' }, 'access', new AbortController().signal)).data.kind, 'questionnaire_required');
   } finally { global.fetch = oldFetch; }
 });
 

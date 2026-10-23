@@ -5,7 +5,7 @@ import { saveflowMock } from "./saveflow-mock";
 import { request } from "./api/client";
 import { apiConfig } from "./api/config";
 import { askQwen, type AgentTurn } from "./agent-client";
-import { askBankingAgent, BankingAgentError, executeTrialTransfer, type BankingAgentData, type SavingsPlanInputs } from "./banking-agent-client";
+import { askBankingAgent, BankingAgentError, executeTrialTransfer, type BankingAgentData, type SavingsPlanInputs, type WealthScreeningInputs } from "./banking-agent-client";
 import { createBankingClient } from "./api/banking-client";
 import type { ActionReceipt } from "../banking-core/contracts";
 import { ApiError, validatePlan, type Analysis, type Receipt } from "./api/contracts";
@@ -57,7 +57,7 @@ export function useSaveflow() {
     setMessages(current => current.map(message => message.banking?.operationId === id
       ? { ...message, banking: { ...message.banking, coreStage: state } } : message));
   };
-  const lastBankingRequest = useRef<{ text: string; choice?: { optionId: string; label: string }; resumeFlowId?: string; savings?: { token: string; inputs: SavingsPlanInputs } } | null>(null);
+  const lastBankingRequest = useRef<{ text: string; choice?: { optionId: string; label: string }; resumeFlowId?: string; savings?: { token: string; inputs: SavingsPlanInputs }; wealth?: { token: string; inputs: WealthScreeningInputs } } | null>(null);
   const active = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const goal = useRef("");
@@ -125,26 +125,28 @@ export function useSaveflow() {
     const timer = setTimeout(() => setBankingFlows(current => Object.fromEntries(Object.entries(current).filter(([, flow]) => flow.expiresAt > Date.now()))), Math.max(0, Math.min(...expiries) - Date.now()));
     return () => clearTimeout(timer);
   }, [bankingFlows]);
-  const startBanking = async (text: string, choice?: { optionId: string; label: string }, resumeFlowId?: string, savings?: { token: string; inputs: SavingsPlanInputs }) => {
+  const startBanking = async (text: string, choice?: { optionId: string; label: string }, resumeFlowId?: string, savings?: { token: string; inputs: SavingsPlanInputs }, wealth?: { token: string; inputs: WealthScreeningInputs }) => {
     if (coreBlocked()) return;
     if (!consent || !accessCode.trim()) { setValidation("请勾选授权并输入演示访问码。"); return; }
     const flowId = resumeFlowId || focusedFlowId || crypto.randomUUID();
     const resumed = resumeFlowId ? bankingFlows[resumeFlowId] : undefined;
     if (resumeFlowId && (!resumed || resumed.expiresAt <= Date.now())) { setValidation("该预览续接已过期，请发起新转账。"); return; }
-    const requestToken = savings?.token || resumed?.token || bankingContinuation || undefined;
+    const requestToken = wealth?.token || savings?.token || resumed?.token || bankingContinuation || undefined;
     if (!send("START")) return;
-    lastBankingRequest.current = { text, choice, resumeFlowId, savings };
+    lastBankingRequest.current = { text, choice, resumeFlowId, savings, wealth };
     setValidation("");
     if (!choice) setInput("");
     setMessages(current => current.filter(message => !["banking_preview", "banking_wealth_preview"].includes(message.kind || "")).map(message => message.kind === "banking_clarification" ? { ...message, banking: { ...message.banking!, choices: [] } } : message));
     activePreviews.current = { card: null, transfer: null };
     setActiveCardOperationId(null);
     setActiveTransferOperationId(null);
-    addMessage({ role: "user", text: savings ? ('month' in savings.inputs ? `已填写 ${savings.inputs.month} 分类收支和本目标已存金额` : "已填写本目标已存金额") : choice?.label || text });
+    addMessage({ role: "user", text: wealth ? `按已核验目标，单独筛选 ¥${(wealth.inputs.investable_amount_minor / 100).toFixed(2)} 的模拟理财产品` : savings ? ('month' in savings.inputs ? `已填写 ${savings.inputs.month} 分类收支和本目标已存金额` : "已填写本目标已存金额") : choice?.label || text });
     const version = ++generation.current;
     active.current?.abort(); active.current = new AbortController();
     try {
-      const body = savings
+      const body = wealth
+        ? { continuationToken: requestToken, wealthInputs: wealth.inputs, replyStyle }
+        : savings
         ? { continuationToken: requestToken, planInputs: savings.inputs, replyStyle }
         : choice ? { continuationToken: requestToken, choice: { optionId: choice.optionId }, replyStyle }
           : { message: text, continuationToken: requestToken, replyStyle };
@@ -460,6 +462,10 @@ export function useSaveflow() {
     if (modelMode !== "banking" || data.status !== "needs_plan_inputs" || !data.continuationToken || data.continuationToken !== bankingContinuation || !canTransition(stageRef.current, "START")) return;
     return startBanking("", undefined, undefined, { token: data.continuationToken, inputs });
   };
+  const submitWealthInputs = (data: BankingAgentData, inputs: WealthScreeningInputs) => {
+    if (modelMode !== "banking" || data.status !== "goal_plan" || data.data?.verification_status !== "verified" || !data.wealthHandoffToken || !canTransition(stageRef.current, "START")) return;
+    return startBanking("", undefined, undefined, undefined, { token: data.wealthHandoffToken, inputs });
+  };
   const editTransferPreview = (data: BankingAgentData, message: string) => {
     if (modelMode !== "banking" || !canTransition(stageRef.current, "START")) return;
     if (isTrialPreview(data)) {
@@ -470,6 +476,6 @@ export function useSaveflow() {
       void startBanking(message);
     }
   };
-  return { stage, coreOperations, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, submitSavingsInputs, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId, lastBankingRequest.current.savings) : startDemo(goal.current), canStart: !coreLocked && canTransition(stage, "START"), canReset: !coreLocked && canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
+  return { stage, coreOperations, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, submitSavingsInputs, submitWealthInputs, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId, lastBankingRequest.current.savings, lastBankingRequest.current.wealth) : startDemo(goal.current), canStart: !coreLocked && canTransition(stage, "START"), canReset: !coreLocked && canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
 }
 

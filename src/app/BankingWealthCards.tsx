@@ -11,9 +11,11 @@ export function BankingWealthResult({ data }: { data?: BankingAgentData }) {
   const result = data?.data;
   if (!result) return null;
   const kind = String(result.kind);
+  const screening = result.screening_context as { target_date: string; investable_amount_minor: number; max_risk_level: string; liquidity_requirement: string; source: string } | undefined;
   const products = (kind === "recommendation" ? result.matches : kind === "comparison" ? result.products : []) as Array<{ name: string; risk_level: string; liquidity: string; expected_yield_bps: number; duration_days?: number }>;
   return <div className="banking-result-card">
     <b>{kind === "recommendation" ? "模拟产品筛选" : kind === "comparison" ? "模拟产品对比" : kind === "risk_assessment" ? "模拟风险测评" : "风险测评入口"}</b>
+    {screening?.source === "verified_savings_plan" && <p>按已核验储蓄目标筛选：目标日 {screening.target_date}，独立可投资金额 ¥{(screening.investable_amount_minor / 100).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}，所选风险上限 {screening.max_risk_level}（仍受测评结果约束），资金{liquidityText(screening.liquidity_requirement)}。</p>}
     {products?.map((product, index) => <span key={index}>{product.name} · {riskText(product.risk_level)} · {liquidityText(product.liquidity)} · 示例年化 {(product.expected_yield_bps / 100).toFixed(2)}%{product.duration_days ? ` · 建议持有约 ${Math.max(1, Math.round(product.duration_days / 30))} 个月` : ""}</span>)}
     {kind === "risk_assessment" && <span>测评结果：{riskText(String((result.assessment as { risk_level?: string } | undefined)?.risk_level || ""))}</span>}
     {kind === "questionnaire_required" && <span>需先通过可信页面完成风险测评。</span>}
