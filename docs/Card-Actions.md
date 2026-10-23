@@ -15,4 +15,4 @@ Banking Agent 注册 `card.get`、`card.set_budget`、`card.set_controls`、`car
 
 Agent HTTP 入口把 Skill 写请求交给 Banking Core `prepare()`，返回带卡名、版本、变更前后值、风险、警示、有效期、预览哈希和操作编号的正式预览。只有页面确认按钮调用独立的 `action.decide` 和 `action.execute` 接口。聊天中的“确认”不执行操作。`execute()` 使用保存的请求，重新检查预览、卡片状态、版本及确认决定，并以事务提交卡片变更与回执；重复执行同一操作返回原回执。页面在收到成功回执后重新 `card.get`，以查询结果显示最新值；结果未知时保留操作编号供 `action.status` 查询。
 
-新预览会使同一卡片的旧预览失效。服务端以 `previewGeneration` 复核，不依赖页面隐藏按钮。Postgres 使用 `migrations/002_cards.sql` 和 `migrations/004_card_security_controls.sql` 存储用户归属、卡片状态、预算、消费、安全设置、版本与预览代数；种子只在首次创建卡片时插入，不覆盖已修改值。部署前运行 `npm run db:migrate`，并配置 `DATABASE_URL`。没有数据库时，仅适用于单进程 Mock 演示。
+新预览会使同一卡片的旧预览失效。服务端以 `previewGeneration` 复核，不依赖页面隐藏按钮。Postgres 使用 `migrations/002_cards.sql`、`migrations/004_card_security_controls.sql` 和 `migrations/005_card_balance_reminders.sql` 存储用户归属、卡片状态、预算、消费、安全设置、余额提醒、版本与预览代数；种子只在首次创建卡片时插入，不覆盖已修改值。部署前运行 `npm run db:migrate`，并配置 `DATABASE_URL`。没有数据库时，仅适用于单进程 Mock 演示。

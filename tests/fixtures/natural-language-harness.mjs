@@ -74,7 +74,10 @@ export async function exerciseLanguageCase(definition, { live = false, env = {} 
     } else if (definition.action === 'bill.summary') {
       assert.equal(result.data.status, 'bill_result');
       const expectedFilter = expected.month ? { month: expected.month } : { startDate: expected.period.start_date, endDate: expected.period.end_date, timezone: expected.period.timezone };
-      assert.deepEqual(queries, [expectedFilter]);
+      const [year, oneBasedMonth] = expected.month?.split('-').map(Number) ?? [];
+      const previous = expected.month ? new Date(Date.UTC(year, oneBasedMonth - 2, 1)) : undefined;
+      const comparisonFilter = previous ? { month: `${previous.getUTCFullYear()}-${String(previous.getUTCMonth() + 1).padStart(2, '0')}` } : undefined;
+      assert.deepEqual(queries, comparisonFilter ? [expectedFilter, comparisonFilter] : [expectedFilter]);
       assert.equal(result.data.data.transactionCount, actualCore.repository.getTransactions(expectedFilter).length);
       assert.ok(result.data.data.coverage.warning);
     } else {
