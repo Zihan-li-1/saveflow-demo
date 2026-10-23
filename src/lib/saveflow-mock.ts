@@ -3,6 +3,7 @@ import { getLegacyContext } from "../banking-core/legacy-adapter.mjs";
 const repository = createFinancialContext().repository;
 const context = getLegacyContext(repository);
 const goal = repository.getSavingGoal();
+const cards = repository.getCards();
 // Yuan fields are presentation-only compatibility fields, never Core write inputs.
 export const saveflowMock = {
   currentMonth: context.currentMonth, previousMonth: context.previousMonth, asOf: context.asOf,
@@ -19,5 +20,18 @@ export const saveflowMock = {
     estimatedCompletion: goal.targetDate.slice(0, 7).replace("-", "年") + "月",
   },
   monthlyIncome: context.monthlyIncomeFen / 100,
+  cards: cards.map(card => ({
+    id: card.id,
+    name: card.name,
+    status: card.status,
+    monthlyBudgetFen: card.monthlyBudgetFen,
+    monthlySpentFen: card.monthlySpentFen,
+    onlinePaymentsEnabled: card.onlinePaymentsEnabled,
+    blockedCategories: card.blockedCategories,
+    alertThresholdFen: card.alertThresholdFen,
+    balanceReminderAmountFen: card.balanceReminderAmountFen,
+    balanceReminderPercent: card.balanceReminderPercent,
+    version: card.version,
+  })),
 } as const;
 export type SaveflowMock = typeof saveflowMock;

@@ -82,7 +82,7 @@
       "type": "object", "additionalProperties": false, "required": ["action", "slots"],
       "properties": { "action": { "const": "card.set_controls" }, "slots": {
         "type": "object", "additionalProperties": false, "required": ["card_ref"], "minProperties": 2,
-        "properties": { "card_ref": { "$ref": "#/$defs/cardRef" }, "online_payments_enabled": { "type": "boolean" }, "blocked_categories": { "type": "array", "maxItems": 10, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 32 } }, "alert_amount": { "anyOf": [{ "$ref": "#/$defs/alertAmount" }, { "type": "null" }] } }
+        "properties": { "card_ref": { "$ref": "#/$defs/cardRef" }, "online_payments_enabled": { "type": "boolean" }, "blocked_categories": { "type": "array", "maxItems": 10, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 32 } }, "alert_amount": { "anyOf": [{ "$ref": "#/$defs/alertAmount" }, { "type": "null" }] }, "balance_reminder_amount": { "anyOf": [{ "$ref": "#/$defs/amount" }, { "type": "null" }] }, "balance_reminder_percentage": { "anyOf": [{ "type": "integer", "minimum": 1, "maximum": 100 }, { "type": "null" }] } }
       } }
     },
     "securityReview": {

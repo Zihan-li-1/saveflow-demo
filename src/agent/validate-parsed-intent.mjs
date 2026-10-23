@@ -119,7 +119,7 @@ function validateCard(input, slots) {
   const isLimit = input.action === 'card.set_budget';
   const isControls = input.action === 'card.set_controls';
   const isReview = input.action === 'card.security_review';
-  const allowed = isLimit ? CARD_SLOT_KEYS : isControls ? ['card_ref', 'online_payments_enabled', 'blocked_categories', 'alert_amount'] : isReview ? ['card_ref', 'issue_type'] : ['card_ref'];
+  const allowed = isLimit ? CARD_SLOT_KEYS : isControls ? ['card_ref', 'online_payments_enabled', 'blocked_categories', 'alert_amount', 'balance_reminder_amount', 'balance_reminder_percentage'] : isReview ? ['card_ref', 'issue_type'] : ['card_ref'];
   rejectUnknownKeys(slots, allowed, 'slots');
   if ('card_ref' in slots) {
     requireRawReference(slots.card_ref, 'slots.card_ref');
@@ -132,10 +132,13 @@ function validateCard(input, slots) {
     if ('online_payments_enabled' in slots && typeof slots.online_payments_enabled !== 'boolean') fail('slots.online_payments_enabled must be boolean');
     if ('blocked_categories' in slots && (!Array.isArray(slots.blocked_categories) || slots.blocked_categories.length > 10 || slots.blocked_categories.some(value => typeof value !== 'string' || !value.trim() || value.length > 32) || new Set(slots.blocked_categories).size !== slots.blocked_categories.length)) fail('slots.blocked_categories is invalid');
     if ('alert_amount' in slots && slots.alert_amount !== null) validateAmount(slots.alert_amount, { maximum: 10_000_000 });
+    if ('balance_reminder_amount' in slots && slots.balance_reminder_amount !== null) validateAmount(slots.balance_reminder_amount, { allowZero: true, maximum: 10_000_000 });
+    if ('balance_reminder_percentage' in slots && slots.balance_reminder_percentage !== null && (!Number.isSafeInteger(slots.balance_reminder_percentage) || slots.balance_reminder_percentage < 1 || slots.balance_reminder_percentage > 100)) fail('slots.balance_reminder_percentage must be an integer from 1 to 100');
+    if (slots.balance_reminder_amount != null && slots.balance_reminder_percentage != null) fail('balance reminder must use amount or percentage, not both');
   }
   if (isReview && 'issue_type' in slots && !['card_details_exposed', 'unauthorized_transaction', 'device_lost'].includes(slots.issue_type)) fail('slots.issue_type is invalid');
   const required = isLimit ? CARD_SLOT_KEYS : isReview ? ['card_ref', 'issue_type'] : ['card_ref'];
-  const hasControl = ['online_payments_enabled', 'blocked_categories', 'alert_amount'].some(key => key in slots);
+  const hasControl = ['online_payments_enabled', 'blocked_categories', 'alert_amount', 'balance_reminder_amount', 'balance_reminder_percentage'].some(key => key in slots);
   if (isControls && 'card_ref' in slots && !hasControl) fail('card.set_controls requires at least one control value');
   const missing = required.filter(slot => !(slot in slots));
   requireMissingSlots(input.missingSlots, missing);
