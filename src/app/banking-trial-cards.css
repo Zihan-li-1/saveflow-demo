@@ -19,4 +19,22 @@
 .financial-term-help summary { cursor: pointer; list-style-position: inside; padding: 8px 10px; color: #365d85; font-size: 12px; font-weight: 600; }
 .financial-term-help summary span { margin-left: 5px; color: #71869b; font-size: 10px; font-weight: 400; }
 .financial-term-help details p { margin: 0; padding: 0 10px 10px; color: #5f7388; font-size: 11px; line-height: 1.65; }
+.savings-input-card p, .savings-plan-card article p { color: #455e76; font-size: 12px; line-height: 1.7; }
+.savings-input-grid, .savings-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+.savings-input-grid label { display: grid; gap: 5px; color: #365d85; font-size: 12px; font-weight: 600; }
+.savings-input-grid input { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid #bfd0df; border-radius: 8px; background: #fff; color: #183047; }
+.savings-input-grid input:focus-visible { outline: 2px solid #3e80bd; outline-offset: 2px; }
+.savings-input-card fieldset { min-width: 0; margin: 12px 0; padding: 8px 12px; border: 1px solid #dce7f2; border-radius: 10px; }
+.savings-input-card legend { color: #365d85; font-size: 12px; font-weight: 600; }
+.savings-input-card button:disabled { opacity: .55; cursor: not-allowed; }
+.savings-metrics p { display: grid; gap: 4px; margin: 0; padding: 10px; border-radius: 9px; background: #f3f7fb; }
+.savings-metrics span { color: #64788d; font-size: 11px; }
+.savings-metrics strong { color: #234f79; font-size: 14px; }
+.savings-category-list { display: grid; gap: 8px; }
+.savings-category-list > div { display: grid; gap: 5px; padding: 10px; border: 1px solid #e3ebf3; border-radius: 9px; }
+.savings-category-list b { font-size: 12px; }
+.savings-category-list span, .savings-category-list small { color: #60758a; font-size: 11px; line-height: 1.6; }
+.savings-plan-card footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; border-top: 1px solid #e8eef5; padding-top: 13px; }
 @media (max-width: 480px) { .financial-read-card { padding: 13px; } .financial-data-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .savings-input-grid, .savings-metrics { grid-template-columns: minmax(0, 1fr); } }
+

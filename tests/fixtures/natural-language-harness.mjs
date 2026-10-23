@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createBankingCore } from '../../src/banking-core/core.mjs';
 import { buildParsedIntent } from '../../src/agent/clarification/merge-intent.mjs';
+import { verifyContinuationToken } from '../../src/agent/clarification/continuation-token.mjs';
 import { handleBankingAgent } from '../../server/banking-agent.mjs';
 import { createBankingRuntimeClient } from '../../server/trueforge-banking-runtime.mjs';
 import { fixedNow } from './natural-language-cases.mjs';
@@ -77,10 +78,14 @@ export async function exerciseLanguageCase(definition, { live = false, env = {} 
       assert.equal(result.data.data.transactionCount, actualCore.repository.getTransactions(expectedFilter).length);
       assert.ok(result.data.data.coverage.warning);
     } else {
-      assert.equal(result.data.status, 'goal_plan');
-      assert.equal(result.data.data.targetAmountFen, expected.amount.amount_minor);
-      assert.equal(result.data.data.deadline, expected.deadline);
-      assert.equal(result.data.data.execution_allowed, false);
+      assert.equal(result.data.status, 'needs_plan_inputs');
+      assert.equal(result.data.requiredMonth, '2026-09');
+      assert.ok(result.data.categories.length > 0);
+      const pending = verifyContinuationToken(result.data.continuationToken, settings.CONTINUATION_TOKEN_SECRET, now());
+      assert.equal(pending.pendingSlot, '__plan_inputs');
+      assert.equal(pending.slots.amount.amount_minor, expected.amount.amount_minor);
+      assert.equal(pending.slots.deadline, expected.deadline);
+      assert.equal(prepares.length, 0);
     }
   }
   return { message: definition.message, answer: definition.answer, modelTurns, queries, prepares, resultStatus: result.data.status, resultData: result.data.data, previewEffects: result.data.preview?.exactEffects };
@@ -89,3 +94,4 @@ export async function exerciseLanguageCase(definition, { live = false, env = {} 
     throw error;
   }
 }
+

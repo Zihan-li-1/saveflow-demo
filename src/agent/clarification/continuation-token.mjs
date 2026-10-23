@@ -30,6 +30,7 @@ export function issueContinuationToken(input, secret, now = Date.now(), ttlMs = 
     choices: input.choices ?? [],
     selections: input.selections ?? {},
     ...(input.operation ? { operation: input.operation } : {}),
+    ...(input.recentSource ? { recentSource: input.recentSource, recentSnapshotId: input.recentSnapshotId } : {}),
     expiresAt: now + ttlMs,
   };
   return encode(payload, secret);
@@ -54,6 +55,8 @@ export function verifyContinuationToken(token, secret, now = Date.now()) {
     payload = JSON.parse(Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8'));
   } catch { throw new Error('续接凭据无效'); }
   if (!payload || payload.v !== VERSION || !['transfer.create', 'bill.summary', 'card.get', 'card.set_budget', 'card.set_controls', 'card.security_review', 'card.freeze', 'card.unfreeze', 'wealth.recommend', 'wealth.compare', 'wealth.assess_risk', 'scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule', 'scenario.review_event', 'orchestrator.goal', 'subscription.list', 'product.list', 'clarify'].includes(payload.action) || !payload.slots || !Array.isArray(payload.choices) || !Number.isSafeInteger(payload.expiresAt) || payload.expiresAt <= now) throw new Error('续接凭据已过期或无效');
+  if (payload.recentSource !== undefined && (payload.action !== 'orchestrator.goal' || payload.pendingSlot !== '__plan_inputs' || !['repository', 'user_provided'].includes(payload.recentSource) || typeof payload.recentSnapshotId !== 'string' || payload.recentSnapshotId.length > 200)) throw new Error('续接凭据已过期或无效');
   if (payload.operation !== undefined && (!payload.operation || typeof payload.operation.operationId !== 'string' || !/^op_[a-zA-Z0-9-]+$/.test(payload.operation.operationId) || typeof payload.operation.previewHash !== 'string' || !/^[a-f0-9]{64}$/.test(payload.operation.previewHash) || !Array.isArray(payload.operation.stepIds) || payload.operation.stepIds.length !== 1 || payload.operation.stepIds.some(id => typeof id !== 'string'))) throw new Error('续接凭据已过期或无效');
   return payload;
 }
+
