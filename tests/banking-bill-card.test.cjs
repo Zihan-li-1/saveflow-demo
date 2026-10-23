@@ -41,6 +41,14 @@ test('August card uses structured amounts, exact signed balance, all transaction
   assert.ok(!value.includes('synthetic_demo_only'));
 });
 
+test('bill insights explain the change in plain language and keep unavailable comparisons honest', () => {
+  const insight = { comparisonPeriod: { month: '2026-07' }, currentExpenseFen: 846000, comparisonExpenseFen: 700000, changeFen: 146000, changeRateBps: 2086, comparisonAvailable: true, categoryChanges: [{ category: '餐饮', currentAmountFen: 156000, comparisonAmountFen: 100000, changeFen: 56000 }], largestExpenses: [], note: '与紧邻的等长上一时间段比较；仅统计支出交易。' };
+  const value = text(render({ ...fixture, data: { ...fixture.data, insights: insight } }));
+  for (const expected of ['支出变化解读', '支出增加 ¥1,460.00（+20.9%）', '餐饮', '+¥560.00', '仅统计支出交易']) assert.ok(value.includes(expected), expected);
+  const unavailable = text(render({ ...fixture, data: { ...fixture.data, insights: { ...insight, comparisonExpenseFen: 0, changeFen: 846000, changeRateBps: null, comparisonAvailable: false, categoryChanges: [], note: '上一时间段没有可用交易记录，无法计算可靠涨跌比例。' } } }));
+  assert.ok(unavailable.includes('上一时间段暂无可用记录，暂不判断涨跌'));
+});
+
 test('zero month has honest zeros and no category section; missing/invalid categories are hidden', () => {
   const zero = { ...fixture, data: { month: '2026-01', totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: 0, categoryTotals: {} } };
   const html = render(zero);

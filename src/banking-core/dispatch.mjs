@@ -14,7 +14,7 @@ export async function dispatchBanking(action, value, core = bankingCore) {
       'context.get': [], 'account.list': [], 'account.get': ['id'], 'payee.list': [], 'payee.get': ['id'],
       'transaction.list': ['accountId', 'month'], 'product.list': [], 'card.list': [], 'card.get': ['id'], 'subscription.list': [],
       'transfer.prepare': ['fromAccountId', 'payeeId', 'amountFen', 'currency', 'memo'],
-      'card.set_budget': ['cardId', 'monthlyBudgetFen'], 'card.set_controls': ['cardId', 'onlinePaymentsEnabled', 'blockedCategories', 'alertThresholdFen'], 'card.freeze': ['cardId'], 'card.unfreeze': ['cardId'],
+      'card.set_budget': ['cardId', 'monthlyBudgetFen'], 'card.set_controls': ['cardId', 'onlinePaymentsEnabled', 'blockedCategories', 'alertThresholdFen', 'balanceReminderAmountFen', 'balanceReminderPercent'], 'card.freeze': ['cardId'], 'card.unfreeze': ['cardId'],
       'scenario.create_rule': ['trigger', 'conditions', 'proposed_steps', 'authorization_scope'],
       'scenario.update_rule': ['ruleRef', 'changes'], 'scenario.disable_rule': ['ruleRef'],
       'action.decide': ['operationId', 'previewHash', 'decision', 'confirmedStepIds'],

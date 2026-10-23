@@ -67,7 +67,13 @@ export interface CardReferenceSlots {
 export interface CardBudgetSlots extends CardReferenceSlots {
   amount?: ParsedAmount;
 }
-export interface CardControlSlots extends CardReferenceSlots { online_payments_enabled?: boolean; blocked_categories?: string[]; alert_amount?: ParsedAmount | null }
+export interface CardControlSlots extends CardReferenceSlots {
+  online_payments_enabled?: boolean;
+  blocked_categories?: string[];
+  alert_amount?: ParsedAmount | null;
+  balance_reminder_amount?: ParsedAmount | null;
+  balance_reminder_percentage?: number | null;
+}
 export interface CardSecurityReviewSlots extends CardReferenceSlots { issue_type?: "card_details_exposed" | "unauthorized_transaction" | "device_lost" }
 
 export type WealthAction = "wealth.recommend" | "wealth.compare" | "wealth.assess_risk" | "wealth.subscribe" | "wealth.redeem";

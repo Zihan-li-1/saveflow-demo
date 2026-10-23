@@ -2,6 +2,7 @@ import { validateParsedIntent } from './validate-parsed-intent.mjs';
 import { localDate as calendarLocalDate } from '../lib/calendar.mjs';
 import { transferFromResolvedIntent } from '../banking-core/wire.mjs';
 import { handleCard } from './handlers/card-handler.mjs';
+import { buildBillInsights, previousMonth } from './bill-insights.mjs';
 
 function clarification(intent) {
   return { ok: false, kind: 'needs_clarification', action: intent.action, source: 'parser', ...(intent.missingSlots.length ? { missingSlots: [...intent.missingSlots] } : {}) };
@@ -40,7 +41,9 @@ export async function handleSubscriptionList(_intent, repository) {
       : subscription.isPotentiallyUnused
         ? `数据标记为可能闲置：已${inactivityDays === undefined ? '较长时间' : `连续 ${inactivityDays} 天`}未使用，但仍每月扣费；取消前请核实实际使用情况。`
         : inactivityDays === undefined ? '当前没有潜在闲置标记。' : `最近使用距统计日 ${inactivityDays} 天，当前没有潜在闲置标记。`;
-    return { ...subscription, ...(inactivityDays === undefined ? {} : { inactivityDays }), unusedReason };
+    const confidence = subscription.status !== 'active' || !subscription.isPotentiallyUnused ? 'not_flagged' : inactivityDays !== undefined && inactivityDays >= 90 ? 'high' : 'medium';
+    const recognitionSignals = [subscription.isPotentiallyUnused ? '数据源标记为可能闲置' : '数据源未标记为闲置', inactivityDays === undefined ? '最近使用时间无法换算' : `距最近使用 ${inactivityDays} 天`, subscription.status === 'active' ? '订阅仍在生效并按月计费' : '订阅已取消'];
+    return { ...subscription, ...(inactivityDays === undefined ? {} : { inactivityDays }), unusedReason, recognition: { confidence, signals: recognitionSignals } };
   });
   const active = subscriptions.filter(item => item.status === 'active');
   const potentiallyUnused = active.filter(item => item.isPotentiallyUnused);
@@ -49,7 +52,7 @@ export async function handleSubscriptionList(_intent, repository) {
   return { ok: true, kind: 'subscription_result', action: 'subscription.list', data: {
     subscriptions: enriched,
     summary: { activeCount: active.length, activeMonthlyFeeFen, potentiallyUnusedCount: potentiallyUnused.length, potentiallyUnusedMonthlyFeeFen, potentialAnnualSavingsFen: potentiallyUnusedMonthlyFeeFen * 12 },
-    methodology: { usesRepositoryFlag: true, historicalSubscriptionState: false, savingsEstimateMonths: 12 },
+    methodology: { usesRepositoryFlag: true, usesLastUsedDate: true, highConfidenceInactivityDays: 90, historicalSubscriptionState: false, savingsEstimateMonths: 12, limitation: '闲置判断是规则提示，不等同于已核实的商户使用记录；取消前请由用户确认。' },
   }, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: subscriptions.map(item => item.id) }] };
 }
 
@@ -93,12 +96,19 @@ export async function handleBillSummary(intent, repository) {
     })(),
     ...summarize(transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(value))),
   }));
+  const comparableMonths = monthlyBreakdown.filter(item => item.status === 'complete');
+  const latestComparable = comparableMonths.at(-1)?.month;
+  const previousComparable = comparableMonths.at(-2)?.month;
+  const insightCurrentTransactions = latestComparable ? transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(latestComparable)) : transactions;
+  const insightComparisonTransactions = previousComparable ? transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(previousComparable)) : [];
+  const insights = buildBillInsights(insightCurrentTransactions, insightComparisonTransactions, previousComparable ? { month: previousComparable } : { month: previousMonth(month ?? startMonth) });
   return {
     ok: true,
     kind: 'bill_result',
     action: 'bill.summary',
     data: {
       ...summary,
+      ...(transactions.length ? { insights } : {}),
       coverage: { status: 'unverified', asOf: context.asOf, availableMonths: context.availableMonths ?? [], warning: '仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。' },
       ...(month ? { month } : { period: { startDate: period.start_date, endDate: period.end_date, timezone: period.timezone, label: period.label } }),
       ...(!month ? { monthlyBreakdown } : {}),

@@ -10,6 +10,11 @@ export function BankingBillCard({ data }: { data?: BankingAgentData }) {
   const balance = income !== undefined && expense !== undefined ? income - expense : undefined;
   const count = billFen(summary.transactionCount);
   const categories = billCategories(summary.categoryTotals, expense);
+  const insights = summary.insights && typeof summary.insights === "object" && !Array.isArray(summary.insights) ? summary.insights as Record<string, unknown> : undefined;
+  const insightChange = typeof insights?.changeFen === "number" && Number.isSafeInteger(insights.changeFen) ? insights.changeFen : undefined;
+  const insightRate = typeof insights?.changeRateBps === "number" && Number.isSafeInteger(insights.changeRateBps) ? insights.changeRateBps : undefined;
+  const comparisonAvailable = insights?.comparisonAvailable === true;
+  const insightCategories = Array.isArray(insights?.categoryChanges) ? insights.categoryChanges.filter(item => item && typeof item === "object" && !Array.isArray(item)).slice(0, 3) as Array<Record<string, unknown>> : [];
   const monthly = billMonthlyBreakdown(summary.monthlyBreakdown);
   const showMonthlyChart = shouldShowMonthlyBillChart(summary.period, monthly.length);
   const visibleMonths = monthly.filter(item => item.status !== "future");
@@ -49,6 +54,7 @@ export function BankingBillCard({ data }: { data?: BankingAgentData }) {
       <div className="bill-report-count"><span><ReceiptText size={15} aria-hidden="true" /> 总交易笔数</span><strong>{count === undefined ? "—" : new Intl.NumberFormat("zh-CN").format(count)}{count !== undefined && <span> 笔</span>}</strong></div>
     </div>
     {count === 0 && <p className="bill-report-empty">{monthly.length > 0 && visibleMonths.length === 0 ? "所选时间尚未到来" : isRange ? "所选期间暂无交易记录" : "本月暂无交易记录"}</p>}
+    {insights && <div className="bill-report-insights"><h4>支出变化解读<span>与紧邻的上一时间段比较</span></h4>{comparisonAvailable && insightChange !== undefined ? <><p className={insightChange > 0 ? "up" : insightChange < 0 ? "down" : "neutral"}>支出{insightChange > 0 ? "增加" : insightChange < 0 ? "减少" : "持平"} {formatBillMoney(Math.abs(insightChange))}{insightRate !== undefined ? `（${insightRate > 0 ? "+" : ""}${(insightRate / 100).toFixed(1)}%）` : ""}</p>{insightCategories.length > 0 && <ul>{insightCategories.map(item => <li key={String(item.category)}><span>{String(item.category)}</span><strong className={Number(item.changeFen) > 0 ? "up" : "down"}>{Number(item.changeFen) > 0 ? "+" : "−"}{formatBillMoney(Math.abs(Number(item.changeFen)))}</strong></li>)}</ul>}</> : <p className="neutral">上一时间段暂无可用记录，暂不判断涨跌。</p>}<small>{typeof insights.note === "string" ? insights.note : "仅统计支出交易。"}</small></div>}
     {showMonthlyChart && <div className="bill-report-chart"><h4>每月支出对比<span>柱形高度以支出最高月份为基准</span></h4>{highestMonth && averageExpense !== undefined && <p className="bill-report-chart-summary">最高：{billMonthLabel(highestMonth.month, spansYears)} {formatBillMoney(highestMonth.totalExpenseFen)} · 月均：{formatBillMoney(averageExpense)}{trend ? ` · ${trend}` : ""}</p>}<ul aria-label="每月支出条形图">{monthly.map(item => {
       const height = item.totalExpenseFen === 0 ? 3 : Math.max(8, Math.round((item.totalExpenseFen / maximumMonthlyExpense) * 100));
       const monthLabel = billMonthLabel(item.month, spansYears);

@@ -1,6 +1,7 @@
 import { localDate as calendarLocalDate } from "../../lib/calendar.mjs";
 import type { FinancialContextRepository } from "../../banking-core/contracts";
 import { summarizeBills } from "../../skills/bill/bill-skill";
+import { buildBillInsights, previousMonth } from "../bill-insights.mjs";
 import type { DispatchResult } from "../dispatch-result";
 import type { BillSummaryIntent } from "../dispatcher";
 
@@ -38,6 +39,12 @@ export async function handleBillSummary(
     const status = !(context.availableMonths ?? []).includes(value) ? "unavailable" : monthStart > asOfDate ? "future" : monthEnd >= asOfDate || isPartialSelection ? "partial" : "complete";
     return { month: value, status, ...summarizeBills(items) };
   });
+  const comparableMonths = monthlyBreakdown.filter(item => item.status === "complete");
+  const latestComparable = comparableMonths.at(-1)?.month;
+  const previousComparable = comparableMonths.at(-2)?.month;
+  const insightCurrentTransactions = latestComparable ? transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(latestComparable)) : transactions;
+  const insightComparisonTransactions = previousComparable ? transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(previousComparable)) : [];
+  const insights = buildBillInsights(insightCurrentTransactions, insightComparisonTransactions, previousComparable ? { month: previousComparable } : { month: previousMonth(month ?? startMonth) });
 
   return {
     ok: true,
@@ -45,6 +52,7 @@ export async function handleBillSummary(
     action: "bill.summary",
     data: {
       ...summary,
+      ...(transactions.length ? { insights } : {}),
       coverage: { status: "unverified", asOf: context.asOf, availableMonths: context.availableMonths ?? [], warning: "仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。" },
       ...(month ? { month } : { period: { startDate: period!.start_date, endDate: period!.end_date, timezone: period!.timezone, label: period!.label } }),
       ...(!month ? { monthlyBreakdown } : {}),

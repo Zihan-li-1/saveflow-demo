@@ -10,7 +10,7 @@ const ProductTerms = () => <div className="financial-term-help">
   <details><summary>风险等级 <span>点此了解</span></summary><p>风险等级用来表示价格波动和发生亏损的可能性。这里的百分比只是帮助理解差异的演示尺度，不代表实际产品最多只会亏这么多；购买前仍需查看产品说明和正式风险测评。</p></details>
   <details><summary>流动性 <span>点此了解</span></summary><p>流动性就是需要用钱时，多久能把理财资金取出来。当天可取最灵活；下一个工作日可取需要等待；持有到计划结束通常不能提前使用这笔钱。</p></details>
 </div>;
-type SubscriptionView = { id: string; name: string; monthlyFeeFen: number; status: "active" | "cancelled"; lastUsedDate: string; isPotentiallyUnused: boolean; inactivityDays?: number; unusedReason?: string };
+type SubscriptionView = { id: string; name: string; monthlyFeeFen: number; status: "active" | "cancelled"; lastUsedDate: string; isPotentiallyUnused: boolean; inactivityDays?: number; unusedReason?: string; recognition?: { confidence: "high" | "medium" | "not_flagged"; signals: string[] } };
 export function BankingReadCard({ data }: { data?: BankingAgentData }) {
   const subscriptions = data?.data?.subscriptions as SubscriptionView[] | undefined;
   const subscriptionSummary = data?.data?.summary as { activeCount?: number; activeMonthlyFeeFen?: number; potentiallyUnusedCount?: number; potentiallyUnusedMonthlyFeeFen?: number; potentialAnnualSavingsFen?: number } | undefined;
@@ -31,6 +31,7 @@ export function BankingReadCard({ data }: { data?: BankingAgentData }) {
         <p><span>状态</span><strong>{s.status === "active" ? "使用中" : "已取消"}</strong></p>
         <p><span>最近使用</span><strong>{s.lastUsedDate}</strong></p>
         <p><span>闲置提示</span><strong>{s.isPotentiallyUnused ? "可能闲置，待核实" : "暂无闲置标记"}</strong></p>
+        {s.recognition && <details><summary>为什么这样判断</summary><ul>{s.recognition.signals.map(signal => <li key={signal}>{signal}</li>)}</ul></details>}
       </div>
       {s.unusedReason && <p className="subscription-reason">{s.unusedReason}</p>}
     </article>)}
