@@ -4,6 +4,7 @@ import type { ActionReceipt } from '../banking-core/contracts';
 
 export type BankingReply = { text: string; style: 'concise' | 'friendly' | 'professional'; safetyNotices: string[] };
 export type BankingChoice = { optionId: string; label: string };
+export type SavingsPlanInputs = { saved_amount_minor: number } | { month: string; saved_amount_minor: number; income_minor: number; category_expenses_minor: Record<string, number> };
 export type BankingAgentData = {
   reply?: BankingReply;
   kind?: 'clarification';
@@ -14,6 +15,11 @@ export type BankingAgentData = {
   source?: string;
   choices?: BankingChoice[];
   continuationToken?: string;
+  goal?: { target_amount_minor: number; deadline: string };
+  recentSource?: 'repository' | 'user_provided';
+  recent?: { month: string; income_minor: number; category_expenses_minor: Record<string, number> };
+  requiredMonth?: string;
+  categories?: string[];
   operationId?: string;
   preview?: Record<string, unknown>;
   risk?: Record<string, unknown>;
@@ -45,6 +51,7 @@ export type BankingAgentRequest = {
   continuationToken?: string;
   choice?: { optionId: string };
   replyStyle?: BankingReply['style'];
+  planInputs?: SavingsPlanInputs;
 };
 
 /** Clarifications without selectable options stay as plain chat prompts. */
@@ -82,7 +89,7 @@ export async function askBankingAgent(
         new Set(c.choices.map(v => v.optionId)).size !== c.choices.length || Object.keys(c).some(k => !['kind', 'status', 'action', 'slot', 'question', 'source', 'choices', 'continuationToken'].includes(k))) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 恢复凭据格式异常。');
     throw new BankingAgentError(payload.code, payload.reply?.text || payload.message || '付款账户可用余额不足。', { ...c, reply: payload.reply }, payload.requestId);
   }
-  if (!payload || !response.ok || !payload.data || !['OK', 'NEEDS_CLARIFICATION', 'UNSUPPORTED'].includes(payload.code || '')) throw new ApiError(String(payload?.code || 'BANKING_AGENT_ERROR'), payload?.message || 'Banking Agent 请求失败');
+  if (!payload || !response.ok || !payload.data || !['OK', 'NEEDS_CLARIFICATION', 'NEEDS_PLAN_INPUTS', 'UNSUPPORTED'].includes(payload.code || '')) throw new ApiError(String(payload?.code || 'BANKING_AGENT_ERROR'), payload?.message || 'Banking Agent 请求失败');
   const reply = payload.reply;
   if (!validReply(reply)) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 回复格式异常。');
   const data = payload.data;
@@ -99,6 +106,30 @@ export async function askBankingAgent(
   const products = data.data?.products;
   const wealthProducts = data.data?.products as Array<Record<string, unknown>> | undefined;
   const nonnegative = (n: unknown) => Number.isSafeInteger(n) && Number(n) >= 0;
+  const recent = data.data?.recent as { month?: string; income_minor?: number; category_expenses_minor?: Record<string, number> } | undefined;
+  const calculation = data.data?.calculation as Record<string, unknown> | undefined;
+  const advice = data.data?.advice as { proposed_expense_minor?: number; feasible?: boolean; remaining_gap_minor?: number; observations?: unknown[]; caveats?: unknown[]; category_budgets?: Array<{ category: string; suggested_minor: number }> } | undefined;
+  const verifiedSavings = data.data?.verification_status === 'verified' && !!recent && !!calculation && !!advice &&
+    /^\d{4}-(0[1-9]|1[0-2])$/.test(recent.month || '') && nonnegative(recent.income_minor) &&
+    !!recent.category_expenses_minor && Object.values(recent.category_expenses_minor).every(nonnegative) &&
+    nonnegative(calculation.target_amount_minor) && nonnegative(calculation.saved_amount_minor) && nonnegative(calculation.remaining_minor) &&
+    typeof calculation.deadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(calculation.deadline) &&
+    calculation.remaining_minor === Math.max(0, Number(calculation.target_amount_minor) - Number(calculation.saved_amount_minor)) &&
+    Array.isArray(calculation.opportunity_dates) && (calculation.opportunity_dates.length > 0 || calculation.remaining_minor === 0) && calculation.opportunity_dates.every((date: unknown) => typeof date === 'string' && /^\d{4}-\d{2}-01$/.test(date)) &&
+    nonnegative(calculation.required_monthly_minor) && calculation.required_monthly_minor === (calculation.opportunity_dates.length ? Math.ceil(Number(calculation.remaining_minor) / calculation.opportunity_dates.length) : 0) &&
+    nonnegative(calculation.observed_income_minor) && nonnegative(calculation.observed_expense_minor) &&
+    calculation.observed_expense_minor === Object.values(recent.category_expenses_minor).reduce((sum, amount) => sum + amount, 0) &&
+    calculation.observed_income_minor === recent.income_minor &&
+    calculation.observed_surplus_minor === Number(calculation.observed_income_minor) - Number(calculation.observed_expense_minor) &&
+    calculation.monthly_gap_minor === Math.max(0, Number(calculation.required_monthly_minor) - Number(calculation.observed_surplus_minor)) &&
+    Array.isArray(advice.observations) && Array.isArray(advice.caveats) && advice.caveats.every(item => typeof item === 'string') &&
+    Array.isArray(advice.category_budgets) && advice.category_budgets.length === Object.keys(recent.category_expenses_minor).length &&
+    new Set(advice.category_budgets.map(item => item.category)).size === advice.category_budgets.length &&
+    advice.category_budgets.every(item => item.category in recent.category_expenses_minor! && nonnegative(item.suggested_minor)) &&
+    advice.proposed_expense_minor === advice.category_budgets.reduce((sum, item) => sum + item.suggested_minor, 0) &&
+    advice.remaining_gap_minor === Math.max(0, Number(advice.proposed_expense_minor) + Number(calculation.required_monthly_minor) - Number(calculation.observed_income_minor)) &&
+    advice.feasible === (advice.remaining_gap_minor === 0) && ['repository', 'user_provided'].includes(String(data.data?.recent_source)) &&
+    data.evidence?.some(item => item.source === (data.data?.recent_source === 'repository' ? 'synthetic_demo_only' : 'user_provided'));
   const listEvidence = evidence?.source === 'synthetic_demo_only' && typeof evidence.asOf === 'string' && Array.isArray(evidence.entityIds);
   const trialMetadataValid = !isTrialOperationId(data.operationId) || (data.source === 'trueforge-mcp' && data.previewOnly === true && data.executionAllowed === false);
   const scenarioPreview = data.preview as Record<string, unknown> | undefined;
@@ -123,6 +154,7 @@ export async function askBankingAgent(
     (payload.code === 'UNSUPPORTED' && data.status === 'unsupported') ||
     (payload.code === 'OK' && data.status === 'cancelled') ||
     (payload.code === 'NEEDS_CLARIFICATION' && data.status === 'needs_clarification' && typeof data.question === 'string' && typeof data.continuationToken === 'string' && Array.isArray(data.choices) && data.choices.every(choice => typeof choice.optionId === 'string' && typeof choice.label === 'string')) ||
+    (payload.code === 'NEEDS_PLAN_INPUTS' && data.status === 'needs_plan_inputs' && data.action === 'orchestrator.goal' && nonnegative(data.goal?.target_amount_minor) && typeof data.goal?.deadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.goal.deadline) && /^\d{4}-(0[1-9]|1[0-2])$/.test(data.requiredMonth || '') && typeof data.continuationToken === 'string' && Array.isArray(data.categories) && data.categories.length > 0 && data.categories.every(category => typeof category === 'string' && !!category.trim()) && new Set(data.categories).size === data.categories.length && (data.recentSource === 'user_provided' || (data.recentSource === 'repository' && data.recent?.month === data.requiredMonth && nonnegative(data.recent?.income_minor) && !!data.recent?.category_expenses_minor && data.categories.every(category => nonnegative(data.recent?.category_expenses_minor[category]))))) ||
     (payload.code === 'OK' && data.status === 'bill_result' && validBillMonth !== validBillPeriod && nonnegative(bill?.totalExpenseFen) && nonnegative(bill?.totalIncomeFen) && nonnegative(bill?.transactionCount) && validBillInsights && (!monthlyBreakdown || validMonthlyBreakdown) && (!validBillPeriod || validMonthlyBreakdown) && Array.isArray(data.evidence) && data.evidence.length > 0) ||
     (payload.code === 'OK' && data.status === 'card_result' && ['card.get', 'card.security_review'].includes(data.action || '') && typeof card?.id === 'string' && typeof card.name === 'string' && ['active', 'frozen'].includes(String(card.status)) && Number.isSafeInteger(card.monthlyBudgetFen) && Number(card.monthlyBudgetFen) >= 0 && Number.isSafeInteger(card.monthlySpentFen) && Number(card.monthlySpentFen) >= 0 && typeof card.onlinePaymentsEnabled === 'boolean' && Array.isArray(card.blockedCategories) && (card.alertThresholdFen === null || nonnegative(card.alertThresholdFen)) && (card.balanceReminderAmountFen === null || nonnegative(card.balanceReminderAmountFen)) && (card.balanceReminderPercent === null || Number.isSafeInteger(card.balanceReminderPercent) && Number(card.balanceReminderPercent) >= 1 && Number(card.balanceReminderPercent) <= 100) && !(card.balanceReminderAmountFen !== null && card.balanceReminderPercent !== null) && Number.isSafeInteger(card.version) && cardEvidenceValid && (data.action !== 'card.security_review' || (data.data?.execution_allowed === false && data.data?.requires_explicit_user_request_to_freeze === true && Array.isArray(data.data?.guidance)))) ||
     (payload.code === 'OK' && data.status === 'wealth_result' && data.action?.startsWith('wealth.') && typeof data.data?.kind === 'string' && data.data?.synthetic_demo_only === true && typeof data.data?.as_of === 'string' && typeof data.data?.context_snapshot_id === 'string' && Array.isArray(data.data?.evidence)) ||
@@ -131,7 +163,7 @@ export async function askBankingAgent(
     (payload.code === 'OK' && data.status === 'product_result' && data.action === 'product.list' && listEvidence && Array.isArray(products) && products.every(p => p && typeof p.id === 'string' && typeof p.name === 'string' && ['R1', 'R2', 'R3'].includes(p.riskLevel) && nonnegative(p.expectedYield) && nonnegative(p.minimumAmountFen) && nonnegative(p.durationDays) && ['T+0', 'T+1', 'AT_MATURITY'].includes(p.liquidity) && p.currency === 'CNY' && p.isSynthetic === true)) ||
     (payload.code === 'OK' && ['wealth_recommendation', 'wealth_comparison'].includes(data.status) && ['wealth.recommend', 'wealth.compare'].includes(data.action || '') && Array.isArray(wealthProducts) && wealthProducts.every(p => typeof p.product_ref === 'string' && typeof p.name === 'string' && ['R1', 'R2', 'R3'].includes(String(p.risk_level)) && nonnegative(p.expected_yield_bps) && nonnegative(p.minimum_amount_minor) && nonnegative(p.duration_days) && ['T+0', 'T+1', 'AT_MATURITY'].includes(String(p.liquidity)) && p.currency === 'CNY') && Array.isArray(data.evidence)) ||
     (payload.code === 'OK' && data.status === 'risk_assessment_required' && data.action === 'wealth.assess_risk' && data.data?.status === 'requires_user_questionnaire' && data.data?.model_may_answer_for_user === false) ||
-    (payload.code === 'OK' && data.status === 'goal_plan' && data.action === 'orchestrator.goal' && data.data?.execution_allowed === false && Array.isArray(data.data?.steps) && Array.isArray(data.evidence)) ||
+    (payload.code === 'OK' && data.status === 'goal_plan' && data.action === 'orchestrator.goal' && data.data?.execution_allowed === false && Array.isArray(data.data?.steps) && Array.isArray(data.evidence) && (verifiedSavings || (data.data?.verification_status === undefined && data.data?.targetAmountFen == null && data.data?.deadline == null))) ||
     (payload.code === 'OK' && data.status === 'scenario_rule_preview' && scenarioAction && data.data?.requires_confirmation === true && typeof data.operationId === 'string' && typeof data.continuationToken === 'string' && typeof scenarioPreview?.previewHash === 'string' && /^[a-f0-9]{64}$/.test(scenarioPreview.previewHash) && Array.isArray(scenarioPreview.stepIds) && scenarioPreview.stepIds.length === 1 && scenarioEffect?.kind === 'scenario_rule_change' && scenarioEffect.action === data.action && typeof scenarioEffect.ruleId === 'string' && scenarioAfter?.id === scenarioEffect.ruleId && scenarioRule?.id === scenarioEffect.ruleId && data.risk?.allowed === true) ||
     (payload.code === 'OK' && data.status === 'scenario_rule' && scenarioAction && typeof data.operationId === 'string' && typeof scenarioRule?.id === 'string' && scenarioReceipt?.status === 'succeeded' && scenarioReceipt.action === data.action && scenarioReceiptEffect?.kind === 'scenario_rule_change' && scenarioReceiptEffect.action === data.action && scenarioReceiptAfter?.id === scenarioRule.id) ||
     (payload.code === 'OK' && data.status === 'scenario_event_review' && data.action === 'scenario.review_event' && data.data?.inherited_confirmation === false) ||
@@ -175,3 +207,4 @@ export async function executeTrialTransfer(
     !Array.isArray((receipt as ActionReceipt).effects)) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', '执行桥回执格式异常。', true);
   return receipt as ActionReceipt;
 }
+
