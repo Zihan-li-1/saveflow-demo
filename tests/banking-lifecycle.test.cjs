@@ -1,4 +1,4 @@
-﻿/* eslint-disable @typescript-eslint/no-require-imports -- Compile and mount the real Hook and page in Node. */
+/* eslint-disable @typescript-eslint/no-require-imports -- Compile and mount the real Hook and page in Node. */
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const Module = require('node:module');
@@ -34,6 +34,14 @@ const reply = { text: 'test response', style: 'concise', safetyNotices: [] };
 const composer = () => root.root.findAllByType('input').find(node => node.props.placeholder === '输入转账、账单或卡片请求…');
 const loading = () => root.root.findAll(node => node.props.className === 'typing').length > 0;
 const preview = () => { const message = flow.messages.findLast(message => message.banking?.status === 'awaiting_confirmation'); assert.ok(message, JSON.stringify(flow.messages)); return message.banking; };
+const savingsObservation = facts => {
+  const category = '购物';
+  const previous = facts.history.map(month => month.category_expenses_minor[category]).filter(Number.isSafeInteger);
+  const average = previous.reduce((sum, value) => sum + value, 0) / previous.length;
+  const difference = facts.recent.category_expenses_minor[category] - average;
+  const trend = difference > Math.max(1000, average * .1) ? 'up' : difference < -Math.max(1000, average * .1) ? 'down' : 'flat';
+  return { category, trend, evidence_refs: [`recent:${category}`, `history:${facts.history[0].month}:${category}`], reason: '近期与历史演示数据仅供参考', uncertain: true };
+};
 async function mount() {
   calls = []; intercept = null;
   const storage = new Map();
@@ -44,7 +52,7 @@ async function mount() {
     init.headers["x-forwarded-for"] = `lifecycle-${++requestSequence}`;
     const body = JSON.parse(init.body); calls.push(body.action || 'agent');
     const run = () => url === '/api/banking-agent'
-      ? handleAgent(new Request(`http://localhost${url}`, init), { env, core, parseIntent: async () => intent })
+      ? handleAgent(new Request(`http://localhost${url}`, init), { env, core, parseIntent: async () => intent, savingsAdvisor: async facts => ({ observations: [savingsObservation(facts)], category_budgets: Object.entries(facts.recent.category_expenses_minor).map(([category, suggested_minor]) => ({ category, suggested_minor, reason: '近期数据参考', evidence_refs: [`recent:${category}`] })), caveats: [], self_review: { passed: true, data_coverage: true, category_evidence: true, fixed_costs: true, budget_totals: true, uncertainty: true, failed_items: [] } }) })
       : handleBanking(new Request(`http://localhost${url}`, init), { env, core });
     return intercept ? intercept(body, run) : run();
   };
@@ -69,6 +77,29 @@ before(async () => {
 });
 afterEach(async () => { if (root) await act(async () => root.unmount()); root = null; agent.askBankingAgent = realAsk; });
 after(() => { global.fetch = originalFetch; delete global.sessionStorage; });
+
+test('savings form resumes the goal and displays only a verified card', async () => {
+  await mount();
+  intent = { schemaVersion: '1.0.0', action: 'orchestrator.goal', slots: { goal_text: '年底存一万', amount: { amount_minor: 1000000, currency: 'CNY' }, deadline: '2026-12-31' }, missingSlots: [], status: 'ready_for_resolution' };
+  await act(async () => { await flow.startDemo('年底存一万'); });
+  const pending = flow.messages.findLast(message => message.banking?.status === 'needs_plan_inputs')?.banking;
+  assert.ok(pending?.continuationToken);
+  assert.equal(flow.messages.some(message => message.banking?.status === 'goal_plan'), false);
+  const form = root.root.findAll(node => node.type === 'form' && node.props['aria-label'] === '补充储蓄计划数据')[0];
+  assert.ok(form);
+  const expenses = { 房租: 300000, 餐饮: 145000, 交通: 40000, 通信: 10000, 日用品: 50000, 娱乐: 112000, 购物: 128000, 订阅: 9000, 其他: 52000 };
+  const inputs = form.findAllByType('input');
+  await act(async () => {
+    inputs[0].props.onChange({ target: { value: '0' } });
+    inputs[1].props.onChange({ target: { value: '12000' } });
+    pending.categories.forEach((category, index) => inputs[index + 2].props.onChange({ target: { value: String(expenses[category] / 100) } }));
+  });
+  const filled = root.root.findAll(node => node.type === 'form' && node.props['aria-label'] === '补充储蓄计划数据')[0];
+  await act(async () => { filled.props.onSubmit({ preventDefault() {} }); await new Promise(resolve => setTimeout(resolve, 10)); });
+  assert.equal(flow.messages.findLast(message => message.banking?.status === 'goal_plan')?.banking?.data?.verification_status, 'verified');
+  assert.ok(root.root.findAll(node => node.props['aria-label'] === '储蓄计划卡片').length);
+  assert.equal(flow.canStart, true);
+});
 
 test('same page: card query → freeze → verify → bill → unfreeze → query → budget and controls', async () => {
   await mount();
@@ -299,3 +330,4 @@ test('real clarification options remain usable after the Agent request ends', as
   await act(async () => { await flow.chooseBankingOption(choice.optionId, choice.label); });
   ready(); assert.equal(flow.stage, 'answered'); assert.ok(preview().operationId);
 });
+

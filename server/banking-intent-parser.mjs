@@ -67,7 +67,7 @@ export class BankingIntentParserError extends Error {
   }
 }
 
-function config(env) {
+export function bankingModelConfig(env) {
   if (!env?.DASHSCOPE_API_KEY?.trim()) {
     throw new BankingIntentParserError('MODEL_AUTH_ERROR', '模型服务未配置。', 503);
   }
@@ -140,7 +140,7 @@ export async function parseBankingIntent(
   { history = [], context = undefined, env = process.env, fetchImpl = fetch, requestId = undefined, now = Date.now, timezone = 'Asia/Shanghai', financialContext, onDiagnostic = entry => console.warn(JSON.stringify(entry)) } = {},
 ) {
   validateInput(message, history);
-  const settings = config(env);
+  const settings = bankingModelConfig(env);
   const report = (reason, validationRule = undefined) => {
     const entry = {
       event: 'banking_intent_validation_failed', schemaVersion: '1.0.0', reason,
