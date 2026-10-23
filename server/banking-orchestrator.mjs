@@ -80,7 +80,7 @@ function tokenError(error) {
 }
 
 function issueState({ action, slots, pendingSlot, question, choices = [], selections = {}, operation, recentSource, recentSnapshotId, env, now }) {
-  return issueContinuationToken({ action, slots, pendingSlot, question, choices, selections, operation, recentSource, recentSnapshotId }, continuationSecret(env), now(), pendingSlot === '__plan_inputs' ? 30 * 60_000 : 5 * 60_000);
+  return issueContinuationToken({ action, slots, pendingSlot, question, choices, selections, operation, recentSource, recentSnapshotId }, continuationSecret(env), now(), ['__plan_inputs', '__wealth_screening'].includes(pendingSlot) ? 30 * 60_000 : 5 * 60_000);
 }
 
 async function accountChoices(repository) {
@@ -151,15 +151,16 @@ export async function runBankingConversation(body, {
     throw Object.assign(new Error('续接令牌密钥未配置'), { code: 'CONTINUATION_CONFIG_ERROR', status: 503 });
   }
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw inputError('INVALID_REQUEST', '请求体必须是对象', 400);
-  const allowed = ['message', 'history', 'consent', 'continuationToken', 'choice', 'replyStyle', 'planInputs'];
+  const allowed = ['message', 'history', 'consent', 'continuationToken', 'choice', 'replyStyle', 'planInputs', 'wealthInputs'];
   if (Object.keys(body).some(key => !allowed.includes(key))) throw inputError('INVALID_REQUEST', '请求包含未注册字段', 400);
   const continuing = body.continuationToken !== undefined;
   if (body.planInputs !== undefined && (!continuing || body.message !== undefined || body.choice !== undefined)) throw inputError('INVALID_REQUEST', '储蓄数据只能随目标续接单独提交', 400);
+  if (body.wealthInputs !== undefined && (!continuing || body.message !== undefined || body.choice !== undefined || body.planInputs !== undefined)) throw inputError('INVALID_REQUEST', '理财筛选条件只能随计划续接单独提交', 400);
   if (body.choice !== undefined && (!continuing || body.message !== undefined)) throw inputError('INVALID_REQUEST', 'choice 必须与 continuationToken 一起提交，且不能同时提交 message', 400);
   if (continuing && (typeof body.continuationToken !== 'string' || body.continuationToken.length > 10000)) throw inputError('CONTINUATION_INVALID', '续接凭据无效', 400);
   if (!continuing && !initialIntent && (typeof body.message !== 'string' || !body.message.trim() || body.message.length > 2000)) throw inputError('INVALID_REQUEST', 'message 必须是 1-2000 字符的文本', 400);
   if (continuing && body.message !== undefined && (typeof body.message !== 'string' || body.message.length > 2000)) throw inputError('INVALID_REQUEST', 'message 格式无效', 400);
-  if (continuing && body.message === undefined && body.planInputs === undefined && (!body.choice || typeof body.choice !== 'object')) throw inputError('INVALID_REQUEST', '续接请求需要 message、choice 或 planInputs', 400);
+  if (continuing && body.message === undefined && body.planInputs === undefined && body.wealthInputs === undefined && (!body.choice || typeof body.choice !== 'object')) throw inputError('INVALID_REQUEST', '续接请求需要 message、choice、planInputs 或 wealthInputs', 400);
   if (body.choice !== undefined && (!body.choice || typeof body.choice !== 'object' || Array.isArray(body.choice) || typeof body.choice.optionId !== 'string' || !body.choice.optionId.trim() || Object.keys(body.choice).some(key => key !== 'optionId'))) throw inputError('INVALID_REQUEST', 'choice 只能包含非空 optionId', 400);
   if (body.consent !== undefined && body.consent !== true) throw inputError('INVALID_REQUEST', 'consent 必须明确为 true', 400);
   const history = body.history ?? [];
@@ -193,10 +194,21 @@ export async function runBankingConversation(body, {
       const candidate = await savingsAdvisor(facts, { env, fetchImpl });
       const advice = verifySavingsAdvice(candidate, facts);
       const generic = await handleGoal({ slots: continuation.slots }, repository);
+      const wealthHandoffToken = core.wealthPorts ? issueState({ action: 'wealth.recommend', slots: { goal: { kind: 'steady_growth', target_date: calculation.deadline } }, pendingSlot: '__wealth_screening', env, now }) : undefined;
       return reply(200, 'OK', '储蓄计划已核算', { status: 'goal_plan', action: 'orchestrator.goal', data: {
         ...generic.data, verification_status: 'verified', recent_month: recent.month, recent, recent_source: financial.recentSource,
         calculation, advice, execution_allowed: false,
-      }, evidence: [...generic.evidence, { source: financial.recentSource === 'repository' ? financial.context.dataSource : 'user_provided', asOf: financial.sources.recent_as_of, entityIds: [] }] });
+      }, ...(wealthHandoffToken ? { wealthHandoffToken } : {}), evidence: [...generic.evidence, { source: financial.recentSource === 'repository' ? financial.context.dataSource : 'user_provided', asOf: financial.sources.recent_as_of, entityIds: [] }] });
+    }
+    if (body.wealthInputs !== undefined) {
+      if (continuation.action !== 'wealth.recommend' || continuation.pendingSlot !== '__wealth_screening' || continuation.slots.goal?.kind !== 'steady_growth' || typeof continuation.slots.goal.target_date !== 'string') throw inputError('CONTINUATION_INVALID', '理财筛选与已核验计划不匹配', 400);
+      const inputs = body.wealthInputs;
+      if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs) || Object.keys(inputs).sort().join(',') !== 'investable_amount_minor,liquidity_requirement,max_risk_level' || !['R1', 'R2', 'R3'].includes(inputs.max_risk_level) || !Number.isSafeInteger(inputs.investable_amount_minor) || inputs.investable_amount_minor < 1 || inputs.investable_amount_minor > 1_000_000_000 || !['T+0', 'T+1', 'AT_MATURITY'].includes(inputs.liquidity_requirement)) throw inputError('WEALTH_INPUT_INVALID', '请填写有效的独立可投资金额、风险上限和取用要求。', 400);
+      const goal = { ...continuation.slots.goal, max_risk_level: inputs.max_risk_level };
+      const constraints = { investable_amount: { amount_minor: inputs.investable_amount_minor, currency: 'CNY' }, ...(inputs.liquidity_requirement === 'AT_MATURITY' ? {} : { max_settlement_days: inputs.liquidity_requirement === 'T+0' ? 0 : 1 }) };
+      const result = await wealthHandler({ action: 'wealth.recommend', goal, constraints });
+      if (!result.ok) return reply(statusFor(result.error?.code), result.error?.code || 'SKILL_ERROR', result.error?.message || '理财筛选失败', { status: 'wealth_error', action: 'wealth.recommend', error: result.error });
+      return reply(200, 'OK', result.data.kind === 'questionnaire_required' ? '请先完成风险测评' : '按已核验目标完成只读理财筛选', { status: 'wealth_result', action: 'wealth.recommend', data: result.data.kind === 'recommendation' ? { ...result.data, screening_context: { target_date: goal.target_date, investable_amount_minor: inputs.investable_amount_minor, max_risk_level: inputs.max_risk_level, liquidity_requirement: inputs.liquidity_requirement, source: 'verified_savings_plan' } } : result.data, evidence: result.data.evidence });
     }
     if (continuation.pendingSlot === '__scenario_confirmation') {
       if (!continuation.operation) throw inputError('CONTINUATION_INVALID', '规则操作续接信息无效', 400);
