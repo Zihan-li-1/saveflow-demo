@@ -43,8 +43,11 @@ export async function handleBillSummary(
   const latestComparable = comparableMonths.at(-1)?.month;
   const previousComparable = comparableMonths.at(-2)?.month;
   const insightCurrentTransactions = latestComparable ? transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(latestComparable)) : transactions;
-  const insightComparisonTransactions = previousComparable ? transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(previousComparable)) : [];
-  const insights = buildBillInsights(insightCurrentTransactions, insightComparisonTransactions, previousComparable ? { month: previousComparable } : { month: previousMonth(month ?? startMonth) });
+  const comparisonMonth = previousComparable ?? previousMonth(month ?? startMonth);
+  const insightComparisonTransactions = previousComparable
+    ? transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(previousComparable))
+    : month ? await repository.getTransactions({ month: comparisonMonth }) : [];
+  const insights = buildBillInsights(insightCurrentTransactions, insightComparisonTransactions, { month: comparisonMonth });
 
   return {
     ok: true,

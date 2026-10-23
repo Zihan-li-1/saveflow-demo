@@ -131,7 +131,8 @@ test('real bill handler reads the shared repository and reflects changed transac
   assert.ok(second.evidence[0].entityIds.includes('TXN-EXTRA-202608'));
   assert.equal(second.data.insights.currentExpenseFen, second.data.totalExpenseFen);
   assert.equal(second.data.insights.comparisonPeriod.month, '2026-07');
-  assert.equal(second.data.insights.comparisonAvailable, false);
+  assert.equal(second.data.insights.comparisonAvailable, true);
+  assert.equal(second.data.insights.comparisonExpenseFen, 718000);
 });
 
 test('range bill includes every calendar month for monthly comparison', async () => {
