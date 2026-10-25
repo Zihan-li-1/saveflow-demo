@@ -10,7 +10,7 @@ export type BankingRequestMap = {
   "card.list": Record<string, never>;
   "card.get": { id: string };
   "card.set_budget": { cardId: string; monthlyBudgetFen: number };
-  "card.set_controls": { cardId: string; onlinePaymentsEnabled?: boolean; blockedCategories?: string[]; alertThresholdFen?: number | null };
+  "card.set_controls": { cardId: string; onlinePaymentsEnabled?: boolean; blockedCategories?: string[]; alertThresholdFen?: number | null; balanceReminderAmountFen?: number | null; balanceReminderPercent?: number | null };
   "card.freeze": { cardId: string };
   "card.unfreeze": { cardId: string };
   "subscription.list": Record<string, never>;

@@ -52,7 +52,11 @@ export function validateSkillResult(turn, { tool, serverName, expectedArgs }) {
   if (tool === 'card_get') {
     const c = r.data?.card;
     if (r.action !== policy.action || r.status !== policy.kind || r.code !== 'OK' || !isObject(c) || !text(c.id) || !text(c.name) || !text(c.accountId) ||
-        !['active', 'frozen'].includes(c.status) || !integer(c.monthlyBudgetFen) || !integer(c.monthlySpentFen) || !integer(c.version) || !integer(c.previewGeneration)) throw invalidToolResult();
+        !['active', 'frozen'].includes(c.status) || !integer(c.monthlyBudgetFen) || !integer(c.monthlySpentFen) || typeof c.onlinePaymentsEnabled !== 'boolean' ||
+        !Array.isArray(c.blockedCategories) || c.blockedCategories.some(category => !text(category)) || (c.alertThresholdFen !== null && !integer(c.alertThresholdFen)) ||
+        (c.balanceReminderAmountFen !== null && !integer(c.balanceReminderAmountFen)) ||
+        (c.balanceReminderPercent !== null && (!integer(c.balanceReminderPercent) || c.balanceReminderPercent < 1 || c.balanceReminderPercent > 100)) ||
+        (c.balanceReminderAmountFen !== null && c.balanceReminderPercent !== null) || !integer(c.version) || !integer(c.previewGeneration)) throw invalidToolResult();
     const evidence = validateEvidence(r.evidence, [c.id]);
     if (!contextValid(r.data.context, evidence)) throw invalidToolResult();
     return { type: 'done', data: { status: policy.kind, action: policy.action, data: structuredClone(r.data), evidence } };
@@ -88,7 +92,16 @@ function validatePreview(r, policy) {
     if (e.kind !== 'card_change' || e.action !== policy.action || !text(e.cardId) || !text(e.cardName) || !integer(e.cardVersion) ||
         !integer(e.previewGeneration) || e.previewGeneration < 1 || !integer(e.monthlySpentFen) ||
         !isObject(e.before) || !isObject(e.after) || !['active', 'frozen'].includes(e.before.status) || !['active', 'frozen'].includes(e.after.status) ||
-        !integer(e.before.monthlyBudgetFen) || !integer(e.after.monthlyBudgetFen) || e.after.monthlyBudgetFen > 10000000) throw invalidToolResult();
+        !integer(e.before.monthlyBudgetFen) || !integer(e.after.monthlyBudgetFen) || e.after.monthlyBudgetFen > 10000000 ||
+        typeof e.before.onlinePaymentsEnabled !== 'boolean' || typeof e.after.onlinePaymentsEnabled !== 'boolean' ||
+        !Array.isArray(e.before.blockedCategories) || !Array.isArray(e.after.blockedCategories) ||
+        e.before.blockedCategories.some(category => !text(category)) || e.after.blockedCategories.some(category => !text(category)) ||
+        (e.before.alertThresholdFen !== null && !integer(e.before.alertThresholdFen)) || (e.after.alertThresholdFen !== null && !integer(e.after.alertThresholdFen)) ||
+        (e.before.balanceReminderAmountFen !== null && !integer(e.before.balanceReminderAmountFen)) || (e.after.balanceReminderAmountFen !== null && !integer(e.after.balanceReminderAmountFen)) ||
+        (e.before.balanceReminderPercent !== null && (!integer(e.before.balanceReminderPercent) || e.before.balanceReminderPercent < 1 || e.before.balanceReminderPercent > 100)) ||
+        (e.after.balanceReminderPercent !== null && (!integer(e.after.balanceReminderPercent) || e.after.balanceReminderPercent < 1 || e.after.balanceReminderPercent > 100)) ||
+        (e.before.balanceReminderAmountFen !== null && e.before.balanceReminderPercent !== null) ||
+        (e.after.balanceReminderAmountFen !== null && e.after.balanceReminderPercent !== null)) throw invalidToolResult();
     if (policy.action === 'card.set_budget') {
       if (e.before.status !== e.after.status || e.before.monthlyBudgetFen === e.after.monthlyBudgetFen) throw invalidToolResult();
     } else if (e.before.monthlyBudgetFen !== e.after.monthlyBudgetFen ||
