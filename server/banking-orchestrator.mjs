@@ -13,6 +13,7 @@ import { calculateSavingsGoal, validatePlanInputs, validateSavedAmount } from '.
 import { requestSavingsAdvice, verifySavingsAdvice } from './savings-advisor.mjs';
 import { understandingContext } from './understanding-context.mjs';
 import { collectSavingsData } from './savings-data.mjs';
+import { buildFinancialAnalysisContext } from './financial-analysis-context.mjs';
 
 const scenarioStores = new Map();
 function scenarioStoreFor(scope) {
@@ -139,12 +140,18 @@ export async function runBankingConversation(body, {
 }) {
   let replyContext = {};
   const reply = (httpStatus, code, message, data) => ({ httpStatus, code, message, data, replyContext });
-  const wealthReadHandler = raw => createWealthSkill(repository)(raw);
-  const wealthHandler = raw => {
+  const wealthReadHandler = (raw, financialContext) => createWealthSkill(repository)(raw, financialContext ? { financialContext } : {});
+  const wealthHandler = async raw => {
     const extended = ['wealth.subscribe', 'wealth.redeem'].includes(raw.action) ||
       (raw.action === 'wealth.recommend' && raw.goal && typeof raw.goal === 'object') ||
       (raw.action === 'wealth.assess_risk' && ['investment', 'portfolio'].includes(raw.assessment_scope));
-    if (!extended) return wealthReadHandler(raw);
+    if (!extended) {
+      if (raw.action === 'wealth.recommend') {
+        const financial = await buildFinancialAnalysisContext(repository, { now, timezone });
+        return wealthReadHandler(raw, financial);
+      }
+      return wealthReadHandler(raw);
+    }
     const { action, ...slots } = raw;
     return handleWealth({ action, slots }, repository, core.wealthPorts, selections);
   };
