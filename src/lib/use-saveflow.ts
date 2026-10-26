@@ -16,7 +16,7 @@ import { transferFlow, bankingContinuationToken, updateBankingFlows, type Bankin
 import { agentErrorHint, agentErrorPolicy } from "./agent-error-policy.mjs";
 import type { BankingConversation } from './banking-conversation-contract';
 
-export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_wealth_receipt" | "banking_savings_inputs" | "banking_savings_plan"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
+export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "banking_purchase" | "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_wealth_receipt" | "banking_savings_inputs" | "banking_savings_plan"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
 const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。可以查询模拟账单，或生成转账正式预览，例如：给张三转 500 元。" }];
 const pendingKey = "saveflow.pending-operation.v1";
 
@@ -233,6 +233,9 @@ export function useSaveflow() {
       } else if (answer.status === "card_result") {
         setBankingContinuation(null);
         addMessage({ role: "agent", kind: "banking_card", text: replyText, banking: answer });
+      } else if (answer.status === "purchase_request") {
+        setBankingContinuation(null);
+        addMessage({ role: "agent", kind: "banking_purchase", text: replyText, banking: answer });
       } else if (answer.status === "wealth_result") {
         setBankingContinuation(null);
         addMessage({ role: "agent", kind: "banking_wealth", text: replyText, banking: answer });
@@ -392,12 +395,21 @@ export function useSaveflow() {
     const previewHash = data.preview?.previewHash;
     const stepIds = data.preview?.stepIds;
     if (mode !== "check" && (typeof previewHash !== "string" || (!trial && (!Array.isArray(stepIds) || stepIds.some(step => typeof step !== "string"))))) return;
-    // 高风险试点转账先发起一次性验证码，进入 OTP 输入态；验证通过后才执行，绝不未验证直接扣款。
-    if (mode === "confirm" && trial && kind === "transfer" && typeof previewHash === "string" && data.risk?.requiredVerification === "otp") {
+    // 高风险转账先发起一次性验证码，进入 OTP 输入态；验证通过后才执行，绝不未验证直接扣款。
+    // 试点路走执行桥（startTrialVerification 内部先 decide 再发码）；正常路先 decide(confirm) 再 verification.start。
+    if (mode === "confirm" && kind === "transfer" && typeof previewHash === "string" && data.risk?.requiredVerification === "otp") {
       transferBusyRef.current = true; setTransferBusy(true);
       try {
-        const started = await startTrialVerification(id, previewHash, accessCode, active.current?.signal ?? new AbortController().signal);
-        setOtpChallenge({ operationId: id, challengeId: started.challengeId, expiresAt: started.expiresAt });
+        if (trial) {
+          const started = await startTrialVerification(id, previewHash, accessCode, active.current?.signal ?? new AbortController().signal);
+          setOtpChallenge({ operationId: id, challengeId: started.challengeId, expiresAt: started.expiresAt });
+        } else {
+          const client = cardClient();
+          const decision = await client.request("action.decide", { operationId: id, previewHash, decision: "confirm", confirmedStepIds: stepIds as string[] });
+          if (decision.state !== "confirmed") throw new ApiError("CONFIRMATION_INVALID", "操作未被确认");
+          const started = await client.request("verification.start", { operationId: id, previewHash });
+          setOtpChallenge({ operationId: id, challengeId: started.challengeId, expiresAt: started.expiresAt });
+        }
         setOtpError(null);
       } catch (error) {
         addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "验证码发起失败", errorHint: "验证码未发出；可重新点击确认转账。" });
@@ -476,9 +488,17 @@ export function useSaveflow() {
     if (!data.operationId || typeof previewHash !== "string") return;
     transferBusyRef.current = true; setTransferBusy(true); setOtpError(null);
     const version = generation.current;
+    const trial = isTrialPreview(data);
     try {
-      await verifyTrialVerification(data.operationId, previewHash, challenge.challengeId, code, accessCode, active.current?.signal ?? new AbortController().signal);
-      const receipt = await executeTrialTransfer(data.operationId, previewHash, accessCode, active.current?.signal ?? new AbortController().signal);
+      let receipt: ActionReceipt;
+      if (trial) {
+        await verifyTrialVerification(data.operationId, previewHash, challenge.challengeId, code, accessCode, active.current?.signal ?? new AbortController().signal);
+        receipt = await executeTrialTransfer(data.operationId, previewHash, accessCode, active.current?.signal ?? new AbortController().signal);
+      } else {
+        const client = cardClient();
+        await client.request("verification.verify", { operationId: data.operationId, previewHash, challengeId: challenge.challengeId, code });
+        receipt = await client.request("action.execute", { operationId: data.operationId, previewHash });
+      }
       setOtpChallenge(null);
       const outcome = await showTransferOutcome(data, receipt, version);
       if (outcome) {

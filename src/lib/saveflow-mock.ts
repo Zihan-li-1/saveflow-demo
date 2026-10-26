@@ -4,6 +4,7 @@ const repository = createFinancialContext().repository;
 const context = getLegacyContext(repository);
 const goal = repository.getSavingGoal();
 const cards = repository.getCards();
+const subscriptions = repository.getSubscriptions();
 // Yuan fields are presentation-only compatibility fields, never Core write inputs.
 export const saveflowMock = {
   currentMonth: context.currentMonth, previousMonth: context.previousMonth, asOf: context.asOf,
@@ -20,6 +21,7 @@ export const saveflowMock = {
     estimatedCompletion: goal.targetDate.slice(0, 7).replace("-", "年") + "月",
   },
   monthlyIncome: context.monthlyIncomeFen / 100,
+  subscriptions: subscriptions.map(subscription => ({ ...subscription })),
   cards: cards.map(card => ({
     id: card.id,
     name: card.name,

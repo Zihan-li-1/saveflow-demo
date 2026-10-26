@@ -1,0 +1,19 @@
+.flow { max-width: 760px; padding: 20px; border: 1px solid #dce4e5; border-radius: 16px; background: #fff; color: #263b40; font-size: 14px; line-height: 1.6; }
+.flow h3, .flow h4 { margin: 0 0 8px; }
+.heading { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: baseline; }
+.heading span { color: #476b61; }
+.flow label { display: grid; gap: 5px; margin: 8px 0; }
+.flow input:not([type=checkbox]), .flow select, .flow textarea { width: 100%; padding: 9px; border: 1px solid #bacacc; border-radius: 7px; font: inherit; color: inherit; background: #fff; box-sizing: border-box; }
+.flow textarea { min-height: 70px; resize: vertical; }
+.flow button, .flow a { font: inherit; }
+.flow button { margin: 5px 8px 5px 0; border: 1px solid #97b2aa; border-radius: 7px; padding: 8px 12px; background: #edf5f0; color: #224a3c; cursor: pointer; }
+.flow button[aria-pressed=true] { background: #245941; color: white; }
+.flow button:disabled { opacity: .5; cursor: default; }
+.flow button:focus-visible, .flow input:focus-visible, .flow select:focus-visible, .flow textarea:focus-visible { outline: 3px solid #5a997b; outline-offset: 2px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.flow article, .preview { margin: 12px 0; padding: 14px; border: 1px solid #d6e2dc; border-radius: 9px; background: #f7faf8; overflow-wrap: anywhere; }
+.flow fieldset { border: 1px solid #d6e2dc; margin: 14px 0; border-radius: 9px; }
+.flow .inline { display: inline-flex; align-items: center; gap: 8px; margin-right: 12px; }
+.totals { display: flex; gap: 8px 16px; flex-wrap: wrap; padding: 12px 0; }
+.actions { display: flex; flex-wrap: wrap; }
+.flow .error { color: #943a32; padding: 10px; background: #fff2ef; border-radius: 7px; }

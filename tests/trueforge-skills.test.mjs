@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { startTrialMcpServer } from '../server/mcp/saveflow-trial.mjs';
-import { createBankingCore } from '../src/banking-core/core.mjs';
+import { createLowBalanceCore as createBankingCore } from './fixtures/low-balance-core.mjs';
 import { createTrueforgeSkillAdapter, routeTrueforgeSkill, validateSkillResult } from '../server/trueforge-skill-adapter.mjs';
 import { trialAgentSpec, createTrueforgeClient } from '../server/trueforge-client.mjs';
 import { handleBankingAgent } from '../server/banking-agent.mjs';

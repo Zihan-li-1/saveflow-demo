@@ -2,7 +2,8 @@
 .account-overview-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
 .account-overview-header .eyebrow { color: #acb4bd; font-size: 9px; letter-spacing: .11em; }
 .account-overview-header h2 { color: #33404d; font-size: 20px; margin: 5px 0 0; }
-.account-chip { color: #2f6ec7; background: #eaf2ff; font-size: 11px; padding: 5px 10px; border-radius: 99px; }
+.account-chip { color: #2f6ec7; background: #eaf2ff; font-size: 15px; font-weight: 700; padding: 6px 12px; border-radius: 99px; }
+.account-balance-card small .account-name { color: #2a3948; font-weight: 700; font-size: 14px; }
 .account-balance-card { border: 1px solid #e9edf1; background: #fff; border-radius: 10px; padding: 16px; }
 .account-balance-card span { color: #a2abb4; font-size: 10px; display: block; }
 .account-balance-card strong { color: #2a3948; font-size: 28px; display: block; margin: 8px 0 4px; }
@@ -44,4 +45,17 @@
 .managed-card dt { color: #929eaa; }
 .managed-card dd { color: #4e5f70; margin: 0; text-align: right; }
 .managed-card-version { color: #a0aab5; display: block; font-size: 9px; margin-top: 14px; }
+.card-activity { margin-top: 24px; padding: 16px; border: 1px solid #e4eaf1; border-radius: 12px; background: #fbfcfe; }
+.card-activity-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.card-activity-heading h3 { margin: 0; color: #405163; font-size: 13px; }
+.card-activity-heading > span { color: #8d99a5; font-size: 10px; }
+.card-activity ul { display: grid; gap: 0; margin: 10px 0 0; padding: 0; list-style: none; }
+.card-activity li { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 11px 0; border-top: 1px solid #edf1f5; }
+.card-activity li > div { display: grid; gap: 4px; min-width: 0; }
+.card-activity li strong { color: #435365; font-size: 11px; }
+.card-activity li div span, .card-activity > p { color: #8b97a4; font-size: 10px; line-height: 1.5; }
+.card-activity > p { margin: 12px 0 0; }
+.card-activity-status { flex-shrink: 0; padding: 4px 7px; border-radius: 99px; background: #edf3fb; color: #4f75a4; font-size: 9px; }
+.card-activity-status.status-已完成 { background: #e9f7f0; color: #27805c; }
+.card-activity-status.status-已取消, .card-activity-status.status-操作失败, .card-activity-status.status-结果待核实 { background: #fff3e9; color: #a56635; }
 @media (max-width: 900px) { .managed-card-grid { grid-template-columns: 1fr; } }

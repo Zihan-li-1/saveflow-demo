@@ -13,6 +13,7 @@ import { calculateSavingsGoal, validatePlanInputs, validateSavedAmount } from '.
 import { requestSavingsAdvice, verifySavingsAdvice } from './savings-advisor.mjs';
 import { understandingContext } from './understanding-context.mjs';
 import { collectSavingsData } from './savings-data.mjs';
+import { buildFinancialAnalysisContext } from './financial-analysis-context.mjs';
 
 const scenarioStores = new Map();
 function scenarioStoreFor(scope) {
@@ -139,12 +140,18 @@ export async function runBankingConversation(body, {
 }) {
   let replyContext = {};
   const reply = (httpStatus, code, message, data) => ({ httpStatus, code, message, data, replyContext });
-  const wealthReadHandler = raw => createWealthSkill(repository)(raw);
-  const wealthHandler = raw => {
+  const wealthReadHandler = (raw, financialContext) => createWealthSkill(repository)(raw, financialContext ? { financialContext } : {});
+  const wealthHandler = async raw => {
     const extended = ['wealth.subscribe', 'wealth.redeem'].includes(raw.action) ||
       (raw.action === 'wealth.recommend' && raw.goal && typeof raw.goal === 'object') ||
       (raw.action === 'wealth.assess_risk' && ['investment', 'portfolio'].includes(raw.assessment_scope));
-    if (!extended) return wealthReadHandler(raw);
+    if (!extended) {
+      if (raw.action === 'wealth.recommend') {
+        const financial = await buildFinancialAnalysisContext(repository, { now, timezone });
+        return wealthReadHandler(raw, financial);
+      }
+      return wealthReadHandler(raw);
+    }
     const { action, ...slots } = raw;
     return handleWealth({ action, slots }, repository, core.wealthPorts, selections);
   };
@@ -281,6 +288,9 @@ export async function runBankingConversation(body, {
   replyContext = { slots: parsed.slots };
   if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
   if (!continuing && parsed.choice) throw inputError('INVALID_CHOICE', '当前请求没有可选择的候选项', 400);
+  if (parsed.action === 'scenario.plan_purchase') return reply(200, 'OK', '请在购物流程中补齐预算和日期，再选择问答搭配或商品自选。', {
+    status: 'purchase_request', action: parsed.action, data: { slots: parsed.slots, synthetic_demo_only: true },
+  });
   if (parsed.action === 'orchestrator.goal' && (parsed.slots.amount || parsed.slots.deadline)) {
     for (const slot of ['amount', 'deadline']) if (!parsed.slots[slot]) return clarificationResponse(reply, { action: parsed.action, slot, question: questionFor(parsed.action, slot, body.message, parsed.slots), slots: parsed.slots, env, now });
     const currentDate = understandingContext({ now, timezone }).currentDate;

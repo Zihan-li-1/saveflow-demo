@@ -41,7 +41,7 @@ test('browser accepts Wealth result, preview and the verified execution receipt'
     assert.equal(receipt.action, 'wealth.subscribe');
     assert.equal(receipt.status, 'succeeded');
     assert.equal(receipt.effects[0].kind, 'wealth_change');
-    assert.equal(receipt.effects[0].accountBalanceAfterFen, 490000);
+    assert.equal(receipt.effects[0].accountBalanceAfterFen, prepared.preview.exactEffects[0].accountBalanceBeforeFen - 10000);
     assert.equal(receipt.effects[0].holdingAmountAfterFen, 10000);
   } finally { global.fetch = oldFetch; }
 });

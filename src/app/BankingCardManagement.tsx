@@ -2,16 +2,17 @@
 
 import type { Message } from "@/lib/use-saveflow";
 import { saveflowMock } from "@/lib/saveflow-mock";
-import { budgetBalanceAlert, synchronizeManagedCards } from "@/lib/card-management";
+import { budgetBalanceAlert, cardActivities, synchronizeManagedCards } from "@/lib/card-management";
 
 const yuan = (fen: number) => `¥${(fen / 100).toFixed(2)}`;
 
 /** Two initialized virtual cards, overlaid with verified card.get results after operations. */
-export function BankingCardManagement({ messages }: { messages: Message[] }) {
+export function BankingCardManagement({ messages, operationStates = {} }: { messages: Message[]; operationStates?: Readonly<Record<string, string>> }) {
   const cards = synchronizeManagedCards(saveflowMock.cards, messages);
-  return <section className="card-management">
+  const activities = cardActivities(messages, operationStates);
+  return <section className="card-management" aria-labelledby="card-management-title">
     <header className="card-management-header">
-      <div><span className="eyebrow">CARD MANAGEMENT</span><h2>卡片管理</h2></div>
+      <div><span className="eyebrow">CARD MANAGEMENT</span><h2 id="card-management-title">卡片管理</h2></div>
       <span className="account-chip">{cards.length} 张虚拟卡</span>
     </header>
     <p className="card-management-note">这里固定展示两张初始化卡。卡片操作成功后，以重新查询并核实过的结果同步更新对应卡片，不会用操作预览提前改变状态。</p>
@@ -35,5 +36,9 @@ export function BankingCardManagement({ messages }: { messages: Message[] }) {
         </article>;
       })}
     </div>
+    <section className="card-activity" aria-labelledby="card-activity-title">
+      <div className="card-activity-heading"><h3 id="card-activity-title">卡片操作记录</h3><span>{activities.length ? `${activities.length} 项` : "暂无操作"}</span></div>
+      {activities.length ? <ul>{activities.map(activity => <li key={activity.id}><div><strong>{activity.label}</strong><span>{activity.cardName} · {activity.detail}</span></div><span className={`card-activity-status status-${activity.status}`}>{activity.status}</span></li>)}</ul> : <p>还没有卡片操作。上方仍会持续显示已有的虚拟卡及当前状态。</p>}
+    </section>
   </section>;
 }

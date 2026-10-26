@@ -4,6 +4,7 @@ import { createBankingCore, bankingCore } from './core.mjs';
 import { createFinancialContext } from './repository.mjs';
 import { BankingError, assertFen, assertId, canonical } from './errors.mjs';
 import { createWealthMockPorts } from '../skills/wealth/mock-ports.mjs';
+import { DEMO_OTP_CODE } from '../lib/demo-otp.mjs';
 
 const terminalStates = new Set(['succeeded', 'failed', 'cancelled']);
 let configuredUrl;
@@ -300,8 +301,8 @@ export async function createPostgresBankingCore({ connectionString, source = see
 }
 
 export async function getConfiguredBankingCore(env = process.env) {
-  // 演示视频专用：设置 SAVEFLOW_DEMO_OTP_CODE=123456 可把高风险转账验证码固定为 6 位数字，否则仍是密码学随机。
-  const demoOtpCode = env.SAVEFLOW_DEMO_OTP_CODE || undefined;
+  // 演示默认固定验证码 DEMO_OTP_CODE（不在界面上展示，演示时口头告知）；演示视频可用 SAVEFLOW_DEMO_OTP_CODE 覆盖。
+  const demoOtpCode = env.SAVEFLOW_DEMO_OTP_CODE || DEMO_OTP_CODE;
   if (!env.DATABASE_URL) {
     if (env.NETLIFY && env.ALLOW_EPHEMERAL_BANKING !== 'true') throw Object.assign(new Error('DATABASE_URL is required for Netlify banking persistence'), { code: 'DATABASE_NOT_CONFIGURED' });
     if (demoOtpCode) {
