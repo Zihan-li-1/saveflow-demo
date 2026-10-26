@@ -35,6 +35,13 @@
 .bill-report-drivers strong { font-size: 11px; font-variant-numeric: tabular-nums; }
 .bill-report-drivers strong.up { color: #9c432c; }
 .bill-report-drivers strong.down { color: #246447; }
+.bill-report-insights { margin-top: 16px; padding: 14px; border: 1px solid #dce7f3; border-radius: 12px; background: #f5f9fe; }
+.bill-report-insights > p { margin: 0; color: #40546c; font-size: 12px; font-weight: 650; }
+.bill-report-insights > p.up, .bill-report-insights strong.up { color: #9c432c; }
+.bill-report-insights > p.down, .bill-report-insights strong.down { color: #246447; }
+.bill-report-insights ul { display: grid; gap: 7px; margin: 10px 0 0; padding: 0; list-style: none; }
+.bill-report-insights li { display: flex; justify-content: space-between; gap: 12px; color: #53657a; }
+.bill-report-insights small { display: block; margin-top: 9px; color: #718096; font-size: 9px; line-height: 1.5; }
 .bill-report .bill-report-drivers p { margin: 9px 0 0; color: #718096; font-size: 9px; }
 .bill-report-chart { margin-top: 18px; padding: 15px 14px 12px; border: 1px solid #e3eaf2; border-radius: 12px; background: #f8fafc; }
 .bill-report-chart ul { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(44px, 1fr); align-items: end; gap: 9px; min-height: 176px; margin: 0; padding: 0; list-style: none; overflow-x: auto; }

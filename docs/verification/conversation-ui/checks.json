@@ -1,0 +1,46 @@
+{
+  "testDate": "2026-10-26",
+  "understanding": "injected offline fixture; not real model",
+  "transport": "real HTTP",
+  "browser": "Chrome headless",
+  "cases": [
+    {
+      "name": "transfer clarification → card query → resume transfer with fresh options",
+      "passed": true
+    },
+    {
+      "name": "one session continuously visits transfer, bill and card Skills with separate task IDs",
+      "passed": true
+    },
+    {
+      "name": "transfer preview → bill → resume → amount edit creates new preview",
+      "passed": true
+    },
+    {
+      "name": "browser reload → authenticated sync → explicit resume; storage grants no preview authority",
+      "passed": true
+    },
+    {
+      "name": "access code and server secret absent from browser storage",
+      "passed": true
+    },
+    {
+      "name": "two browser contexts isolate tasks and slot/credential ownership",
+      "passed": true
+    },
+    {
+      "name": "forged cached session rejected; new request succeeds without clearing history",
+      "passed": true
+    },
+    {
+      "name": "committed execute response lost → reload → query original receipt; no repeated execute",
+      "passed": true
+    },
+    {
+      "name": "expired process-local session rejected; composer and new business remain usable",
+      "passed": true
+    }
+  ],
+  "pageErrors": 0,
+  "passed": 9
+}

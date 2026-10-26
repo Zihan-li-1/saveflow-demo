@@ -135,14 +135,14 @@ test('changing cards clears the signed prior selection; task switch discards old
   const other = await send({ continuationToken: changed.data.continuationToken, choice: { optionId: changed.data.choices[1].optionId } }, { core });
   const final = await send({ continuationToken: other.data.continuationToken, message: '1000元' }, { core });
   assert.equal(final.data.preview.exactEffects[0].cardId, 'CARD-ENT');
-  const switched = await send({ continuationToken: changed.data.continuationToken, message: '查账单' }, { core, parseIntent: async () => ({ schemaVersion: '1.0.0', action: 'bill.summary', slots: {}, missingSlots: ['month'], status: 'needs_clarification' }) });
+  const switched = await send({ conversationToken: final.data.conversation.token, taskMode: 'new', message: '查账单' }, { core, parseIntent: async () => ({ schemaVersion: '1.0.0', action: 'bill.summary', slots: {}, missingSlots: ['month'], status: 'needs_clarification' }) });
   assert.equal(switched.data.action, 'bill.summary');
   assert.equal(switched.data.slot, 'month');
-  const cardQuery = await send({ continuationToken: changed.data.continuationToken, message: '查看娱乐虚拟卡信息' }, { core, parseIntent: async () => card('card.get', { card_ref: '娱乐虚拟卡' }) });
+  const cardQuery = await send({ conversationToken: switched.data.conversation.token, taskMode: 'new', message: '查看娱乐虚拟卡信息' }, { core, parseIntent: async () => card('card.get', { card_ref: '娱乐虚拟卡' }) });
   assert.equal(cardQuery.data.status, 'card_result');
   assert.equal(cardQuery.data.data.card.id, 'CARD-ENT');
   const forged = await handleBankingAgent(request({ continuationToken: first.data.continuationToken, choice: { optionId: 'opt_forged' } }), { env, core, now: () => 1000 });
-  assert.equal(forged.status, 400);
+  assert.equal(forged.status, 409);
 });
 
 test('natural language card budget reaches Core through Agent preview and dedicated HTTP confirmation', async () => {

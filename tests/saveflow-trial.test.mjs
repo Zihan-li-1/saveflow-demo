@@ -242,21 +242,26 @@ test('invalid transfer amounts never prepare; valid insufficient-balance request
   });
 });
 
-test('HTTP and MCP can resume the same shared clarification rules in both directions', async () => {
+test('HTTP and MCP reuse clarification rules but cannot exchange session-bound credentials', async () => {
   await withCoreClient(async (client, core) => {
     let requestNumber = 0;
-    const sendHttp = async body => {
+    const sendHttp = async (body, expectedStatus = 200) => {
       const response = await handleBankingAgent(new Request('http://localhost/api/banking-agent', {
         method: 'POST', headers: { 'content-type': 'application/json', 'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'x-forwarded-for': `mcp-parity-${++requestNumber}` },
         body: JSON.stringify(body),
       }), { env, core, now: () => 1000, parseIntent: async (message, options) => options.context ? continuationModel(message, options) : buildParsedIntent('transfer.create', { payee_ref: '张三', amount: { amount_minor: 50000, currency: 'CNY' } }) });
-      assert.equal(response.status, 200);
+      assert.equal(response.status, expectedStatus);
       return (await response.json()).data;
     };
     const httpDraft = await sendHttp({ message: '给张三转500元' });
-    const mcpPreview = await callTool(client, 'transfer_preview', { continuationToken: httpDraft.continuationToken, choice: { optionId: httpDraft.choices[0].optionId } });
-    assert.equal(mcpPreview.preview.exactEffects[0].amountFen, 50000);
-    const httpEdited = await sendHttp({ continuationToken: mcpPreview.continuationToken, message: '改成600元' });
+    const foreign = await callTool(client, 'transfer_preview', { continuationToken: httpDraft.continuationToken, choice: { optionId: httpDraft.choices[0].optionId } });
+    assert.equal(foreign.ok, false);
+    assert.equal(foreign.error.code, 'CONTINUATION_ACTION_MISMATCH');
+    const mcpDraft = await callTool(client, 'transfer_preview', { payee_ref: '张三', amount: { amount_minor: 50000, currency: 'CNY' } });
+    const refused = await sendHttp({ continuationToken: mcpDraft.continuationToken, message: '改成600元' }, 400);
+    assert.equal(refused.error.code, 'CONTINUATION_INVALID');
+    const httpPreview = await sendHttp({ continuationToken: httpDraft.continuationToken, choice: { optionId: httpDraft.choices[0].optionId } });
+    const httpEdited = await sendHttp({ continuationToken: httpPreview.continuationToken, message: '改成600元' });
     assert.equal(httpEdited.preview.exactEffects[0].amountFen, 60000);
   });
 });

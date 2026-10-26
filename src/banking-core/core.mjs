@@ -5,6 +5,7 @@ import { BankingError, assertFen, assertId, canonical } from './errors.mjs';
 import { OperationStore } from './operation-store.mjs';
 import { canTransitionAction, transitionAction } from './action-machine.mjs';
 import { createWealthMockPorts } from '../skills/wealth/mock-ports.mjs';
+import { generateCode, createChallenge, verifyChallenge, VERIFICATION_TTL_MS, VERIFICATION_MAX_ATTEMPTS, VERIFICATION_ISSUE_COOLDOWN_MS } from './verification.mjs';
 
 /** @param {unknown} input @returns {import('./contracts').TransferInput} */
 function validateTransfer(input) {
@@ -25,15 +26,18 @@ const safeScenarioSteps = new Set(['bill.analyze', 'bill.report', 'subscription.
 function validateCardInput(action, input) {
   if (!cardActions.has(action) || !input || typeof input !== 'object' || Array.isArray(input)) throw new BankingError('VALIDATION_ERROR', '卡片操作参数无效');
   const body = /** @type {Record<string, unknown>} */ (input);
-  const fields = action === 'card.set_budget' ? ['cardId', 'monthlyBudgetFen'] : action === 'card.set_controls' ? ['cardId', 'onlinePaymentsEnabled', 'blockedCategories', 'alertThresholdFen'] : ['cardId'];
+  const fields = action === 'card.set_budget' ? ['cardId', 'monthlyBudgetFen'] : action === 'card.set_controls' ? ['cardId', 'onlinePaymentsEnabled', 'blockedCategories', 'alertThresholdFen', 'balanceReminderAmountFen', 'balanceReminderPercent'] : ['cardId'];
   if (Object.keys(body).some(key => !fields.includes(key)) || !Object.hasOwn(body, 'cardId') || (action === 'card.set_budget' && !Object.hasOwn(body, 'monthlyBudgetFen'))) throw new BankingError('VALIDATION_ERROR', '卡片操作包含缺失或未注册字段');
   assertId(body.cardId, '卡片');
   if (action === 'card.set_budget' && (!Number.isSafeInteger(body.monthlyBudgetFen) || Number(body.monthlyBudgetFen) < 0 || Number(body.monthlyBudgetFen) > 10_000_000)) throw new BankingError('VALIDATION_ERROR', '月预算必须是 0 到 10000000 的整数分');
   if (action === 'card.set_controls') {
-    if (!['onlinePaymentsEnabled', 'blockedCategories', 'alertThresholdFen'].some(key => Object.hasOwn(body, key))) throw new BankingError('VALIDATION_ERROR', '至少需要修改一项卡片安全设置');
+    if (!['onlinePaymentsEnabled', 'blockedCategories', 'alertThresholdFen', 'balanceReminderAmountFen', 'balanceReminderPercent'].some(key => Object.hasOwn(body, key))) throw new BankingError('VALIDATION_ERROR', '至少需要修改一项卡片设置');
     if (Object.hasOwn(body, 'onlinePaymentsEnabled') && typeof body.onlinePaymentsEnabled !== 'boolean') throw new BankingError('VALIDATION_ERROR', '线上支付开关必须是布尔值');
     if (Object.hasOwn(body, 'blockedCategories') && (!Array.isArray(body.blockedCategories) || body.blockedCategories.length > 10 || body.blockedCategories.some(value => typeof value !== 'string' || !value.trim() || value.length > 32) || new Set(body.blockedCategories).size !== body.blockedCategories.length)) throw new BankingError('VALIDATION_ERROR', '禁用交易类别必须是最多 10 个不重复的短文本');
     if (Object.hasOwn(body, 'alertThresholdFen') && body.alertThresholdFen !== null && (!Number.isSafeInteger(body.alertThresholdFen) || Number(body.alertThresholdFen) < 1 || Number(body.alertThresholdFen) > 10_000_000)) throw new BankingError('VALIDATION_ERROR', '单笔提醒金额必须是 1 到 10000000 的整数分或 null');
+    if (Object.hasOwn(body, 'balanceReminderAmountFen') && body.balanceReminderAmountFen !== null && (!Number.isSafeInteger(body.balanceReminderAmountFen) || Number(body.balanceReminderAmountFen) < 0 || Number(body.balanceReminderAmountFen) > 10_000_000)) throw new BankingError('VALIDATION_ERROR', '余额提醒金额必须是 0 到 10000000 的整数分或 null');
+    if (Object.hasOwn(body, 'balanceReminderPercent') && body.balanceReminderPercent !== null && (!Number.isSafeInteger(body.balanceReminderPercent) || Number(body.balanceReminderPercent) < 1 || Number(body.balanceReminderPercent) > 100)) throw new BankingError('VALIDATION_ERROR', '余额提醒比例必须是 1 到 100 的整数百分比或 null');
+    if (body.balanceReminderAmountFen != null && body.balanceReminderPercent != null) throw new BankingError('VALIDATION_ERROR', '余额提醒只能选择固定金额或预算百分比中的一种');
   }
   return /** @type {import('./contracts').CardInput} */ (body);
 }
@@ -76,7 +80,7 @@ function validateScenarioInput(action, input) {
 
 /** One isolated Mock banking session. Never feed model output to decide()/execute().
  * Future write actions must use this engine and a transaction adapter, not per-Skill Maps.
- * @param {{source?: Parameters<typeof createFinancialContext>[0], now?: () => number, store?: import('./contracts').BankingOperationStore, repository?: import('./contracts').FinancialContextRepository, wealthPorts?: ReturnType<typeof createWealthMockPorts>, ownerId?: string, policy?: {version: string, maxTransferFen: number, previewTtlMs: number}}} [options] */
+ * @param {{source?: Parameters<typeof createFinancialContext>[0], now?: () => number, store?: import('./contracts').BankingOperationStore, repository?: import('./contracts').FinancialContextRepository, wealthPorts?: ReturnType<typeof createWealthMockPorts>, ownerId?: string, policy?: {version: string, maxTransferFen: number, previewTtlMs: number}, deliverVerificationCode?: (args: {operationId: string, challengeId: string, code: string, expiresAt: string}) => void, demoOtpCode?: string}} [options] */
 export function createBankingCore(options = {}) {
   const context = createFinancialContext(options.source);
   const repository = options.repository ?? context.repository;
@@ -92,6 +96,8 @@ export function createBankingCore(options = {}) {
   const wealthPorts = options.wealthPorts ?? (options.repository || options.store ? undefined : createWealthMockPorts({ getHoldings: context.getWealthHoldings, now }));
   const policy = Object.freeze({ version: 'mock-transfer-v1', maxTransferFen: 10000000, previewTtlMs: 300000, largeTransferFen: 100000, ...options.policy });
   assertFen(policy.maxTransferFen); assertFen(policy.previewTtlMs); assertFen(policy.largeTransferFen);
+  /** 受控测试渠道：把明文验证码交给演示投递方（默认打印到服务端控制台），绝不写进风险响应。 */
+  const deliverVerificationCode = options.deliverVerificationCode ?? (({ operationId, code, expiresAt }) => console.warn(`[SaveFlow Demo] 转账验证码 operationId=${operationId}: ${code}（有效期至 ${expiresAt}）`));
   /** @type {import('./contracts').AuditEvent[]} */
   const audit = [];
   /** @type {Map<string, Promise<import('./contracts').ActionResult<import('./contracts').ActionReceipt>>>} */
@@ -139,8 +145,8 @@ export function createBankingCore(options = {}) {
     });
     const largeTransfer = input.amountFen > policy.largeTransferFen;
     const warnings = ['合成数据模拟转账，不接真实银行；此确认仅用于 Mock。'];
-    if (largeTransfer) warnings.push(`大额转账（>¥${(policy.largeTransferFen / 100).toFixed(2)}）需短信验证码（演示码 123456）。`);
-    return { allowed: result.ok, riskLevel: 'L3', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', requiredVerification: largeTransfer ? 'mock_sms' : 'none', ...(largeTransfer ? { verificationCode: '123456' } : {}), warnings, ...(!result.ok ? { error: result.error } : {}) };
+    if (largeTransfer) warnings.push(`大额转账（>¥${(policy.largeTransferFen / 100).toFixed(2)}）需一次性验证码（OTP）验证。`);
+    return { allowed: result.ok, riskLevel: 'L3', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', requiredVerification: largeTransfer ? 'otp' : 'none', warnings, ...(!result.ok ? { error: result.error } : {}) };
   }
   /** @param {import('./contracts').TransferInput} input @returns {Promise<import('./contracts').TransferEffect>} */
   async function effectFor(input) {
@@ -156,8 +162,10 @@ export function createBankingCore(options = {}) {
     if (action === 'card.freeze' && card.status !== 'active') throw new BankingError('INVALID_STATE', '卡片已经冻结');
     if (action === 'card.unfreeze' && card.status !== 'frozen') throw new BankingError('INVALID_STATE', '卡片并未冻结');
     if (action === 'card.set_budget' && card.monthlyBudgetFen === input.monthlyBudgetFen) throw new BankingError('INVALID_STATE', '新预算与当前预算相同');
-    const before = { status: card.status, monthlyBudgetFen: card.monthlyBudgetFen, onlinePaymentsEnabled: card.onlinePaymentsEnabled, blockedCategories: structuredClone(card.blockedCategories), alertThresholdFen: card.alertThresholdFen };
-    const after = { ...before, status: action === 'card.freeze' ? 'frozen' : action === 'card.unfreeze' ? 'active' : card.status, monthlyBudgetFen: action === 'card.set_budget' ? /** @type {number} */ (input.monthlyBudgetFen) : card.monthlyBudgetFen, onlinePaymentsEnabled: action === 'card.set_controls' && input.onlinePaymentsEnabled !== undefined ? input.onlinePaymentsEnabled : card.onlinePaymentsEnabled, blockedCategories: action === 'card.set_controls' && input.blockedCategories !== undefined ? structuredClone(input.blockedCategories) : structuredClone(card.blockedCategories), alertThresholdFen: action === 'card.set_controls' && input.alertThresholdFen !== undefined ? input.alertThresholdFen : card.alertThresholdFen };
+    const before = { status: card.status, monthlyBudgetFen: card.monthlyBudgetFen, onlinePaymentsEnabled: card.onlinePaymentsEnabled, blockedCategories: structuredClone(card.blockedCategories), alertThresholdFen: card.alertThresholdFen, balanceReminderAmountFen: card.balanceReminderAmountFen, balanceReminderPercent: card.balanceReminderPercent };
+    const after = { ...before, status: action === 'card.freeze' ? 'frozen' : action === 'card.unfreeze' ? 'active' : card.status, monthlyBudgetFen: action === 'card.set_budget' ? /** @type {number} */ (input.monthlyBudgetFen) : card.monthlyBudgetFen, onlinePaymentsEnabled: action === 'card.set_controls' && input.onlinePaymentsEnabled !== undefined ? input.onlinePaymentsEnabled : card.onlinePaymentsEnabled, blockedCategories: action === 'card.set_controls' && input.blockedCategories !== undefined ? structuredClone(input.blockedCategories) : structuredClone(card.blockedCategories), alertThresholdFen: action === 'card.set_controls' && input.alertThresholdFen !== undefined ? input.alertThresholdFen : card.alertThresholdFen, balanceReminderAmountFen: action === 'card.set_controls' && input.balanceReminderAmountFen !== undefined ? input.balanceReminderAmountFen : card.balanceReminderAmountFen, balanceReminderPercent: action === 'card.set_controls' && input.balanceReminderPercent !== undefined ? input.balanceReminderPercent : card.balanceReminderPercent };
+    if (action === 'card.set_controls' && input.balanceReminderAmountFen !== undefined && input.balanceReminderAmountFen !== null) after.balanceReminderPercent = null;
+    if (action === 'card.set_controls' && input.balanceReminderPercent !== undefined && input.balanceReminderPercent !== null) after.balanceReminderAmountFen = null;
     if (action === 'card.set_controls' && JSON.stringify(before) === JSON.stringify(after)) throw new BankingError('INVALID_STATE', '安全设置没有变化');
     return { kind: 'card_change', action, cardId: card.id, cardName: card.name, cardVersion: card.version, previewGeneration: card.previewGeneration, before, after, monthlySpentFen: card.monthlySpentFen };
   }
@@ -294,7 +302,7 @@ export function createBankingCore(options = {}) {
       const planId = `plan_${crypto.randomUUID()}`, stepId = `step_${crypto.randomUUID()}`;
       const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical({ ownerId, operationId, planId, stepId, effect, expiresAt, contextSnapshotId, policy })));
       const previewHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
-      const summary = action === 'card.set_budget' ? `${effect.cardName}月消费预算 ¥${(effect.before.monthlyBudgetFen / 100).toFixed(2)} → ¥${(effect.after.monthlyBudgetFen / 100).toFixed(2)}` : action === 'card.set_controls' ? `${effect.cardName}安全设置：线上支付${effect.after.onlinePaymentsEnabled ? '开启' : '关闭'}；禁用类别${effect.after.blockedCategories.length ? effect.after.blockedCategories.join('、') : '无'}；单笔提醒${effect.after.alertThresholdFen === null ? '关闭' : `¥${(effect.after.alertThresholdFen / 100).toFixed(2)}`}` : `${effect.cardName}${action === 'card.freeze' ? '冻结' : '解冻'}：${effect.before.status} → ${effect.after.status}`;
+      const summary = action === 'card.set_budget' ? `${effect.cardName}月消费预算 ¥${(effect.before.monthlyBudgetFen / 100).toFixed(2)} → ¥${(effect.after.monthlyBudgetFen / 100).toFixed(2)}` : action === 'card.set_controls' ? `${effect.cardName}卡片设置：线上支付${effect.after.onlinePaymentsEnabled ? '开启' : '关闭'}；禁用类别${effect.after.blockedCategories.length ? effect.after.blockedCategories.join('、') : '无'}；单笔提醒${effect.after.alertThresholdFen === null ? '关闭' : `¥${(effect.after.alertThresholdFen / 100).toFixed(2)}`}；余额提醒${effect.after.balanceReminderAmountFen !== null ? `剩余 ¥${(effect.after.balanceReminderAmountFen / 100).toFixed(2)}` : effect.after.balanceReminderPercent !== null ? `剩余 ${effect.after.balanceReminderPercent}%` : '关闭'}` : `${effect.cardName}${action === 'card.freeze' ? '冻结' : '解冻'}：${effect.before.status} → ${effect.after.status}`;
       record.preview = { planId, stepIds: [stepId], summary, exactEffects: [effect], riskLevel: risk.riskLevel, warnings: risk.warnings, expiresAt, previewHash, contextSnapshotId };
       await move(record, 'PREVIEWED');
       return /** @type {import('./contracts').ActionResult<import('./contracts').PreparedAction>} */ ({ ok: true, data: { operationId, state: 'awaiting_confirmation', preview: structuredClone(record.preview), risk: structuredClone(risk) } });
@@ -434,6 +442,53 @@ export function createBankingCore(options = {}) {
         return statusFor(record);
       }, operationId);
     },
+    /** 为已确认的高风险操作发起逐笔 OTP 挑战。明文验证码走受控测试渠道，响应不含验证码；重新发起会作废旧挑战。
+     * @param {string} operationId @param {string} previewHash */
+    async startVerification(operationId, previewHash) {
+      return guard(async () => {
+        assertId(operationId);
+        const record = await lookup(operationId);
+        if (!record.preview) throw new BankingError('INVALID_STATE', '缺少预览');
+        verifyHash(record, previewHash);
+        if (record.state !== 'confirmed' || record.decision?.decision !== 'confirm') throw new BankingError('CONFIRMATION_REQUIRED', '需要先确认当前精确预览');
+        if (record.risk?.requiredVerification !== 'otp') throw new BankingError('VERIFICATION_REQUIRED', '本笔操作无需额外验证');
+        // 速率限制：同一操作相邻两次发码需间隔冷却期，避免「重发→试 3 次→重发」暴力枚举。
+        if (record.verification?.issuedAt && now() - Date.parse(record.verification.issuedAt) < VERIFICATION_ISSUE_COOLDOWN_MS) {
+          throw new BankingError('VERIFICATION_RATE_LIMITED', '验证码发送过于频繁，请稍后再试');
+        }
+        const challengeId = `otp_${crypto.randomUUID()}`;
+        const code = options.demoOtpCode ?? generateCode(); // 演示视频可用 demoOtpCode 固定验证码，默认仍是密码学随机 6 位
+        const ttlMs = Math.max(1, Math.min(VERIFICATION_TTL_MS, Date.parse(record.preview.expiresAt) - now()));
+        const challenge = createChallenge({ challengeId, code, nowMs: now(), ttlMs, maxAttempts: VERIFICATION_MAX_ATTEMPTS });
+        record.verification = challenge.state;
+        await save(record);
+        deliverVerificationCode({ operationId, challengeId, code, expiresAt: challenge.state.expiresAt });
+        return { challengeId: challenge.state.challengeId, expiresAt: challenge.state.expiresAt, remainingAttempts: VERIFICATION_MAX_ATTEMPTS - challenge.state.attempts, deliveryHint: '验证码已通过受控测试渠道发送，本响应不返回验证码。' };
+      }, operationId);
+    },
+    /** 校验逐笔 OTP。成功后把「已验证」状态持久化到操作记录，供 execute() 最终关卡核验。
+     * @param {string} operationId @param {string} previewHash @param {import('./contracts').VerificationVerifyInput} input */
+    async verifyVerification(operationId, previewHash, input) {
+      return guard(async () => {
+        assertId(operationId);
+        const record = await lookup(operationId);
+        if (!record.preview) throw new BankingError('INVALID_STATE', '缺少预览');
+        verifyHash(record, previewHash);
+        if (record.state !== 'confirmed' || record.decision?.decision !== 'confirm') throw new BankingError('CONFIRMATION_REQUIRED', '需要先确认当前精确预览');
+        const challenge = record.verification;
+        if (!challenge) throw new BankingError('VERIFICATION_REQUIRED', '尚未发起验证，请先获取验证码');
+        if (!input || typeof input !== 'object' || Array.isArray(input)) throw new BankingError('VALIDATION_ERROR', '验证参数无效');
+        const body = /** @type {Record<string, unknown>} */ (input);
+        if (Object.keys(body).some(k => !['challengeId', 'code'].includes(k))) throw new BankingError('VALIDATION_ERROR', '验证请求包含未注册字段');
+        if (typeof body.challengeId !== 'string' || body.challengeId !== challenge.challengeId) throw new BankingError('VERIFICATION_REQUIRED', '验证码挑战编号不匹配，请重新发起验证');
+        if (typeof body.code !== 'string' || !/^\d{6}$/.test(body.code)) throw new BankingError('VALIDATION_ERROR', '验证码必须是 6 位数字');
+        const result = verifyChallenge(challenge, body.code, now());
+        record.verification = result.state;
+        await save(record);
+        if (!result.ok) throw new BankingError(result.error.code, result.error.message);
+        return { verified: true, operationId };
+      }, operationId);
+    },
     /** Only stored, confirmed parameters execute. There is deliberately no input/amount argument.
      * @param {string} operationId @param {string} previewHash */
     execute(operationId, previewHash) {
@@ -448,6 +503,7 @@ export function createBankingCore(options = {}) {
         if (record.receipt) return record.receipt;
         if (['executing', 'unknown', 'checking'].includes(record.state)) throw new BankingError('INVALID_STATE', '操作结果待核实，只能查询原编号', true);
         if (record.state !== 'confirmed' || record.decision?.decision !== 'confirm') throw new BankingError('CONFIRMATION_REQUIRED', '需要先确认当前精确预览');
+        if (record.risk?.requiredVerification === 'otp' && record.verification?.status !== 'verified') throw new BankingError('VERIFICATION_REQUIRED', '本笔操作需要先完成一次性验证码验证');
         try {
           await recheck(record); await move(record, 'EXECUTE');
           const at = new Date(now()).toISOString();
@@ -532,11 +588,44 @@ export function createBankingCore(options = {}) {
       const record = recordResult.data;
       const origin = record.request && 'origin' in record.request ? record.request.origin : undefined;
       if (origin !== 'agent_suggested') return { ok: false, error: errorData(new BankingError('FORBIDDEN', '该操作不是试点建议，请通过普通执行入口')), operationId };
+      if (record.risk?.requiredVerification === 'otp' && record.verification?.status !== 'verified') return { ok: false, error: errorData(new BankingError('VERIFICATION_REQUIRED', '本笔操作需要先完成一次性验证码验证')), operationId };
       trialAuthorized.add(operationId);
       try {
         const decided = await core.decide(operationId, { previewHash, decision: 'confirm', confirmedStepIds: record.preview?.stepIds ?? [] });
         if (!decided.ok) return decided;
         return await core.execute(operationId, previewHash);
+      } finally {
+        trialAuthorized.delete(operationId);
+      }
+    },
+    /** 试点建议操作发起 OTP 验证：与 executeTrial 同源授权，先确认当前预览再发起挑战，响应不含验证码。仅供执行桥调用。
+     * @param {string} operationId @param {string} previewHash */
+    async startTrialVerification(operationId, previewHash) {
+      const recordResult = await guard(async () => lookup(operationId), operationId);
+      if (!recordResult.ok) return recordResult;
+      const record = recordResult.data;
+      const origin = record.request && 'origin' in record.request ? record.request.origin : undefined;
+      if (origin !== 'agent_suggested') return { ok: false, error: errorData(new BankingError('FORBIDDEN', '该操作不是试点建议，请通过普通验证入口')), operationId };
+      trialAuthorized.add(operationId);
+      try {
+        const decided = await core.decide(operationId, { previewHash, decision: 'confirm', confirmedStepIds: record.preview?.stepIds ?? [] });
+        if (!decided.ok) return decided;
+        return await core.startVerification(operationId, previewHash);
+      } finally {
+        trialAuthorized.delete(operationId);
+      }
+    },
+    /** 试点建议操作校验 OTP：与 executeTrial 同源授权，校验成功后持久化已验证状态，供执行桥最终关卡核验。
+     * @param {string} operationId @param {string} previewHash @param {import('./contracts').VerificationVerifyInput} input */
+    async verifyTrialVerification(operationId, previewHash, input) {
+      const recordResult = await guard(async () => lookup(operationId), operationId);
+      if (!recordResult.ok) return recordResult;
+      const record = recordResult.data;
+      const origin = record.request && 'origin' in record.request ? record.request.origin : undefined;
+      if (origin !== 'agent_suggested') return { ok: false, error: errorData(new BankingError('FORBIDDEN', '该操作不是试点建议，请通过普通验证入口')), operationId };
+      trialAuthorized.add(operationId);
+      try {
+        return await core.verifyVerification(operationId, previewHash, input);
       } finally {
         trialAuthorized.delete(operationId);
       }

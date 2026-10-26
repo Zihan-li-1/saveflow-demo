@@ -2,6 +2,9 @@ import { validateParsedIntent } from './validate-parsed-intent.mjs';
 import { localDate as calendarLocalDate } from '../lib/calendar.mjs';
 import { transferFromResolvedIntent } from '../banking-core/wire.mjs';
 import { handleCard } from './handlers/card-handler.mjs';
+import { agentErrorPolicy } from '../lib/agent-error-policy.mjs';
+import { buildBillInsights, previousMonth } from './bill-insights.mjs';
+import { summarizeBills } from '../skills/bill/bill-summary.mjs';
 
 function clarification(intent) {
   return { ok: false, kind: 'needs_clarification', action: intent.action, source: 'parser', ...(intent.missingSlots.length ? { missingSlots: [...intent.missingSlots] } : {}) };
@@ -21,6 +24,8 @@ export async function dispatchParsedIntent(value, dependencies) {
     if (intent.action === 'orchestrator.goal') return dependencies.goalHandler ? await dependencies.goalHandler(intent) : { ok: false, kind: 'unsupported' };
     return { ok: false, kind: 'unsupported' };
   } catch (error) {
+    if (agentErrorPolicy(error?.code).category !== 'internal') return { ok: false, kind: 'core_error', action: intent.action,
+      error: { code: error.code, message: typeof error.message === 'string' ? error.message : '当前请求未满足业务条件。', uncertain: error.uncertain === true } };
     return { ok: false, kind: 'skill_error', action: intent.action, error: { code: 'SKILL_ERROR', message: error instanceof Error && error.message.trim() ? error.message : 'Skill 处理失败，请稍后重试。' } };
   }
 }
@@ -40,7 +45,9 @@ export async function handleSubscriptionList(_intent, repository) {
       : subscription.isPotentiallyUnused
         ? `数据标记为可能闲置：已${inactivityDays === undefined ? '较长时间' : `连续 ${inactivityDays} 天`}未使用，但仍每月扣费；取消前请核实实际使用情况。`
         : inactivityDays === undefined ? '当前没有潜在闲置标记。' : `最近使用距统计日 ${inactivityDays} 天，当前没有潜在闲置标记。`;
-    return { ...subscription, ...(inactivityDays === undefined ? {} : { inactivityDays }), unusedReason };
+    const confidence = subscription.status !== 'active' || !subscription.isPotentiallyUnused ? 'not_flagged' : inactivityDays !== undefined && inactivityDays >= 90 ? 'high' : 'medium';
+    const recognitionSignals = [subscription.isPotentiallyUnused ? '数据源标记为可能闲置' : '数据源未标记为闲置', inactivityDays === undefined ? '最近使用时间无法换算' : `距最近使用 ${inactivityDays} 天`, subscription.status === 'active' ? '订阅仍在生效并按月计费' : '订阅已取消'];
+    return { ...subscription, ...(inactivityDays === undefined ? {} : { inactivityDays }), unusedReason, recognition: { confidence, signals: recognitionSignals } };
   });
   const active = subscriptions.filter(item => item.status === 'active');
   const potentiallyUnused = active.filter(item => item.isPotentiallyUnused);
@@ -49,7 +56,7 @@ export async function handleSubscriptionList(_intent, repository) {
   return { ok: true, kind: 'subscription_result', action: 'subscription.list', data: {
     subscriptions: enriched,
     summary: { activeCount: active.length, activeMonthlyFeeFen, potentiallyUnusedCount: potentiallyUnused.length, potentiallyUnusedMonthlyFeeFen, potentialAnnualSavingsFen: potentiallyUnusedMonthlyFeeFen * 12 },
-    methodology: { usesRepositoryFlag: true, historicalSubscriptionState: false, savingsEstimateMonths: 12 },
+    methodology: { usesRepositoryFlag: true, usesLastUsedDate: true, highConfidenceInactivityDays: 90, historicalSubscriptionState: false, savingsEstimateMonths: 12, limitation: '闲置判断是规则提示，不等同于已核实的商户使用记录；取消前请由用户确认。' },
   }, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: subscriptions.map(item => item.id) }] };
 }
 
@@ -58,18 +65,10 @@ export async function handleBillSummary(intent, repository) {
   const period = intent.slots.period;
   if (!month && !period) throw new Error('bill.summary requires a resolved time period before dispatch');
   const localDate = occurredAt => calendarLocalDate(occurredAt, period?.timezone ?? 'Asia/Shanghai');
-  const summarize = items => items.reduce((result, transaction) => {
-    if (transaction.type === 'income') result.totalIncomeFen += transaction.amountFen;
-    if (transaction.type === 'expense') {
-      result.totalExpenseFen += transaction.amountFen;
-      result.categoryTotals[transaction.category] = (result.categoryTotals[transaction.category] ?? 0) + transaction.amountFen;
-    }
-    return result;
-  }, { totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: items.length, categoryTotals: {} });
   const transactions = month
     ? await repository.getTransactions({ month })
     : await repository.getTransactions({ startDate: period.start_date, endDate: period.end_date, timezone: period.timezone });
-  const summary = summarize(transactions);
+  const summary = summarizeBills(transactions);
   const context = await repository.getContextInfo();
   const asOfDate = localDate(context.asOf);
   const startMonth = month ?? period.start_date.slice(0, 7);
@@ -91,14 +90,24 @@ export async function handleBillSummary(intent, repository) {
       const isPartialSelection = !!period && (period.start_date > monthStart || period.end_date < monthEnd);
       return !(context.availableMonths ?? []).includes(value) ? 'unavailable' : monthStart > asOfDate ? 'future' : monthEnd >= asOfDate || isPartialSelection ? 'partial' : 'complete';
     })(),
-    ...summarize(transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(value))),
+    ...summarizeBills(transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(value))),
   }));
+  const comparableMonths = monthlyBreakdown.filter(item => item.status === 'complete');
+  const latestComparable = comparableMonths.at(-1)?.month;
+  const previousComparable = comparableMonths.at(-2)?.month;
+  const insightCurrentTransactions = latestComparable ? transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(latestComparable)) : transactions;
+  const comparisonMonth = previousComparable ?? previousMonth(month ?? startMonth);
+  const insightComparisonTransactions = previousComparable
+    ? transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(previousComparable))
+    : month ? await repository.getTransactions({ month: comparisonMonth }) : [];
+  const insights = buildBillInsights(insightCurrentTransactions, insightComparisonTransactions, { month: comparisonMonth });
   return {
     ok: true,
     kind: 'bill_result',
     action: 'bill.summary',
     data: {
       ...summary,
+      ...(transactions.length ? { insights } : {}),
       coverage: { status: 'unverified', asOf: context.asOf, availableMonths: context.availableMonths ?? [], warning: '仅统计当前可用记录，数据覆盖未保证完整；无记录不代表没有支出。' },
       ...(month ? { month } : { period: { startDate: period.start_date, endDate: period.end_date, timezone: period.timezone, label: period.label } }),
       ...(!month ? { monthlyBreakdown } : {}),

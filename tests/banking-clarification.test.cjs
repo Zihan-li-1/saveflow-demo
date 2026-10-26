@@ -181,6 +181,7 @@ test('改口换任务、伪造选项和无法理解回答都不会进入 Core', 
   assert.equal(expired.status, 400);
   assert.equal(prepares, 0);
   const invalidChoice = await handleBankingAgent(request({ continuationToken: draft.data.continuationToken, choice: { optionId: 'opt_fake' } }), { env, core: wrapped, parseIntent, now: () => 5000 });
-  assert.equal(invalidChoice.status, 400);
+  assert.equal(invalidChoice.status, 409);
+  assert.equal((await invalidChoice.json()).code, 'CONVERSATION_TASK_MISMATCH');
   assert.equal(prepares, 0);
 });

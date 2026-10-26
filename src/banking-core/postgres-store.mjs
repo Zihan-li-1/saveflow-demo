@@ -8,6 +8,8 @@ import { createWealthMockPorts } from '../skills/wealth/mock-ports.mjs';
 const terminalStates = new Set(['succeeded', 'failed', 'cancelled']);
 let configuredUrl;
 let configuredCore;
+let demoCore;
+let demoCoreCode;
 
 function fromRecord(record) {
   if (record === undefined) return undefined;
@@ -35,11 +37,11 @@ function accountFromRow(row, sourceAccount) {
 
 function cardFromRow(row) {
   if (!row) return undefined;
-  return { id: row.card_id, name: row.name, accountId: row.account_id, status: row.status, monthlyBudgetFen: Number(row.monthly_budget_fen), monthlySpentFen: Number(row.monthly_spent_fen), onlinePaymentsEnabled: row.online_payments_enabled !== false, blockedCategories: Array.isArray(row.blocked_categories) ? row.blocked_categories : [], alertThresholdFen: row.alert_threshold_fen === null ? null : Number(row.alert_threshold_fen), version: Number(row.version), previewGeneration: Number(row.preview_generation) };
+  return { id: row.card_id, name: row.name, accountId: row.account_id, status: row.status, monthlyBudgetFen: Number(row.monthly_budget_fen), monthlySpentFen: Number(row.monthly_spent_fen), onlinePaymentsEnabled: row.online_payments_enabled !== false, blockedCategories: Array.isArray(row.blocked_categories) ? row.blocked_categories : [], alertThresholdFen: row.alert_threshold_fen === null ? null : Number(row.alert_threshold_fen), balanceReminderAmountFen: row.balance_reminder_amount_fen === null ? null : Number(row.balance_reminder_amount_fen), balanceReminderPercent: row.balance_reminder_percent === null ? null : Number(row.balance_reminder_percent), version: Number(row.version), previewGeneration: Number(row.preview_generation) };
 }
 
-/** Creates an async Postgres adapter; migrations 001 through 004 must be applied first. */
-export async function createPostgresBankingCore({ connectionString, source = seed } = {}) {
+/** Creates an async Postgres adapter; migrations 001 through 005 must be applied first. */
+export async function createPostgresBankingCore({ connectionString, source = seed, demoOtpCode } = {}) {
   if (typeof connectionString !== 'string' || !connectionString.trim()) throw new Error('DATABASE_URL is required');
   const { default: postgres } = await import('postgres');
   const sql = postgres(connectionString, { max: 1, idle_timeout: 20, connect_timeout: 10 });
@@ -67,9 +69,9 @@ export async function createPostgresBankingCore({ connectionString, source = see
     }
     for (const card of staticCards) {
       await tx.unsafe(
-        `INSERT INTO banking_cards (owner_id, card_id, name, account_id, status, monthly_budget_fen, monthly_spent_fen, online_payments_enabled, blocked_categories, alert_threshold_fen, version, preview_generation)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12) ON CONFLICT (owner_id, card_id) DO NOTHING`,
-        [ownerId, card.id, card.name, card.accountId, card.status, card.monthlyBudgetFen, card.monthlySpentFen, card.onlinePaymentsEnabled, tx.json(card.blockedCategories), card.alertThresholdFen, card.version, card.previewGeneration],
+        `INSERT INTO banking_cards (owner_id, card_id, name, account_id, status, monthly_budget_fen, monthly_spent_fen, online_payments_enabled, blocked_categories, alert_threshold_fen, balance_reminder_amount_fen, balance_reminder_percent, version, preview_generation)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14) ON CONFLICT (owner_id, card_id) DO NOTHING`,
+        [ownerId, card.id, card.name, card.accountId, card.status, card.monthlyBudgetFen, card.monthlySpentFen, card.onlinePaymentsEnabled, tx.json(card.blockedCategories), card.alertThresholdFen, card.balanceReminderAmountFen, card.balanceReminderPercent, card.version, card.previewGeneration],
       );
     }
     for (const holding of staticHoldings) {
@@ -210,8 +212,8 @@ export async function createPostgresBankingCore({ connectionString, source = see
         if (persisted.receipt) return structuredClone(persisted.receipt);
         if (persisted.action !== effect.action || persisted.state !== 'executing' || persisted.decision?.decision !== 'confirm' || persisted.preview?.previewHash !== record.preview?.previewHash) throw new BankingError('INVALID_STATE', '卡片操作未处于已确认的执行状态', true);
         const [card] = await tx.unsafe('SELECT * FROM banking_cards WHERE owner_id = $1 AND card_id = $2 FOR UPDATE', [owner, effect.cardId]);
-        if (!card || Number(card.version) !== effect.cardVersion || Number(card.preview_generation) !== effect.previewGeneration || card.status !== effect.before.status || Number(card.monthly_budget_fen) !== effect.before.monthlyBudgetFen || card.online_payments_enabled !== effect.before.onlinePaymentsEnabled || JSON.stringify(card.blocked_categories ?? []) !== JSON.stringify(effect.before.blockedCategories) || (card.alert_threshold_fen === null ? null : Number(card.alert_threshold_fen)) !== effect.before.alertThresholdFen) throw new BankingError('PREVIEW_STALE', '卡片已变化，请重新预览并确认');
-        await tx.unsafe('UPDATE banking_cards SET status = $3, monthly_budget_fen = $4, online_payments_enabled = $5, blocked_categories = $6::jsonb, alert_threshold_fen = $7, version = version + 1, updated_at = now() WHERE owner_id = $1 AND card_id = $2', [owner, effect.cardId, effect.after.status, effect.after.monthlyBudgetFen, effect.after.onlinePaymentsEnabled, tx.json(effect.after.blockedCategories), effect.after.alertThresholdFen]);
+        if (!card || Number(card.version) !== effect.cardVersion || Number(card.preview_generation) !== effect.previewGeneration || card.status !== effect.before.status || Number(card.monthly_budget_fen) !== effect.before.monthlyBudgetFen || card.online_payments_enabled !== effect.before.onlinePaymentsEnabled || JSON.stringify(card.blocked_categories ?? []) !== JSON.stringify(effect.before.blockedCategories) || (card.alert_threshold_fen === null ? null : Number(card.alert_threshold_fen)) !== effect.before.alertThresholdFen || (card.balance_reminder_amount_fen === null ? null : Number(card.balance_reminder_amount_fen)) !== effect.before.balanceReminderAmountFen || (card.balance_reminder_percent === null ? null : Number(card.balance_reminder_percent)) !== effect.before.balanceReminderPercent) throw new BankingError('PREVIEW_STALE', '卡片已变化，请重新预览并确认');
+        await tx.unsafe('UPDATE banking_cards SET status = $3, monthly_budget_fen = $4, online_payments_enabled = $5, blocked_categories = $6::jsonb, alert_threshold_fen = $7, balance_reminder_amount_fen = $8, balance_reminder_percent = $9, version = version + 1, updated_at = now() WHERE owner_id = $1 AND card_id = $2', [owner, effect.cardId, effect.after.status, effect.after.monthlyBudgetFen, effect.after.onlinePaymentsEnabled, tx.json(effect.after.blockedCategories), effect.after.alertThresholdFen, effect.after.balanceReminderAmountFen, effect.after.balanceReminderPercent]);
         const receipt = makeReceipt();
         persisted.receipt = receipt;
         persisted.state = 'succeeded';
@@ -294,16 +296,24 @@ export async function createPostgresBankingCore({ connectionString, source = see
     },
   };
 
-  return createBankingCore({ source, repository, store, wealthPorts, ownerId });
+  return createBankingCore({ source, repository, store, wealthPorts, ownerId, demoOtpCode });
 }
 
 export async function getConfiguredBankingCore(env = process.env) {
+  // 演示视频专用：设置 SAVEFLOW_DEMO_OTP_CODE=123456 可把高风险转账验证码固定为 6 位数字，否则仍是密码学随机。
+  const demoOtpCode = env.SAVEFLOW_DEMO_OTP_CODE || undefined;
   if (!env.DATABASE_URL) {
     if (env.NETLIFY && env.ALLOW_EPHEMERAL_BANKING !== 'true') throw Object.assign(new Error('DATABASE_URL is required for Netlify banking persistence'), { code: 'DATABASE_NOT_CONFIGURED' });
+    if (demoOtpCode) {
+      if (demoCore && demoCoreCode === demoOtpCode) return demoCore;
+      demoCoreCode = demoOtpCode;
+      demoCore = createBankingCore({ demoOtpCode });
+      return demoCore;
+    }
     return bankingCore;
   }
   if (configuredCore && configuredUrl === env.DATABASE_URL) return configuredCore;
   configuredUrl = env.DATABASE_URL;
-  configuredCore = createPostgresBankingCore({ connectionString: configuredUrl });
+  configuredCore = createPostgresBankingCore({ connectionString: configuredUrl, demoOtpCode });
   return configuredCore;
 }

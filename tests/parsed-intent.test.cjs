@@ -108,7 +108,7 @@ test('rejects model-injected tool, confirmation, risk, operation and entity fiel
     source_account_ref: '活期账户',
   }, [], 'ready_for_resolution');
 
-  for (const field of ['tool', 'confirmed', 'riskLevel', 'operationId', 'result']) {
+  for (const field of ['tool', 'confirmed', 'riskLevel', 'operationId', 'result', 'taskId', 'conversationId', 'verifiedSlots', 'preview', 'coreState', 'executionState']) {
     assert.throws(() => validateParsedIntent({ ...valid, [field]: true }), ParsedIntentValidationError);
   }
   for (const field of ['payee_id', 'entity_id', 'source_account_id']) {

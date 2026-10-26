@@ -25,7 +25,7 @@ async function worker(t, adapter) {
   return { url: `http://127.0.0.1:${port}`, pid };
 }
 
-for (const adapter of ['local', 'netlify']) test(`real HTTP / ${adapter}: independent processes continue account, payee, bill and edit flows`, async t => {
+for (const adapter of ['local', 'netlify']) test(`real HTTP / ${adapter}: one process continues flows and a foreign process rejects its credentials`, async t => {
   const a = await worker(t, adapter), b = await worker(t, adapter);
   assert.notEqual(a.pid, b.pid);
   const before = await (await fetch(`${b.url}/test-state`)).json();
@@ -41,30 +41,32 @@ for (const adapter of ['local', 'netlify']) test(`real HTTP / ${adapter}: indepe
   const first = await post(a, { message: '给张三转 500 元' });
   assert.equal(first.data.slot, 'source_account_ref');
   assert.ok(first.data.choices.every(c => Object.keys(c).sort().join(',') === 'label,optionId'));
-  const preview = await post(b, { continuationToken: first.data.continuationToken, choice: { optionId: first.data.choices[0].optionId } });
+  const foreign = await post(b, { conversationToken: first.data.conversation.token, continuationToken: first.data.continuationToken, choice: { optionId: first.data.choices[0].optionId } });
+  assert.equal(foreign.code, 'CONVERSATION_NOT_FOUND');
+  const preview = await post(a, { continuationToken: first.data.continuationToken, choice: { optionId: first.data.choices[0].optionId } });
   assert.equal(preview.data.preview.exactEffects[0].amountFen, 50000);
   const edited = await post(a, { continuationToken: preview.data.continuationToken, message: '改成 600 元' });
   assert.equal(edited.data.preview.exactEffects[0].amountFen, 60000);
   assert.notEqual(edited.data.operationId, preview.data.operationId);
-  const payees = await post(b, { continuationToken: edited.data.continuationToken, message: '改给王先生' });
+  const payees = await post(a, { continuationToken: edited.data.continuationToken, message: '改给王先生' });
   assert.equal(payees.data.choices.length, 2);
   assert.notEqual(payees.data.choices[0].label, payees.data.choices[1].label);
   const changed = await post(a, { continuationToken: payees.data.continuationToken, choice: { optionId: payees.data.choices[1].optionId } });
   assert.equal(changed.data.preview.exactEffects[0].payeeId, 'payee_004');
   assert.equal(changed.data.preview.exactEffects[0].amountFen, 60000);
-  const replaced = await post(b, { continuationToken: changed.data.continuationToken, message: '收款人改成李四' });
+  const replaced = await post(a, { continuationToken: changed.data.continuationToken, message: '收款人改成李四' });
   assert.equal(replaced.data.preview.exactEffects[0].payeeId, 'payee_002');
   assert.equal(replaced.data.preview.exactEffects[0].amountFen, 60000);
   const reselect = await post(a, { continuationToken: replaced.data.continuationToken, message: '改选收款人' });
   assert.equal(reselect.data.slot, 'payee_ref');
   assert.equal(reselect.data.choices.length, 4);
   const ambiguous = await post(a, { message: '从活期账户给王先生转 500 元' });
-  const selected = await post(b, { continuationToken: ambiguous.data.continuationToken, choice: { optionId: ambiguous.data.choices[0].optionId } });
+  const selected = await post(a, { continuationToken: ambiguous.data.continuationToken, choice: { optionId: ambiguous.data.choices[0].optionId } });
   assert.equal(selected.data.preview.exactEffects[0].payeeId, 'payee_003');
-  assert.equal((await post(b, { continuationToken: ambiguous.data.continuationToken, choice: { optionId: 'opt_forged' } })).code, 'INVALID_CHOICE');
-  assert.equal((await post(b, { continuationToken: ambiguous.data.continuationToken, choice: { optionId: ambiguous.data.choices[0].optionId, entityId: 'payee_001' } })).code, 'INVALID_REQUEST');
+  assert.equal((await post(a, { continuationToken: ambiguous.data.continuationToken, choice: { optionId: 'opt_forged' } })).code, 'CONTINUATION_STALE');
+  assert.equal((await post(a, { continuationToken: ambiguous.data.continuationToken, choice: { optionId: ambiguous.data.choices[0].optionId, entityId: 'payee_001' } })).code, 'CONTINUATION_STALE');
   const bill = await post(a, { message: '查账单' });
-  const result = await post(b, { continuationToken: bill.data.continuationToken, message: '2026年8月' });
+  const result = await post(a, { continuationToken: bill.data.continuationToken, message: '2026年8月' });
   assert.equal(result.data.data.month, '2026-08');
   assert.equal(result.data.data.transactionCount, 12);
   assert.equal(result.data.evidence[0].source, 'synthetic_demo_only');

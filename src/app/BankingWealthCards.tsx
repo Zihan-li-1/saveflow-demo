@@ -1,5 +1,6 @@
 "use client";
 
+import { stageCopy } from "@/lib/flow-machine";
 import type { BankingAgentData } from "@/lib/banking-agent-client";
 import type { ActionReceipt, WealthEffect } from "@/banking-core/contracts";
 
@@ -55,7 +56,7 @@ export function BankingWealthPreview({ data, active, busy, onConfirm, onReject, 
   if (!data || !preview) return null;
   const effect = (preview.exactEffects as WealthEffect[] | undefined)?.[0];
   return <div className="banking-preview-card card-action-preview">
-    <div><b>模拟理财操作预览</b><span>{active ? "等待单独确认" : "已失效"}</span></div>
+    <div><b>模拟理财操作预览</b><span>{data.coreStage && data.coreStage !== "plan" ? stageCopy[data.coreStage] : active ? "等待单独确认" : "已失效"}</span></div>
     <strong>{data.action === "wealth.subscribe" ? "申购" : "赎回"}</strong>
     <p>{String(preview.summary || "")}</p>
     {effect && <div className="financial-data-grid">

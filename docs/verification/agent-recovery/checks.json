@@ -1,0 +1,16 @@
+{
+  "verifiedOn": "2026-10-26",
+  "timezone": "Asia/Shanghai",
+  "integratedMain": "5aacc64d8a996bf7ea66042263b5ba8d24372a5c",
+  "resolvedConflictedFiles": 12,
+  "defaultTests": { "total": 414, "passed": 402, "failed": 0, "skipped": 12, "skipReasons": { "postgresNotConfigured": 10, "optInLiveModel": 2 } },
+  "typecheck": "passed",
+  "lint": "passed",
+  "build": "passed",
+  "naturalLanguage": { "mode": "real TrueForge", "passed": 31, "failed": 0 },
+  "recoverySuiteOptIn": { "passed": 17, "failed": 0, "realModelCases": 1, "injectedUnderstandingCases": 16 },
+  "billSuiteOptIn": { "passed": 8, "failed": 0, "realModelCases": 1 },
+  "browser": { "priorPhase": "real TrueForge with isolated synthetic data at localhost:3001", "finalPhase": "HTTP, actual hook with scheduling host, actual component render; browser not rerun" },
+  "deployedToProduction": false,
+  "mainModified": false
+}
