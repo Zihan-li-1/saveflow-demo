@@ -18,8 +18,12 @@ function runtime(resolve) {
   return { seen, createSession: async () => 'private-runtime', cancel: async id => seen.push({ cancel: id }),
     runTurn: async (_id, wire) => { const input = JSON.parse(wire); seen.push(input); return JSON.stringify(await resolve(input)); } };
 }
+const clientCores = new WeakMap();
 const post = async (body, options = {}) => {
-  const r = await handleBankingAgent(request(body), { env, core: createBankingCore(), ...options });
+  const client = options.trueforgeRuntimeClient;
+  const core = options.core ?? (client && clientCores.get(client)) ?? createBankingCore();
+  if (client) clientCores.set(client, core);
+  const r = await handleBankingAgent(request(body), { env, core, ...options });
   return { httpStatus: r.status, ...await r.json() };
 };
 
@@ -69,7 +73,7 @@ test('clarifications acknowledge known slots, candidate selection retains signed
   assert.equal(selected.data.status, 'awaiting_confirmation'); assert.equal(selected.data.preview.exactEffects[0].amountFen, 50000);
   assert.equal(client.seen.length, 1);
   const forged = await post({ continuationToken: first.data.continuationToken, choice: { optionId: 'foreign' } }, { core, trueforgeRuntimeClient: client });
-  assert.equal(forged.code, 'INVALID_CHOICE');
+  assert.equal(forged.code, 'CONTINUATION_STALE');
 });
 
 test('free-text continuation uses the same TrueForge context with retained slots and partial bill periods', async () => {

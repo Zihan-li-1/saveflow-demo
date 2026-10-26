@@ -57,7 +57,10 @@ test('correct access code permits either explicitly configured whole runtime', a
     trueforgeRuntimeClient: { createSession: async () => 'runtime-session', cancel: async () => {}, runTurn: async () => { called++; return JSON.stringify({ schemaVersion: '1.0.0', action: 'bill.summary', slots: { month: '2026-08' }, missingSlots: [], status: 'ready_for_resolution' }); } },
   });
   assert.equal(trueforge.status, 200); assert.equal(called, 1);
-  assert.deepEqual((await trueforge.json()).data, result.data);
+  const { conversation: firstSession, ...firstData } = result.data;
+  const { conversation: secondSession, ...secondData } = (await trueforge.json()).data;
+  assert.notEqual(firstSession.token, secondSession.token);
+  assert.deepEqual(secondData, firstData);
 });
 
 test('Netlify wrapper reads runtime environment and keeps access verification', async () => {

@@ -1,0 +1,37 @@
+{
+  "testDate": "2026-10-26",
+  "understanding": "real configured model; no injected output",
+  "core": "in-memory simulated Banking Core",
+  "browser": "Chrome headless",
+  "cases": [
+    {
+      "name": "transfer Skill: missing account → signed option → formal preview",
+      "passed": true
+    },
+    {
+      "name": "one live session: transfer → bill → card; separate tasks, shared session",
+      "passed": true
+    },
+    {
+      "name": "explicit transfer resume → amount edit → distinct preview on the original task",
+      "passed": true
+    },
+    {
+      "name": "browser reload on the same server process → reauthorize → sync → explicit resume",
+      "passed": true
+    },
+    {
+      "name": "chat and recovery invoke no Core decision or execution; no browser page errors",
+      "passed": true
+    }
+  ],
+  "passed": 5,
+  "failed": 0,
+  "skipped": 0,
+  "pageErrors": 0,
+  "lastResponse": {
+    "code": "OK",
+    "status": "awaiting_confirmation",
+    "action": "transfer.create"
+  }
+}

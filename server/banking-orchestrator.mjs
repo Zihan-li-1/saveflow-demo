@@ -29,6 +29,8 @@ function inputError(code, message, status) {
 }
 
 export function statusFor(code) {
+  if (code?.startsWith('CONVERSATION_')) return code.endsWith('CAPACITY') || code === 'CONVERSATION_CORE_UNAVAILABLE' ? 503 : 409;
+  if (code === 'CONTINUATION_STALE') return 409;
   if (code === 'UNAUTHORIZED') return 401;
   if (code === 'FORBIDDEN') return 403;
   if (code === 'REQUEST_TOO_LARGE') return 413;
@@ -133,7 +135,7 @@ function nextMissingSlot(intent) {
 /** Shared clarification and preview workflow. The only Core capability used is prepare(). */
 export async function runBankingConversation(body, {
   core, repository = core.repository, env = process.env, now = Date.now, timezone = 'Asia/Shanghai',
-  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, requestId = crypto.randomUUID(), origin = 'user_requested', scenarioHandler, scenarioScope = 'fixed_mock_user', savingsAdvisor = requestSavingsAdvice,
+  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, requestId = crypto.randomUUID(), origin = 'user_requested', scenarioHandler, scenarioScope = 'fixed_mock_user', savingsAdvisor = requestSavingsAdvice, conversation, resumeOnly = false,
 }) {
   let replyContext = {};
   const reply = (httpStatus, code, message, data) => ({ httpStatus, code, message, data, replyContext });
@@ -164,7 +166,7 @@ export async function runBankingConversation(body, {
   if (continuing && (typeof body.continuationToken !== 'string' || body.continuationToken.length > 10000)) throw inputError('CONTINUATION_INVALID', '续接凭据无效', 400);
   if (!continuing && !initialIntent && (typeof body.message !== 'string' || !body.message.trim() || body.message.length > 2000)) throw inputError('INVALID_REQUEST', 'message 必须是 1-2000 字符的文本', 400);
   if (continuing && body.message !== undefined && (typeof body.message !== 'string' || body.message.length > 2000)) throw inputError('INVALID_REQUEST', 'message 格式无效', 400);
-  if (continuing && body.message === undefined && body.planInputs === undefined && (!body.choice || typeof body.choice !== 'object')) throw inputError('INVALID_REQUEST', '续接请求需要 message、choice 或 planInputs', 400);
+  if (continuing && !resumeOnly && body.message === undefined && body.planInputs === undefined && (!body.choice || typeof body.choice !== 'object')) throw inputError('INVALID_REQUEST', '续接请求需要 message、choice 或 planInputs', 400);
   if (body.choice !== undefined && (!body.choice || typeof body.choice !== 'object' || Array.isArray(body.choice) || typeof body.choice.optionId !== 'string' || !body.choice.optionId.trim() || Object.keys(body.choice).some(key => key !== 'optionId'))) throw inputError('INVALID_REQUEST', 'choice 只能包含非空 optionId', 400);
   if (body.consent !== undefined && body.consent !== true) throw inputError('INVALID_REQUEST', 'consent 必须明确为 true', 400);
   const history = body.history ?? [];
@@ -200,6 +202,7 @@ export async function runBankingConversation(body, {
   if (continuing) {
     try { continuation = verifyContinuationToken(body.continuationToken, continuationSecret(env), now()); }
     catch (error) { throw tokenError(error); }
+    if (continuation.conversation && !conversation) throw Object.assign(new Error('HTTP task credential cannot cross adapters'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
     replyContext = { slots: continuation.slots };
     if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:确认|确认转账|确认执行|执行|同意)[。！!]?\s*$/.test(body.message.trim())) throw inputError('CONFIRMATION_REQUIRED', '聊天文字不能确认执行，请在页面核对预览并完成所需确认与验证。', 403);
     if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:取消|取消操作|取消本次操作|不用了)[。！!]?\s*$/.test(body.message.trim())) return reply(200, 'OK', '本次会话已取消，未执行资金或卡片操作。', { status: 'cancelled', action: continuation.action });
@@ -235,7 +238,10 @@ export async function runBankingConversation(body, {
       }
       if (/^(?:确认|确认保存|同意|保存规则)[。！]?$/.test(answer)) throw inputError('CONFIRMATION_REQUIRED', '聊天文字不能确认执行。请在原规则预览中查询状态、核对明细，并使用页面确认按钮。', 403);
     }
-    if (body.message) {
+    if (resumeOnly) {
+      parsed = buildParsedIntent(continuation.action, continuation.slots);
+      selections = { ...continuation.selections };
+    } else if (body.message) {
       parsed = validateParsedIntent(await parseIntent(body.message, { ...modelOptions, history,
         context: { action: continuation.action, slots: continuation.slots, pendingSlot: continuation.pendingSlot, question: continuation.question,
           choices: continuation.choices.map(({ optionId, label, rawValue }) => ({ optionId, label, rawValue })) } }));
@@ -268,6 +274,10 @@ export async function runBankingConversation(body, {
   }
   // Apply exactly the same boundary to all configured/injected understanders.
   parsed = validateParsedIntent(parsed);
+  if (conversation) {
+    parsed = await conversation.acceptIntent(parsed, modelOptions);
+    if (continuation && parsed.action !== continuation.action) selections = {};
+  }
   replyContext = { slots: parsed.slots };
   if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
   if (!continuing && parsed.choice) throw inputError('INVALID_CHOICE', '当前请求没有可选择的候选项', 400);

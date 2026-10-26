@@ -1,5 +1,5 @@
 {
-  "testDate": "2026-10-22",
+  "testDate": "2026-10-26",
   "timezone": "Asia/Shanghai",
   "runtime": "trueforge",
   "model": "test/deepseek-v4-1-flash",
@@ -59,6 +59,9 @@
       "queries": [
         {
           "month": "2026-09"
+        },
+        {
+          "month": "2026-08"
         }
       ]
     },
@@ -148,6 +151,9 @@
       "queries": [
         {
           "month": "2026-08"
+        },
+        {
+          "month": "2026-07"
         }
       ]
     },
@@ -267,6 +273,9 @@
       "queries": [
         {
           "month": "2026-09"
+        },
+        {
+          "month": "2026-08"
         }
       ]
     },
@@ -292,6 +301,9 @@
       "queries": [
         {
           "month": "2026-09"
+        },
+        {
+          "month": "2026-08"
         }
       ]
     },
@@ -314,7 +326,7 @@
               "start_date": "2026-01-01",
               "end_date": "2026-10-22",
               "timezone": "Asia/Shanghai",
-              "label": "2026年年初至今"
+              "label": "2026年至今"
             }
           }
         }
@@ -331,7 +343,7 @@
       "index": 13,
       "passed": true,
       "message": "我要在年底存够一万",
-      "resultStatus": "goal_plan",
+      "resultStatus": "needs_plan_inputs",
       "modelTurns": [
         {
           "calendar": {
@@ -343,7 +355,17 @@
           "status": "ready_for_resolution"
         }
       ],
-      "queries": []
+      "queries": [
+        {
+          "month": "2026-06"
+        },
+        {
+          "month": "2026-07"
+        },
+        {
+          "month": "2026-08"
+        }
+      ]
     },
     {
       "index": 14,
@@ -439,6 +461,9 @@
       "queries": [
         {
           "month": "2025-12"
+        },
+        {
+          "month": "2025-11"
         }
       ]
     },
@@ -461,7 +486,7 @@
               "start_date": "2027-01-01",
               "end_date": "2027-01-01",
               "timezone": "Asia/Shanghai",
-              "label": "今年到现在"
+              "label": "今年至今"
             }
           }
         }
@@ -751,7 +776,7 @@
       "index": 31,
       "passed": true,
       "message": "想在年底攒个大概一万",
-      "resultStatus": "goal_plan",
+      "resultStatus": "needs_plan_inputs",
       "modelTurns": [
         {
           "calendar": {
@@ -772,9 +797,20 @@
           "status": "ready_for_resolution"
         }
       ],
-      "queries": []
+      "queries": [
+        {
+          "month": "2026-06"
+        },
+        {
+          "month": "2026-07"
+        },
+        {
+          "month": "2026-08"
+        }
+      ]
     }
   ],
   "passed": 31,
+  "skipped": 0,
   "failed": 0
 }

@@ -1,4 +1,5 @@
 import { validCalendarDate, validTimezone } from './calendar.mjs';
+import { validBankingConversation } from './banking-conversation-contract';
 
 export type ResponseFailure = { reason: 'INVALID_HTTP_RESPONSE' | 'INVALID_REPLY_ENVELOPE' | 'INVALID_BILL_PERIOD' | 'INVALID_MONTHLY_STATUS' | 'INVALID_BILL_TOTALS' | 'INVALID_EVIDENCE'; path: string };
 type RecordValue = Record<string, unknown>;
@@ -39,7 +40,8 @@ function validInsights(value: unknown, bill: RecordValue, entityIds: string[]): 
 /** Validate untrusted bill data before presentation. Diagnostics contain fixed schema paths only. */
 export function billResponseFailure(data: RecordValue): ResponseFailure | undefined {
   const fail = (reason: ResponseFailure['reason'], path: string): ResponseFailure => ({ reason, path });
-  if (data.action !== 'bill.summary' || !keys(data, ['status', 'action', 'data', 'evidence']) || !record(data.data)) return fail('INVALID_REPLY_ENVELOPE', 'data');
+  if (data.action !== 'bill.summary' || !keys(data, ['status', 'action', 'data', 'evidence', 'conversation']) || !record(data.data) ||
+      (data.conversation !== undefined && !validBankingConversation(data.conversation))) return fail('INVALID_REPLY_ENVELOPE', 'data');
   const bill = data.data;
   if (!keys(bill, [...totalKeys, 'month', 'period', 'monthlyBreakdown', 'coverage', 'insights'])) return fail('INVALID_BILL_TOTALS', 'data.data');
   if (('month' in bill) === ('period' in bill)) return fail('INVALID_BILL_PERIOD', 'data.data.period');
