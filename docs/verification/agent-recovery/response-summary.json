@@ -1,0 +1,29 @@
+{
+  "verifiedOn": "2026-10-26",
+  "clock": "2026-10-22T04:00:00Z",
+  "understanding": "injected ParsedIntent; real HTTP handler, Skill and Core",
+  "http": 409,
+  "code": "INVALID_STATE",
+  "requestId": "860b2f37-421b-47bc-8a0f-d0bb6ef0f2ea",
+  "error": {
+    "code": "INVALID_STATE",
+    "message": "娱乐虚拟卡当前处于正常使用状态，无需解冻。你可以选择其他已冻结的卡片，或输入“查看我的卡”查询卡片状态。",
+    "category": "business_conflict",
+    "retryable": false,
+    "nextAction": "choose_option",
+    "context": "preserve"
+  },
+  "recovery": {
+    "kind": "clarification",
+    "status": "needs_clarification",
+    "action": "card.unfreeze",
+    "slot": "card_ref",
+    "choices": [
+      {
+        "optionId": "opt_e56abb30-ee35-42ad-9d39-c8785319aa6f",
+        "label": "日常虚拟卡（卡片 1）"
+      }
+    ],
+    "continuationIssued": true
+  }
+}

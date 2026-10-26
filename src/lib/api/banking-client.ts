@@ -6,11 +6,32 @@ import { fromWire, toWire, WIRE_VERSION } from "../../banking-core/wire.mjs";
 type Options = { mode?: "mock" | "http"; baseUrl?: string; timeoutMs?: number; accessCode?: () => string; fetchImpl?: typeof fetch };
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const fen = (v: unknown) => Number.isSafeInteger(v) && Number(v) >= 0;
+// Rule contracts retain snake_case domain fields, with previewGeneration in camelCase.
+// The generic HTTP decoder otherwise changes nested rule fields as well as the envelope.
+function restoreScenarioReceipt(value: Record<string, unknown>): Record<string, unknown> {
+  if (!['scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule'].includes(String(value.action)) || !Array.isArray(value.effects)) return value;
+  const rule = (input: unknown) => {
+    if (!object(input)) return input;
+    const restored = toWire(input) as Record<string, unknown>;
+    restored.previewGeneration = restored.preview_generation; delete restored.preview_generation;
+    return restored;
+  };
+  return { ...value, effects: value.effects.map(effect => object(effect) && effect.kind === 'scenario_rule_change' ? { ...effect, before: rule(effect.before), after: rule(effect.after) } : effect) };
+}
 function receipt(v: unknown, id: string): boolean {
   if (!object(v)) return false;
   const cardAction = ["card.set_budget", "card.set_controls", "card.freeze", "card.unfreeze"].includes(String(v.action));
+  const scenarioAction = ["scenario.create_rule", "scenario.update_rule", "scenario.disable_rule"].includes(String(v.action));
   const wealthAction = ["wealth.subscribe", "wealth.redeem"].includes(String(v.action));
-  return v.operationId === id && typeof v.receiptId === "string" && (v.action === "transfer_money" || cardAction || wealthAction) && ["succeeded", "failed", "cancelled"].includes(String(v.status)) && typeof v.message === "string" && typeof v.planId === "string" && typeof v.stepId === "string" && typeof v.executedAt === "string" && Number.isFinite(Date.parse(v.executedAt)) && v.dataSource === "synthetic_demo_only" && Array.isArray(v.transactionIds) && v.transactionIds.every(t => typeof t === "string") && Array.isArray(v.effects) && (v.status !== "succeeded" || (cardAction ? v.transactionIds.length === 0 && v.effects.length === 1 && cardEffect(v.effects[0], String(v.action)) : wealthAction ? v.transactionIds.length === 0 && v.effects.length === 1 && wealthEffect(v.effects[0], String(v.action)) : v.transactionIds.length === 1 && v.effects.length === 1 && effect(v.effects[0])));
+  return v.operationId === id && typeof v.receiptId === "string" && (v.action === "transfer_money" || cardAction || wealthAction || scenarioAction) && ["succeeded", "failed", "cancelled"].includes(String(v.status)) && typeof v.message === "string" && typeof v.planId === "string" && typeof v.stepId === "string" && typeof v.executedAt === "string" && Number.isFinite(Date.parse(v.executedAt)) && v.dataSource === "synthetic_demo_only" && Array.isArray(v.transactionIds) && v.transactionIds.every(t => typeof t === "string") && Array.isArray(v.effects) && (v.status !== "succeeded" || (cardAction ? v.transactionIds.length === 0 && v.effects.length === 1 && cardEffect(v.effects[0], String(v.action)) : wealthAction ? v.transactionIds.length === 0 && v.effects.length === 1 && wealthEffect(v.effects[0], String(v.action)) : scenarioAction ? v.transactionIds.length === 0 && v.effects.length === 1 && scenarioEffect(v.effects[0], String(v.action)) : v.transactionIds.length === 1 && v.effects.length === 1 && effect(v.effects[0])));
+}
+function scenarioEffect(v: unknown, action: string): boolean {
+  if (!object(v) || v.kind !== 'scenario_rule_change' || v.action !== action || typeof v.ruleId !== 'string' || !Number.isSafeInteger(v.previewGeneration) ||
+      !(v.ruleVersion === null || Number.isSafeInteger(v.ruleVersion)) || !object(v.after)) return false;
+  const rule = v.after;
+  return rule.id === v.ruleId && ['active', 'disabled'].includes(String(rule.status)) && rule.authorization_scope === 'suggest_only' &&
+    Number.isSafeInteger(rule.version) && object(rule.trigger) && typeof rule.trigger.value === 'string' && Array.isArray(rule.proposed_steps) &&
+    rule.proposed_steps.every(step => object(step) && ['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get'].includes(String(step.action)) && object(step.parameters));
 }
 function wealthEffect(v: unknown, action: string): boolean {
   if (!object(v) || v.kind !== "wealth_change" || v.action !== action || typeof v.productId !== "string" || typeof v.productName !== "string" || typeof v.holdingId !== "string" || !fen(v.amountFen) || Number(v.amountFen) <= 0 || !fen(v.unitsMilli) || Number(v.unitsMilli) <= 0) return false;
@@ -79,6 +100,10 @@ export function createBankingClient(options: Options = {}) {
         const wire: unknown = await response.json();
         if (!object(wire) || wire.schema_version !== WIRE_VERSION || typeof wire.request_id !== "string" || typeof wire.code !== "string") throw new ApiError("INVALID_RESPONSE", "Banking Core 响应协议无效", write);
         const payload = fromWire(wire) as Record<string, unknown>;
+        if (object(payload.data)) {
+          if (object(payload.data.receipt)) payload.data.receipt = restoreScenarioReceipt(payload.data.receipt);
+          payload.data = restoreScenarioReceipt(payload.data);
+        }
         if (!response.ok || payload.code !== "OK") {
           const safeRejection = response.status < 500 && ["VALIDATION_ERROR", "CONFIRMATION_REQUIRED", "CONFIRMATION_INVALID", "INVALID_STATE", "CARD_NOT_FOUND", "UNAUTHORIZED", "FORBIDDEN", "PREVIEW_EXPIRED", "PREVIEW_STALE", "INSUFFICIENT_BALANCE", "LIMIT_EXCEEDED", "SUITABILITY_FAILED", "BELOW_MINIMUM_AMOUNT", "HOLDING_NOT_FOUND", "REDEMPTION_RESTRICTED", "INSUFFICIENT_HOLDING"].includes(String(payload.code));
           throw new ApiError(String(payload.code), typeof payload.message === "string" ? payload.message : "Banking Core 请求失败", write && !safeRejection, String(payload.requestId));

@@ -3,11 +3,12 @@ import { issueContinuationToken, verifyContinuationToken } from '../src/agent/cl
 import { resolveChoice } from '../src/agent/clarification/choice-resolver.mjs';
 import { buildParsedIntent, mergeSlots } from '../src/agent/clarification/merge-intent.mjs';
 import { billClarificationQuestion } from '../src/lib/trueforge-routing.mjs';
-import { validateParsedIntent } from '../src/agent/validate-parsed-intent.mjs';
+import { validateParsedIntent, ParsedIntentValidationError } from '../src/agent/validate-parsed-intent.mjs';
 import { dispatchBanking } from '../src/banking-core/dispatch.mjs';
 import { createWealthSkill } from '../src/skills/wealth/wealth-skill.mjs';
 import { handleWealth } from '../src/agent/handlers/wealth-handler.mjs';
 import { createInMemoryScenarioStore, createScenarioSkill } from '../src/skills/scenario/scenario-skill.mjs';
+import { agentErrorPolicy } from '../src/lib/agent-error-policy.mjs';
 
 const scenarioStores = new Map();
 function scenarioStoreFor(scope) {
@@ -106,6 +107,10 @@ function cardChoices(cards) {
   }));
 }
 
+function eligibleCards(action, cards) {
+  return cards.filter(card => action === 'card.unfreeze' ? card.status === 'frozen' : action === 'card.freeze' ? card.status === 'active' : true);
+}
+
 function clarificationResponse(reply, { action, slot, question, choices = [], slots, selections = {}, env, now, message, source }) {
   const token = issueState({ action, slots, pendingSlot: slot, question, choices, selections, env, now });
   return reply(200, 'NEEDS_CLARIFICATION', question, {
@@ -165,6 +170,28 @@ export async function runBankingConversation(body, {
   let parsed;
   let selections = {};
   let continuation;
+  // Renew only authenticated drafts. Frontend labels/IDs are never accepted here.
+  const recover = async (state, code, message, slot = state?.pendingSlot) => {
+    if (!state || !slot || slot.startsWith('__') || state.operation) return undefined;
+    const slots = { ...state.slots };
+    delete slots[slot];
+    const selected = { ...(state.selections ?? {}) }; delete selected[slot];
+    let choices = [];
+    if (slot === 'card_ref') {
+      const cards = await repository.getCards();
+      choices = cardChoices(eligibleCards(state.action, cards));
+    } else if (slot === 'source_account_ref') choices = await accountChoices(repository);
+    else if (slot === 'payee_ref') choices = payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active'));
+    if (['card_ref', 'source_account_ref', 'payee_ref'].includes(slot) && !choices.length) return undefined;
+    const question = `${message} ${questionFor(state.action, slot, '', slots)}`;
+    return clarificationResponse(reply, { action: state.action, slot, question, choices, slots, selections: selected, env, now, source: 'resolver' }).data;
+  };
+  const failure = async (code, message, state, slot) => {
+    const recovery = await recover(state, code, message, slot);
+    return reply(statusFor(code), code, message, { status: 'error', action: state?.action,
+      error: { code, message }, ...(recovery ? { recovery } : {}) });
+  };
+  try {
   if (continuing) {
     try { continuation = verifyContinuationToken(body.continuationToken, continuationSecret(env), now()); }
     catch (error) { throw tokenError(error); }
@@ -180,18 +207,19 @@ export async function runBankingConversation(body, {
         if (!decision.ok) return reply(statusFor(decision.error.code), decision.error.code, decision.error.message, { status: 'core_error', action: continuation.action, operationId: continuation.operation.operationId, error: decision.error });
         return reply(200, 'OK', '已取消规则变更，未保存任何修改', { status: 'cancelled', action: continuation.action, operationId: continuation.operation.operationId });
       }
-      if (!/^(?:确认|确认保存|同意|保存规则)[。！]?$/.test(answer)) return clarificationResponse(reply, { action: continuation.action, slot: '__scenario_confirmation', question: '请回复“确认保存”或“取消”。', slots: continuation.slots, selections: {}, env, now, source: 'scenario_preview' });
-      const decision = await core.decide(continuation.operation.operationId, { previewHash: continuation.operation.previewHash, decision: 'confirm', confirmedStepIds: continuation.operation.stepIds });
-      if (!decision.ok) return reply(statusFor(decision.error.code), decision.error.code, decision.error.message, { status: 'core_error', action: continuation.action, operationId: continuation.operation.operationId, error: decision.error });
-      const executed = await core.execute(continuation.operation.operationId, continuation.operation.previewHash);
-      if (!executed.ok) return reply(statusFor(executed.error.code), executed.error.code, executed.error.message, { status: 'core_error', action: continuation.action, operationId: continuation.operation.operationId, error: executed.error });
-      const effect = executed.data.effects?.[0];
-      return reply(200, 'OK', '场景规则已保存', { status: 'scenario_rule', action: continuation.action, operationId: continuation.operation.operationId, receipt: executed.data, data: { rule: effect?.after, execution_policy: '规则只生成建议；写操作仍须另行预览并确认。' } });
+      if (/^(?:确认|确认保存|同意|保存规则)[。！]?$/.test(answer)) throw inputError('CONFIRMATION_REQUIRED', '聊天文字不能确认执行。请在原规则预览中查询状态、核对明细，并使用页面确认按钮。', 403);
     }
     if (body.message) {
       parsed = validateParsedIntent(await parseIntent(body.message, { ...modelOptions, history,
         context: { action: continuation.action, slots: continuation.slots, pendingSlot: continuation.pendingSlot, question: continuation.question,
           choices: continuation.choices.map(({ optionId, label, rawValue }) => ({ optionId, label, rawValue })) } }));
+      if (['clarify', 'unsupported'].includes(parsed.action)) {
+        const code = continuation.pendingSlot === 'amount' ? 'INVALID_AMOUNT' : 'INVALID_CHOICE';
+        const message = parsed.action === 'unsupported' ? '暂不支持本次输入，之前的业务仍可继续，请重新选择或补充信息。' : '当前输入未能补全这一步，请重新选择或补充信息。';
+        const recovery = await recover(continuation, code, message);
+        if (recovery) return reply(200, 'NEEDS_CLARIFICATION', recovery.question, { ...recovery, error: { code, message, ...agentErrorPolicy(code, { hasRecovery: true, hasChoices: !!recovery.choices.length }) } });
+        return failure(code, message, continuation);
+      }
       // A model cannot convert an opaque candidate selection into entity IDs.
       // Keep server selections only while their raw references remain unchanged.
       if (parsed.action === continuation.action) {
@@ -205,7 +233,7 @@ export async function runBankingConversation(body, {
       }
     } else {
       const selected = resolveChoice(body.choice, continuation.choices);
-      if (!selected) throw Object.assign(new Error('选项不存在或已失效'), { code: 'INVALID_CHOICE', status: 400 });
+      if (!selected) return failure('INVALID_CHOICE', '选项不存在或已失效，请重新选择。', continuation);
       selections = { ...continuation.selections, [continuation.pendingSlot]: { entityId: selected.entityId, optionId: selected.optionId } };
       parsed = buildParsedIntent(continuation.action, mergeSlots(continuation.slots, { [continuation.pendingSlot]: selected.rawValue || selected.label }));
     }
@@ -265,7 +293,10 @@ export async function runBankingConversation(body, {
   }
   if (result.ok && result.kind === 'card_action_request') {
     const prepared = await core.prepare(result.data.request);
-    if (!prepared.ok) return reply(statusFor(prepared.error.code), prepared.error.code, prepared.error.message, { status: 'core_error', action: result.action, ...(prepared.operationId ? { operationId: prepared.operationId } : {}), error: prepared.error });
+    if (!prepared.ok) {
+      if (!prepared.error.uncertain && ['business_conflict', 'invalid_choice', 'invalid_input'].includes(agentErrorPolicy(prepared.error.code).category)) return failure(prepared.error.code, prepared.error.message, { action: result.action, slots: parsed.slots, selections }, result.action === 'card.set_budget' ? 'amount' : 'card_ref');
+      return reply(statusFor(prepared.error.code), prepared.error.code, prepared.error.message, { status: 'core_error', action: result.action, ...(prepared.operationId ? { operationId: prepared.operationId } : {}), error: prepared.error });
+    }
     const continuationToken = issueState({ action: result.action, slots: parsed.slots, pendingSlot: result.action === 'card.set_budget' ? 'amount' : 'card_ref', selections, env, now });
     return reply(200, 'OK', '卡片正式预览已生成，等待页面确认', { status: 'awaiting_confirmation', action: result.action, operationId: prepared.data.operationId, preview: prepared.data.preview, risk: prepared.data.risk, evidence: result.data.evidence, continuationToken });
   }
@@ -287,11 +318,13 @@ export async function runBankingConversation(body, {
     const action = result.action || parsed.action;
     const slots = parsed.slots || {};
     const slot = result.slot || nextMissingSlot(parsed) || (result.candidates ? 'payee_ref' : undefined);
-    const choices = slot === 'card_ref' ? cardChoices(result.candidates?.length ? result.candidates : await repository.getCards()) : result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' ? await accountChoices(repository) : slot === 'payee_ref' && !slots.payee_ref ? payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active')) : [];
+    // Re-read even resolver candidates: states/eligibility may have changed since resolution.
+    const cards = slot === 'card_ref' ? eligibleCards(action, await repository.getCards()) : [];
+    const choices = slot === 'card_ref' ? cardChoices(cards.filter(card => !result.candidates?.length || result.candidates.some(candidate => candidate.id === card.id))) : result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' ? await accountChoices(repository) : slot === 'payee_ref' && !slots.payee_ref ? payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active')) : [];
     return clarificationResponse(reply, {
       action,
       slot,
-      question: result.question || questionFor(action, slot, body.message, slots),
+      question: slot === 'card_ref' && !choices.length ? '当前没有符合条件的卡片。可以输入“查看我的卡”查询卡片状态，或发起其他业务。' : result.question || questionFor(action, slot, body.message, slots),
       choices,
       slots,
       selections,
@@ -301,7 +334,19 @@ export async function runBankingConversation(body, {
   }
   if (result.kind === 'unsupported') return reply(200, 'UNSUPPORTED', '暂不支持该请求', { status: result.kind });
   if (result.kind === 'skill_error') return reply(502, 'SKILL_ERROR', 'Skill 处理失败，请稍后重试。', errorData('SKILL_ERROR', 'Skill 处理失败，请稍后重试。'));
-  if (result.kind === 'card_error') return reply(statusFor(result.error.code), result.error.code, result.error.message, { status: 'card_error', action: result.action, error: result.error });
+  if (result.kind === 'card_error' || (result.kind === 'core_error' && result.action?.startsWith('card.'))) {
+    let message = result.error.message;
+    if (!result.error.uncertain && ['business_conflict', 'invalid_choice', 'invalid_input'].includes(agentErrorPolicy(result.error.code).category)) {
+      const card = result.cardId ? await repository.getCard(result.cardId) : (await repository.getCards()).find(card => card.id === selections.card_ref?.entityId || card.name === parsed.slots.card_ref);
+      if (card && result.action === 'card.unfreeze' && card.status === 'active') message = `${card.name}当前处于正常使用状态，无需解冻。你可以选择其他已冻结的卡片，或输入“查看我的卡”查询卡片状态。`;
+      else if (card && result.action === 'card.freeze' && card.status === 'frozen') message = `${card.name}已经冻结，无需重复冻结。可选择其他正常卡片，或输入“查看我的卡”查询卡片状态。`;
+      const slot = result.action === 'card.set_budget' ? 'amount' : 'card_ref';
+      const response = await failure(result.error.code, message, { action: result.action, slots: parsed.slots, selections }, slot);
+      if (!response.data.recovery) response.message = response.data.error.message = `${message} 当前没有符合条件的其他选项，请修改请求。`;
+      return response;
+    }
+    return reply(statusFor(result.error.code), result.error.code, message, { status: 'card_error', action: result.action, error: result.error });
+  }
   if (result.kind === 'wealth_error') return reply(statusFor(result.error.code), result.error.code, result.error.message, { status: 'wealth_error', action: result.action, error: result.error });
   if (result.kind === 'core_error') {
     let recovery;
@@ -322,4 +367,15 @@ export async function runBankingConversation(body, {
       ...(recovery ? { recovery, continuationToken } : {}) });
   }
   return reply(500, 'INTERNAL_ERROR', '未取得可靠结果', errorData('INTERNAL_ERROR', '未取得可靠结果'));
+  } catch (error) {
+    const code = error instanceof ParsedIntentValidationError ? 'MODEL_FORMAT_ERROR' : error?.code;
+    // A token for another tool/action is an authorization mismatch, not a bad selection.
+    if (code === 'CONTINUATION_ACTION_MISMATCH') throw error;
+    const policy = agentErrorPolicy(code);
+    if (continuation && ['invalid_input', 'invalid_choice'].includes(policy.category)) {
+      if (continuation.choices.length && continuation.pendingSlot?.endsWith('_ref')) return failure('INVALID_CHOICE', '没有找到匹配的选项，请从当前有效列表中重新选择。', continuation);
+      return failure(code, policy.category === 'invalid_input' ? '输入格式或数值不符合要求，请修正后继续。' : '没有找到有效选项，请重新选择。', continuation);
+    }
+    throw error;
+  }
 }

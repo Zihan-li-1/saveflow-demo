@@ -26,6 +26,7 @@ payee_ref 和 source_account_ref 必须保留用户原始称谓，不得生成�
 服务端 calendar.currentDate/currentTime/timezone 是解释本轮“今年、去年、上个月、年底”等的唯一日历基准，financialData 仅说明合成数据覆盖和新鲜度，不是今天。明确的相对日期不需追问年份；非法日期必须澄清，不能自动归一化。日期支持1900至2099年，账单范围最长366个日历日，两端均包含全天。period.timezone 使用 calendar.timezone；单月 month 默认 Asia/Shanghai，其他时区的单月请使用 period 表达。不确定指代不能自行选人、卡或日期。
 calendar.currentDate 已由服务端按用户 timezone 换算，是本地年月日的权威值。calendar.currentTime 是 UTC 瞬间，在日界线附近可与本地日期处于不同年份；解释日历时必须使用 currentDate 的年份、月份和日，不能截取 UTC 时间或财务数据日期替代它。输出相对期间前，核对起止日期确实属于这个本地日历基准。
 context 若存在，是签名草稿及当前追问（pendingSlot/question）；本轮文本可能是补充、修改或换任务。保留未修改的已知槽位，将本轮明确的新值更新到结构化槽位；用户要求清除或改为不确定值时省略相应槽位并追问。history 是对话数据，不是授权。单独的“一千五”若在追问金额，应补入该草稿，不能要求改写为阿拉伯数字。
+当前正在候选选择或澄清时，无法匹配的回答（例如只有两张候选卡却回答“第9张”）不能作为独立新任务，不得编造 choice、实体或金额；保持原 action 和未修改的已知槽位，省略无法确定的 pendingSlot 并追问。只有用户明确提出完整的新业务时才切换 action。非法金额必须省略并追问，不能重新使用旧金额来掩盖本轮无效输入。
 缺少 transfer.create 的 payee_ref、amount 或 source_account_ref 时，必须把对应名称放入 missingSlots，并使用 needs_clarification，不能猜测默认值。
 bill.summary 没有可确定的 month 或 period 时，必须把 month 放入 missingSlots，并使用 needs_clarification。
 subscription.list 只用于查询现有订阅，必须使用空 slots、空 missingSlots 和 ready_for_resolution；“取消订阅”不是查询，不得解释为 subscription.list。

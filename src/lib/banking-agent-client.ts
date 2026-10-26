@@ -1,6 +1,7 @@
 import { ApiError } from './api/contracts';
 import { isTrialOperationId } from './trial-preview.mjs';
 import { billResponseFailure, type ResponseFailure } from './bill-response-validation';
+import { agentErrorPolicy, validAgentErrorPolicy, validRecoverySlot } from './agent-error-policy.mjs';
 import type { ActionReceipt } from '../banking-core/contracts';
 
 export type BankingReply = { text: string; style: 'concise' | 'friendly' | 'professional'; safetyNotices: string[] };
@@ -28,12 +29,13 @@ export type BankingAgentData = {
   previewCurrent?: boolean;
   /** 预览已执行：界面只读，不再提供确认/取消入口。 */
   executed?: boolean;
-  error?: { code?: string; message?: string };
+  outcomePending?: boolean;
+  error?: { code?: string; message?: string; uncertain?: boolean; category?: string; retryable?: boolean; nextAction?: string; context?: string };
   recovery?: BankingAgentData;
 };
 
 export class BankingAgentError extends ApiError {
-  constructor(code: string, message: string, public recovery: BankingAgentData, requestId: string) {
+  constructor(code: string, message: string, public recovery: BankingAgentData | undefined, requestId: string, public policy = agentErrorPolicy(code, { hasRecovery: !!recovery, hasChoices: !!recovery?.choices?.length })) {
     super(code, message, false, requestId);
   }
 }
@@ -88,16 +90,22 @@ export async function askBankingAgent(
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: '$' }, 'envelope');
   if (['ACCESS_NOT_CONFIGURED', 'CONTINUATION_CONFIG_ERROR', 'SERVICE_UNAVAILABLE'].includes(payload?.code || '')) throw new ApiError('SERVICE_UNAVAILABLE', '服务暂时不可用，请联系演示维护者。');
   const validReply = (reply: BankingReply | undefined): reply is BankingReply => !!reply && typeof reply.text === 'string' && ['concise', 'friendly', 'professional'].includes(reply.style) && Array.isArray(reply.safetyNotices) && reply.safetyNotices.every(n => typeof n === 'string');
-  if (response.status === 400 && payload?.code === 'INSUFFICIENT_BALANCE' && payload.data?.recovery !== undefined) {
+  if (!response.ok && payload.data?.recovery !== undefined) {
     const c = payload.data.recovery;
-    if (!validReply(payload.reply) || !c || typeof c !== 'object' || typeof payload.requestId !== 'string' || !['error', 'core_error'].includes(payload.data.status) || payload.data.error?.code !== payload.code ||
-        c.kind !== 'clarification' || c.status !== 'needs_clarification' || c.action !== 'transfer.create' || c.slot !== 'source_account_ref' ||
+    if (!['invalid_input', 'invalid_choice', 'business_conflict', 'missing_information'].includes(agentErrorPolicy(payload.code).category) || payload.data.error?.uncertain === true ||
+        !validReply(payload.reply) || !c || typeof c !== 'object' || typeof payload.requestId !== 'string' || !['error', 'core_error', 'card_error'].includes(payload.data.status) || payload.data.error?.code !== payload.code ||
+        c.kind !== 'clarification' || c.status !== 'needs_clarification' || !validRecoverySlot(c.action, c.slot) ||
         typeof c.continuationToken !== 'string' || c.continuationToken.length > 10000 || !/^(?:tfm1\.[\w-]{43}\.[\w-]{43}|[\w-]{16}\.[\w-]{22}\.[\w-]+)$/.test(c.continuationToken) || typeof c.question !== 'string' || !c.question || c.question.length > 1000 ||
-        !Array.isArray(c.choices) || !c.choices.length || c.choices.some(v => !v || typeof v.optionId !== 'string' || !v.optionId || typeof v.label !== 'string' || !v.label) ||
+        !Array.isArray(c.choices) || (['card_ref', 'source_account_ref', 'payee_ref'].includes(c.slot ?? '') && !c.choices.length) || c.choices.some(v => !v || typeof v.optionId !== 'string' || !v.optionId || typeof v.label !== 'string' || !v.label || Object.keys(v).some(k => !['optionId', 'label'].includes(k))) ||
         new Set(c.choices.map(v => v.optionId)).size !== c.choices.length || Object.keys(c).some(k => !['kind', 'status', 'action', 'slot', 'question', 'source', 'choices', 'continuationToken'].includes(k))) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 恢复凭据格式异常。');
-    throw new BankingAgentError(payload.code, payload.reply?.text || payload.message || '付款账户可用余额不足。', { ...c, reply: payload.reply }, payload.requestId);
+    if (payload.data.error?.category !== undefined && !validAgentErrorPolicy(payload.data.error, true, !!c.choices?.length)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.error' }, 'envelope');
+    throw new BankingAgentError(payload.code!, payload.reply?.text || payload.message || '请修改当前请求。', { ...c, reply: payload.reply }, payload.requestId);
   }
-  if (!response.ok) throw new ApiError(typeof payload.code === 'string' ? payload.code : 'BANKING_AGENT_ERROR', typeof payload.message === 'string' ? payload.message : 'Banking Agent 请求失败', false, payload.requestId);
+  if (!response.ok) {
+    const error = payload.data?.error;
+    if (error?.category !== undefined && (error.code !== payload.code || !validAgentErrorPolicy(error))) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.error' }, 'envelope');
+    throw new BankingAgentError(typeof payload.code === 'string' ? payload.code : 'BANKING_AGENT_ERROR', typeof payload.message === 'string' ? payload.message : 'Banking Agent 请求失败', undefined, payload.requestId ?? '', agentErrorPolicy(payload.code, { uncertain: error?.uncertain === true }));
+  }
   if (!payload.data || !['OK', 'NEEDS_CLARIFICATION', 'UNSUPPORTED'].includes(payload.code || '')) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data' }, 'envelope');
   const reply = payload.reply;
   if (!validReply(reply)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'reply' }, 'envelope');
