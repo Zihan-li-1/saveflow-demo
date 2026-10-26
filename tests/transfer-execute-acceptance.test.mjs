@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import seed from '../src/data/saveflow_mock_data.json' with { type: 'json' };
 import { createBankingCore } from '../src/banking-core/core.mjs';
+import { createLowBalanceCore } from './fixtures/low-balance-core.mjs';
 import { createPostgresBankingCore } from '../src/banking-core/postgres-store.mjs';
 import { VERIFICATION_TTL_MS, VERIFICATION_ISSUE_COOLDOWN_MS } from '../src/banking-core/verification.mjs';
 import { executeTrialTransfer, startTrialVerification, verifyTrialVerification } from '../server/transfer-execute-bridge.mjs';
@@ -38,7 +39,7 @@ test('[验收 1/12] 500 元普通转账：明确确认后成功，只扣款一�
   assert.equal(first.status, 'succeeded');
   // 重复执行返回同一回执，资金只扣一次、只记一笔账。
   assert.deepEqual(unwrap(await core.execute(p.operationId, p.preview.previewHash)), first);
-  assert.equal(balance(core), 450000);
+  assert.equal(balance(core), 2950000);
   assert.equal(await booked(core, p.operationId), 1);
 });
 
@@ -50,7 +51,7 @@ test('[验收 2/12] 2000 元未验证：直接调用执行接口应被拒绝', a
   const result = await core.execute(p.operationId, p.preview.previewHash);
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'VERIFICATION_REQUIRED');
-  assert.equal(balance(core), 500000); // 未扣款
+  assert.equal(balance(core), 3000000); // 未扣款
 });
 
 test('[验收 3/12] 2000 元验证成功：得到正确回执，余额减 2000 元', async () => {
@@ -62,7 +63,7 @@ test('[验收 3/12] 2000 元验证成功：得到正确回执，余额减 2000 �
   const receipt = unwrap(await core.execute(p.operationId, p.preview.previewHash));
   assert.equal(receipt.status, 'succeeded');
   assert.equal(receipt.effects[0].amountFen, 200000);
-  assert.equal(balance(core), 300000);
+  assert.equal(balance(core), 2800000);
 });
 
 test('[验收 4/12] 连续三次输错验证码：挑战锁定，余额不变', async () => {
@@ -78,7 +79,7 @@ test('[验收 4/12] 连续三次输错验证码：挑战锁定，余额不变', 
   // 锁定后即便给出正确码也拒绝，且无法执行。
   assert.equal((await core.verifyVerification(p.operationId, p.preview.previewHash, { challengeId: started.challengeId, code: codes[0] })).error.code, 'VERIFICATION_LOCKED');
   assert.equal((await core.execute(p.operationId, p.preview.previewHash)).error.code, 'VERIFICATION_REQUIRED');
-  assert.equal(balance(core), 500000);
+  assert.equal(balance(core), 3000000);
 });
 
 test('[验收 5/12] 修改金额或收款人：旧授权失效，需新预览、新验证', async () => {
@@ -93,13 +94,13 @@ test('[验收 5/12] 修改金额或收款人：旧授权失效，需新预览、
   assert.notEqual(a.preview.previewHash, b.preview.previewHash);
   await confirm(core, b);
   assert.equal((await core.execute(b.operationId, b.preview.previewHash)).error.code, 'VERIFICATION_REQUIRED');
-  assert.equal(balance(core), 500000);
+  assert.equal(balance(core), 3000000);
   // 新操作走自己的验证后才可执行。
   const started = unwrap(await core.startVerification(b.operationId, b.preview.previewHash));
   assert.equal((await core.verifyVerification(b.operationId, b.preview.previewHash, { challengeId: started.challengeId, code: codes[codes.length - 1] })).ok, true);
   const receipt = unwrap(await core.execute(b.operationId, b.preview.previewHash));
   assert.equal(receipt.effects[0].amountFen, 250000);
-  assert.equal(balance(core), 250000);
+  assert.equal(balance(core), 2750000);
 });
 
 test('[验收 6/12] 旧验证码或过期验证码：拒绝，不允许重放', async () => {
@@ -120,11 +121,12 @@ test('[验收 6/12] 旧验证码或过期验证码：拒绝，不允许重放', 
   const s2 = unwrap(await core2.startVerification(p2.operationId, p2.preview.previewHash));
   time += VERIFICATION_TTL_MS + 1000;
   assert.equal((await core2.verifyVerification(p2.operationId, p2.preview.previewHash, { challengeId: s2.challengeId, code: codes2[0] })).error.code, 'VERIFICATION_EXPIRED');
-  assert.equal(balance(core2), 500000);
+  assert.equal(balance(core2), 3000000);
 });
 
 test('[验收 7/12] 余额不足，即使验证正确：仍拒绝交易', async () => {
-  const { core, codes } = coreWithCodes();
+  const codes = [];
+  const core = createLowBalanceCore({ deliverVerificationCode: ({ code }) => codes.push(code) });
   const p1 = await prepare(core, 300000); // 两笔 ¥3000，可用余额只有 ¥5000
   const p2 = await prepare(core, 300000);
   await confirm(core, p1); await confirm(core, p2);
@@ -146,14 +148,14 @@ test('[验收 8/12] 通过 TrueForge 执行桥直接提交：不能绕过验证�
   const direct = await executeTrialTransfer(core, { trialOperationId: trialId, previewHash: hash });
   assert.equal(direct.ok, false);
   assert.equal(direct.error.code, 'VERIFICATION_REQUIRED');
-  assert.equal(balance(core), 500000);
+  assert.equal(balance(core), 3000000);
   assert.equal(unwrap(await core.getOperation(p.operationId)).state, 'awaiting_confirmation');
   // 正常流程：发起 → 校验 → 执行。
   const started = unwrap(await startTrialVerification(core, { trialOperationId: trialId, previewHash: hash }));
   assert.equal((unwrap(await verifyTrialVerification(core, { trialOperationId: trialId, previewHash: hash, challengeId: started.challengeId, code: '123456' }))).verified, true);
   const receipt = unwrap(await executeTrialTransfer(core, { trialOperationId: trialId, previewHash: hash }));
   assert.equal(receipt.status, 'succeeded');
-  assert.equal(balance(core), 300000);
+  assert.equal(balance(core), 2800000);
 });
 
 test('[验收 9/12] 同一交易重复执行：最多一次资金效果，返回可信回执', async () => {
@@ -166,7 +168,7 @@ test('[验收 9/12] 同一交易重复执行：最多一次资金效果，返回
   assert.equal(first.status, 'succeeded');
   assert.deepEqual(second, first); // 同一可信回执
   assert.equal(first.receiptId, second.receiptId);
-  assert.equal(balance(core), 300000); // 只扣一次
+  assert.equal(balance(core), 2800000); // 只扣一次
   assert.equal(await booked(core, p.operationId), 1); // 只记一笔账
 });
 
@@ -192,7 +194,7 @@ test('[验收 10/12] PostgreSQL 跨实例/服务重启：挑战状态不丢失�
     const receipt = unwrap(await restarted.execute(p.operationId, p.preview.previewHash));
     assert.equal(receipt.status, 'succeeded');
     assert.deepEqual(unwrap(await restarted.execute(p.operationId, p.preview.previewHash)), receipt);
-    assert.equal((await restarted.repository.getAccount('ACC-CHECKING')).availableBalanceFen, 300000);
+    assert.equal((await restarted.repository.getAccount('ACC-CHECKING')).availableBalanceFen, 2800000);
   } finally {
     for (const core of [first, second, restarted]) if (core) await core.close();
     const { default: postgres } = await import('postgres');
@@ -232,7 +234,7 @@ test('[验收 12/12] 网络中断导致结果不明确：按原操作编号查�
   assert.equal(lookedUp.state, 'succeeded');
   assert.deepEqual(lookedUp.receipt, receipt);
   assert.deepEqual(unwrap(await core.execute(p.operationId, p.preview.previewHash)), receipt);
-  assert.equal(balance(core), 300000);
+  assert.equal(balance(core), 2800000);
   assert.equal(await booked(core, p.operationId), 1);
 });
 
@@ -245,7 +247,7 @@ test('[P1 步骤6] 重复确认：同一预览重复确认幂等，执行仍只�
   assert.equal(first.state, 'confirmed');
   assert.equal(second.state, 'confirmed');
   unwrap(await core.execute(p.operationId, p.preview.previewHash));
-  assert.equal(balance(core), 450000);
+  assert.equal(balance(core), 2950000);
   assert.equal(await booked(core, p.operationId), 1);
 });
 
@@ -258,7 +260,7 @@ test('[P1 步骤6] 并发确认：两个并发确认不产生双重效果，最�
   assert.ok(results.some(r => r.ok), JSON.stringify(results));
   assert.equal(unwrap(await core.getOperation(p.operationId)).state, 'confirmed');
   unwrap(await core.execute(p.operationId, p.preview.previewHash));
-  assert.equal(balance(core), 450000);
+  assert.equal(balance(core), 2950000);
   assert.equal(await booked(core, p.operationId), 1);
 });
 
