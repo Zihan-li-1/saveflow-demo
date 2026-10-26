@@ -43,7 +43,7 @@ export function BankingTransferPreview({ data, active, busy, onEdit, onConfirm, 
     {Array.isArray(data?.preview?.warnings) && (data.preview.warnings as unknown[]).map((warning, index) => <small key={index}>{String(warning)}</small>)}
     <small>预览有效期 {String(data?.preview?.expiresAt || "未知")} · 风险等级 {String(data?.risk?.riskLevel || effect.riskLevel || "未知")} · 操作编号 {data?.operationId}</small>
     {executed ? null : showOtp ? <div className="transfer-preview-otp">
-      <p>这是一笔高风险转账，需输入一次性验证码才能执行。验证码已通过受控测试渠道发出，不显示在聊天记录中。</p>
+      <p>这是一笔高风险转账，需输入一次性验证码才能执行。</p>
       <form className="transfer-preview-edit" onSubmit={event => {
         event.preventDefault();
         if (disabled || !data || !/^\d{6}$/.test(code)) return;
