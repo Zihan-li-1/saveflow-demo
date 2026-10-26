@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import seed from '../src/data/saveflow_mock_data.json' with { type: 'json' };
 import { createBankingCore } from '../src/banking-core/core.mjs';
 import { createPostgresBankingCore } from '../src/banking-core/postgres-store.mjs';
-import { VERIFICATION_TTL_MS } from '../src/banking-core/verification.mjs';
+import { VERIFICATION_TTL_MS, VERIFICATION_ISSUE_COOLDOWN_MS } from '../src/banking-core/verification.mjs';
 import { executeTrialTransfer, startTrialVerification, verifyTrialVerification } from '../server/transfer-execute-bridge.mjs';
 
 // 高风险转账验收清单（队长《高风险操作》12 项）——逐条对照、逐条可执行。
@@ -234,4 +234,49 @@ test('[验收 12/12] 网络中断导致结果不明确：按原操作编号查�
   assert.deepEqual(unwrap(await core.execute(p.operationId, p.preview.previewHash)), receipt);
   assert.equal(balance(core), 300000);
   assert.equal(await booked(core, p.operationId), 1);
+});
+
+test('[P1 步骤6] 重复确认：同一预览重复确认幂等，执行仍只扣一次', async () => {
+  const { core } = coreWithCodes();
+  const p = await prepare(core, 50000);
+  const first = await confirm(core, p);
+  // 对同一预览再次确认：幂等返回同一 confirmed 状态，不报错、不重复计账。
+  const second = unwrap(await core.decide(p.operationId, { previewHash: p.preview.previewHash, decision: 'confirm', confirmedStepIds: p.preview.stepIds }));
+  assert.equal(first.state, 'confirmed');
+  assert.equal(second.state, 'confirmed');
+  unwrap(await core.execute(p.operationId, p.preview.previewHash));
+  assert.equal(balance(core), 450000);
+  assert.equal(await booked(core, p.operationId), 1);
+});
+
+test('[P1 步骤6] 并发确认：两个并发确认不产生双重效果，最终只扣一次', async () => {
+  const { core } = coreWithCodes();
+  const p = await prepare(core, 50000);
+  const decision = { previewHash: p.preview.previewHash, decision: 'confirm', confirmedStepIds: p.preview.stepIds };
+  const results = await Promise.all([core.decide(p.operationId, decision), core.decide(p.operationId, decision)]);
+  // 至少一次确认成功；即便并发下另一路被安全拒绝，最终状态与资金也必须唯一。
+  assert.ok(results.some(r => r.ok), JSON.stringify(results));
+  assert.equal(unwrap(await core.getOperation(p.operationId)).state, 'confirmed');
+  unwrap(await core.execute(p.operationId, p.preview.previewHash));
+  assert.equal(balance(core), 450000);
+  assert.equal(await booked(core, p.operationId), 1);
+});
+
+test('[P1 步骤5] 速率限制：同一操作短时间重复发码被拒，冷却后重发成功', async () => {
+  let time = Date.parse('2026-09-22T00:00:00Z');
+  const codes = [];
+  const core = createBankingCore({ now: () => time, deliverVerificationCode: ({ code }) => codes.push(code) });
+  const p = await prepare(core, 200000);
+  await confirm(core, p);
+  unwrap(await core.startVerification(p.operationId, p.preview.previewHash));
+  // 冷却期内重发 → 被拒（防止暴力枚举）。
+  time += VERIFICATION_ISSUE_COOLDOWN_MS - 1000;
+  const tooSoon = await core.startVerification(p.operationId, p.preview.previewHash);
+  assert.equal(tooSoon.ok, false, JSON.stringify(tooSoon));
+  assert.equal(tooSoon.error.code, 'VERIFICATION_RATE_LIMITED');
+  // 超过冷却期后重发 → 成功，新码有效。
+  time += 2000;
+  const second = unwrap(await core.startVerification(p.operationId, p.preview.previewHash));
+  assert.match(second.challengeId, /^otp_/);
+  assert.equal((await core.verifyVerification(p.operationId, p.preview.previewHash, { challengeId: second.challengeId, code: codes[codes.length - 1] })).ok, true);
 });

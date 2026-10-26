@@ -8,6 +8,8 @@ import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 export const VERIFICATION_TTL_MS = 2 * 60 * 1000;
 /** 每笔挑战最多尝试次数，超过即锁定。 */
 export const VERIFICATION_MAX_ATTEMPTS = 3;
+/** 同一操作相邻两次发码的最小间隔（速率限制），防止「重发→试 3 次→重发」暴力枚举。 */
+export const VERIFICATION_ISSUE_COOLDOWN_MS = 30 * 1000;
 
 /** 6 位数字验证码，使用密码学安全的均匀随机数（拒绝采样避免偏置）。 @returns {string} */
 export function generateCode() {
@@ -26,7 +28,7 @@ export function hashCode(challengeId, code) {
 export function createChallenge({ challengeId, code, nowMs, maxAttempts = VERIFICATION_MAX_ATTEMPTS, ttlMs = VERIFICATION_TTL_MS }) {
   const expiresAt = new Date(nowMs + ttlMs).toISOString();
   return {
-    state: { challengeId, codeHash: hashCode(challengeId, code), expiresAt, attempts: 0, maxAttempts, status: /** @type {const} */ ('pending') },
+    state: { challengeId, codeHash: hashCode(challengeId, code), issuedAt: new Date(nowMs).toISOString(), expiresAt, attempts: 0, maxAttempts, status: /** @type {const} */ ('pending') },
     code,
     expiresAt,
   };

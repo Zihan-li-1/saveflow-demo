@@ -4,7 +4,7 @@ import { BankingError, assertFen, assertId, canonical } from './errors.mjs';
 import { OperationStore } from './operation-store.mjs';
 import { canTransitionAction, transitionAction } from './action-machine.mjs';
 import { createWealthMockPorts } from '../skills/wealth/mock-ports.mjs';
-import { generateCode, createChallenge, verifyChallenge, VERIFICATION_TTL_MS, VERIFICATION_MAX_ATTEMPTS } from './verification.mjs';
+import { generateCode, createChallenge, verifyChallenge, VERIFICATION_TTL_MS, VERIFICATION_MAX_ATTEMPTS, VERIFICATION_ISSUE_COOLDOWN_MS } from './verification.mjs';
 
 /** @param {unknown} input @returns {import('./contracts').TransferInput} */
 function validateTransfer(input) {
@@ -435,6 +435,10 @@ export function createBankingCore(options = {}) {
         verifyHash(record, previewHash);
         if (record.state !== 'confirmed' || record.decision?.decision !== 'confirm') throw new BankingError('CONFIRMATION_REQUIRED', '需要先确认当前精确预览');
         if (record.risk?.requiredVerification !== 'otp') throw new BankingError('VERIFICATION_REQUIRED', '本笔操作无需额外验证');
+        // 速率限制：同一操作相邻两次发码需间隔冷却期，避免「重发→试 3 次→重发」暴力枚举。
+        if (record.verification?.issuedAt && now() - Date.parse(record.verification.issuedAt) < VERIFICATION_ISSUE_COOLDOWN_MS) {
+          throw new BankingError('VERIFICATION_RATE_LIMITED', '验证码发送过于频繁，请稍后再试');
+        }
         const challengeId = `otp_${crypto.randomUUID()}`;
         const code = options.demoOtpCode ?? generateCode(); // 演示视频可用 demoOtpCode 固定验证码，默认仍是密码学随机 6 位
         const ttlMs = Math.max(1, Math.min(VERIFICATION_TTL_MS, Date.parse(record.preview.expiresAt) - now()));
