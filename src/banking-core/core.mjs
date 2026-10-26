@@ -5,7 +5,7 @@ import { BankingError, assertFen, assertId, canonical } from './errors.mjs';
 import { OperationStore } from './operation-store.mjs';
 import { canTransitionAction, transitionAction } from './action-machine.mjs';
 import { createWealthMockPorts } from '../skills/wealth/mock-ports.mjs';
-import { generateCode, createChallenge, verifyChallenge, VERIFICATION_TTL_MS, VERIFICATION_MAX_ATTEMPTS, VERIFICATION_ISSUE_COOLDOWN_MS } from './verification.mjs';
+import { generateCode, createChallenge, verifyChallenge, VERIFICATION_TTL_MS, VERIFICATION_MAX_ATTEMPTS, VERIFICATION_ISSUE_COOLDOWN_MS, VERIFICATION_ISSUE_WINDOW_MS, VERIFICATION_ISSUE_MAX_PER_WINDOW } from './verification.mjs';
 
 /** @param {unknown} input @returns {import('./contracts').TransferInput} */
 function validateTransfer(input) {
@@ -104,6 +104,8 @@ export function createBankingCore(options = {}) {
   const executions = new Map();
   /** 执行桥授权窗口内的试点操作编号；普通 decide/execute 仅在这些编号上放行一次。 */
   const trialAuthorized = new Set();
+  /** 按演示用户（每个 Core 实例即一个 owner）记录的发码时间戳，用于窗口速率限制。 @type {number[]} */
+  const otpIssueLog = [];
   /** @param {import('./contracts').OperationRecord} record */
   async function save(record) {
     await store.put(ownerId, record);
@@ -452,17 +454,26 @@ export function createBankingCore(options = {}) {
         verifyHash(record, previewHash);
         if (record.state !== 'confirmed' || record.decision?.decision !== 'confirm') throw new BankingError('CONFIRMATION_REQUIRED', '需要先确认当前精确预览');
         if (record.risk?.requiredVerification !== 'otp') throw new BankingError('VERIFICATION_REQUIRED', '本笔操作无需额外验证');
+        const issuedAtMs = now();
         // 速率限制：同一操作相邻两次发码需间隔冷却期，避免「重发→试 3 次→重发」暴力枚举。
-        if (record.verification?.issuedAt && now() - Date.parse(record.verification.issuedAt) < VERIFICATION_ISSUE_COOLDOWN_MS) {
+        if (record.verification?.issuedAt && issuedAtMs - Date.parse(record.verification.issuedAt) < VERIFICATION_ISSUE_COOLDOWN_MS) {
           throw new BankingError('VERIFICATION_RATE_LIMITED', '验证码发送过于频繁，请稍后再试');
         }
+        // 速率限制（按演示用户窗口）：新建操作也无法无限重置发码额度。
+        const recentIssues = otpIssueLog.filter(ts => issuedAtMs - ts < VERIFICATION_ISSUE_WINDOW_MS);
+        if (recentIssues.length >= VERIFICATION_ISSUE_MAX_PER_WINDOW) {
+          throw new BankingError('VERIFICATION_RATE_LIMITED', '验证码发送过于频繁，请稍后再试');
+        }
+        otpIssueLog.length = 0;
+        otpIssueLog.push(...recentIssues);
         const challengeId = `otp_${crypto.randomUUID()}`;
         const code = options.demoOtpCode ?? generateCode(); // 演示视频可用 demoOtpCode 固定验证码，默认仍是密码学随机 6 位
-        const ttlMs = Math.max(1, Math.min(VERIFICATION_TTL_MS, Date.parse(record.preview.expiresAt) - now()));
-        const challenge = createChallenge({ challengeId, code, nowMs: now(), ttlMs, maxAttempts: VERIFICATION_MAX_ATTEMPTS });
+        const ttlMs = Math.max(1, Math.min(VERIFICATION_TTL_MS, Date.parse(record.preview.expiresAt) - issuedAtMs));
+        const challenge = createChallenge({ challengeId, code, nowMs: issuedAtMs, ttlMs, maxAttempts: VERIFICATION_MAX_ATTEMPTS });
         record.verification = challenge.state;
         await save(record);
         deliverVerificationCode({ operationId, challengeId, code, expiresAt: challenge.state.expiresAt });
+        otpIssueLog.push(issuedAtMs);
         return { challengeId: challenge.state.challengeId, expiresAt: challenge.state.expiresAt, remainingAttempts: VERIFICATION_MAX_ATTEMPTS - challenge.state.attempts, deliveryHint: '验证码已通过受控测试渠道发送，本响应不返回验证码。' };
       }, operationId);
     },
@@ -471,21 +482,34 @@ export function createBankingCore(options = {}) {
     async verifyVerification(operationId, previewHash, input) {
       return guard(async () => {
         assertId(operationId);
-        const record = await lookup(operationId);
-        if (!record.preview) throw new BankingError('INVALID_STATE', '缺少预览');
-        verifyHash(record, previewHash);
-        if (record.state !== 'confirmed' || record.decision?.decision !== 'confirm') throw new BankingError('CONFIRMATION_REQUIRED', '需要先确认当前精确预览');
-        const challenge = record.verification;
-        if (!challenge) throw new BankingError('VERIFICATION_REQUIRED', '尚未发起验证，请先获取验证码');
         if (!input || typeof input !== 'object' || Array.isArray(input)) throw new BankingError('VALIDATION_ERROR', '验证参数无效');
         const body = /** @type {Record<string, unknown>} */ (input);
         if (Object.keys(body).some(k => !['challengeId', 'code'].includes(k))) throw new BankingError('VALIDATION_ERROR', '验证请求包含未注册字段');
-        if (typeof body.challengeId !== 'string' || body.challengeId !== challenge.challengeId) throw new BankingError('VERIFICATION_REQUIRED', '验证码挑战编号不匹配，请重新发起验证');
         if (typeof body.code !== 'string' || !/^\d{6}$/.test(body.code)) throw new BankingError('VALIDATION_ERROR', '验证码必须是 6 位数字');
-        const result = verifyChallenge(challenge, body.code, now());
-        record.verification = result.state;
+        const code = /** @type {string} */ (body.code);
+        // 对「新鲜」记录做全部校验并原子地消费一次尝试。返回 error 时由调用方在持久化后抛出，
+        // 保证错误码也会把 attempts 计数写回（锁定/重放不会被并发丢失）。
+        const verifyAgainstFresh = (/** @type {import('./contracts').OperationRecord} */ record) => {
+          if (!record.preview) throw new BankingError('INVALID_STATE', '缺少预览');
+          verifyHash(record, previewHash);
+          if (record.state !== 'confirmed' || record.decision?.decision !== 'confirm') throw new BankingError('CONFIRMATION_REQUIRED', '需要先确认当前精确预览');
+          const challenge = record.verification;
+          if (!challenge) throw new BankingError('VERIFICATION_REQUIRED', '尚未发起验证，请先获取验证码');
+          if (typeof body.challengeId !== 'string' || body.challengeId !== challenge.challengeId) throw new BankingError('VERIFICATION_REQUIRED', '验证码挑战编号不匹配，请重新发起验证');
+          const result = verifyChallenge(challenge, code, now());
+          record.verification = result.state;
+          return { error: result.ok ? undefined : result.error };
+        };
+        if (typeof store.mutateVerification === 'function') {
+          const { error } = await store.mutateVerification(ownerId, operationId, verifyAgainstFresh);
+          if (error) throw new BankingError(error.code, error.message);
+          return { verified: true, operationId };
+        }
+        // 回退：无原子能力的简单存储，单进程内读改写（无真实并发竞争）。
+        const record = await lookup(operationId);
+        const { error } = verifyAgainstFresh(record);
         await save(record);
-        if (!result.ok) throw new BankingError(result.error.code, result.error.message);
+        if (error) throw new BankingError(error.code, error.message);
         return { verified: true, operationId };
       }, operationId);
     },
