@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBankingCore } from '../src/banking-core/core.mjs';
+import { createLowBalanceCore } from './fixtures/low-balance-core.mjs';
 import { generateCode, hashCode, createChallenge, verifyChallenge, VERIFICATION_MAX_ATTEMPTS, VERIFICATION_TTL_MS, VERIFICATION_ISSUE_COOLDOWN_MS } from '../src/banking-core/verification.mjs';
 
 const unwrap = result => { assert.equal(result.ok, true, JSON.stringify(result)); return result.data; };
@@ -28,7 +29,7 @@ test('普通转账（≤1000元）无需验证：确认后直接执行', async (
   await confirm(core, p);
   const receipt = unwrap(await core.execute(p.operationId, p.preview.previewHash));
   assert.equal(receipt.status, 'succeeded');
-  assert.equal(balance(core), 450000);
+  assert.equal(balance(core), 2950000);
 });
 
 test('高风险转账未验证时，执行被拒绝且不扣款', async () => {
@@ -39,7 +40,7 @@ test('高风险转账未验证时，执行被拒绝且不扣款', async () => {
   const result = await core.execute(p.operationId, p.preview.previewHash);
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'VERIFICATION_REQUIRED');
-  assert.equal(balance(core), 500000); // 未扣款
+  assert.equal(balance(core), 3000000); // 未扣款
 });
 
 test('高风险转账验证成功后执行：得到回执并扣款一次', async () => {
@@ -51,7 +52,7 @@ test('高风险转账验证成功后执行：得到回执并扣款一次', async
   const receipt = unwrap(await core.execute(p.operationId, p.preview.previewHash));
   assert.equal(receipt.status, 'succeeded');
   assert.equal(receipt.effects[0].amountFen, 200000);
-  assert.equal(balance(core), 300000);
+  assert.equal(balance(core), 2800000);
 });
 
 test('连续输错 3 次锁定，余额不变，正确码也无法再授权', async () => {
@@ -69,7 +70,7 @@ test('连续输错 3 次锁定，余额不变，正确码也无法再授权', as
   assert.equal(correct.error.code, 'VERIFICATION_LOCKED');
   const exec = await core.execute(p.operationId, p.preview.previewHash);
   assert.equal(exec.error.code, 'VERIFICATION_REQUIRED');
-  assert.equal(balance(core), 500000);
+  assert.equal(balance(core), 3000000);
 });
 
 test('验证码过期：超过 2 分钟或预览有效期后拒绝', async () => {
@@ -83,7 +84,7 @@ test('验证码过期：超过 2 分钟或预览有效期后拒绝', async () =>
   const r = await core.verifyVerification(p.operationId, p.preview.previewHash, { challengeId: started.challengeId, code: codes[0] });
   assert.equal(r.ok, false);
   assert.equal(r.error.code, 'VERIFICATION_EXPIRED');
-  assert.equal(balance(core), 500000);
+  assert.equal(balance(core), 3000000);
 });
 
 test('已消费的验证码不得重放（单次有效）', async () => {
@@ -138,11 +139,12 @@ test('demoOtpCode 固定验证码：仍走 hash/TTL/单次校验，投递的就�
   assert.equal(ok.ok, true);
   const receipt = unwrap(await core.execute(p.operationId, p.preview.previewHash));
   assert.equal(receipt.status, 'succeeded');
-  assert.equal(balance(core), 300000);
+  assert.equal(balance(core), 2800000);
 });
 
 test('余额不足时，即使验证正确也拒绝执行', async () => {
-  const { core, codes } = coreWithCapturedCodes();
+  const codes = [];
+  const core = createLowBalanceCore({ deliverVerificationCode: ({ code }) => codes.push(code) });
   // 两笔 ¥3000 都通过 prepare/confirm/verify，但可用余额只有 ¥5000，后执行的那笔被最终余额重查拦下。
   const p1 = await prepare(core, 300000);
   const p2 = await prepare(core, 300000);

@@ -1,7 +1,7 @@
 // @ts-check
 // 逐笔 OTP（One-Time Password）验证码：纯函数 + 参数化时钟，便于单元测试。
 // 只做「生成 / 校验 / 过期 / 限次」，不做持久化、不做渠道投递、不参与账务。
-// 明文验证码只通过受控测试渠道交付（默认打印到服务端控制台），绝不写入风险响应或操作记录。
+// 明文验证码只通过受控测试渠道交付（默认不投递——演示验证码固定 DEMO_OTP_CODE，演示时口头告知），绝不写入风险响应或操作记录。
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 
 /** 验证码有效期：2 分钟，且不能超过原预览有效期（由调用方在 start 时取较小值）。 */
@@ -10,6 +10,9 @@ export const VERIFICATION_TTL_MS = 2 * 60 * 1000;
 export const VERIFICATION_MAX_ATTEMPTS = 3;
 /** 同一操作相邻两次发码的最小间隔（速率限制），防止「重发→试 3 次→重发」暴力枚举。 */
 export const VERIFICATION_ISSUE_COOLDOWN_MS = 30 * 1000;
+/** 同一演示用户（每个 Core 实例）在时间窗口内的最大发码次数，防止「新建操作→无限重置发码额度」。 */
+export const VERIFICATION_ISSUE_WINDOW_MS = 60 * 1000;
+export const VERIFICATION_ISSUE_MAX_PER_WINDOW = 5;
 
 /** 6 位数字验证码，使用密码学安全的均匀随机数（拒绝采样避免偏置）。 @returns {string} */
 export function generateCode() {

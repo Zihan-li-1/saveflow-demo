@@ -62,9 +62,9 @@ test('orchestrator wires bill analysis into wealth.recommend end-to-end without 
   assert.equal(body.data.operationId, undefined);
 });
 
-test('阶段3验收句：真实 TrueForge 运行时把「根据我的账单流水推荐一些理财产品」识别为 wealth.recommend 并追问，而不是 bill.summary 或 TRUEFORGE_FORMAT_ERROR', async () => {
+test('阶段3（mock 传输层）：理解服务把「根据我的账单流水推荐一些理财产品」识别为 wealth.recommend 并追问，而不是 bill.summary 或 TRUEFORGE_FORMAT_ERROR', async () => {
   const core = createBankingCore();
-  // 只 mock TrueForge 理解服务的传输层；返回的是提示词要求的「账单驱动推荐 → wealth.recommend，缺风险/期限/流动性 → 逐项追问」。
+  // 只 mock TrueForge 理解服务的传输层（未跑真实模型）；返回的是提示词要求的「账单驱动推荐 → wealth.recommend，缺风险/期限/流动性 → 逐项追问」。
   const trueforgeRuntimeClient = {
     createSession: async () => 'session-1',
     cancel: async () => {},
@@ -98,4 +98,42 @@ test('账单数据不可用时如实说明，而不是静默省略', async () =>
   assert.match(result.data.bill_basis.note, /没有可用的账单流水/);
   assert.equal(result.data.methodology.financial_analysis_used, false);
   assert.equal(result.data.methodology.net_cash_flow_is_investable, false);
+});
+
+test('账单覆盖状态会改变推荐解释与下一步（available vs partial），但产品筛选不变', async () => {
+  const skill = createWealthSkill(createBankingCore().repository);
+  const input = { action: 'wealth.recommend', goal: '根据账单流水推荐', max_risk_level: 'R2', horizon_days: 180, liquidity_requirement: 'T+1' };
+  const availableCtx = { status: 'available', range: { months: ['2026-07', '2026-08', '2026-09'] }, summary: { totalIncomeFen: 1500000, totalExpenseFen: 900000, netCashFlowFen: 600000 }, coverage: { completeness: 'unverified', missingMonths: [], insufficientMonths: false }, source: {} };
+  const partialCtx = { status: 'partial', range: { months: ['2026-07', '2026-09'] }, summary: { totalIncomeFen: 1000000, totalExpenseFen: 800000, netCashFlowFen: 200000 }, coverage: { completeness: 'unverified', missingMonths: ['2026-08'], insufficientMonths: true }, source: {} };
+  const available = await skill(input, { financialContext: availableCtx });
+  const partial = await skill(input, { financialContext: partialCtx });
+  // 解释与下一步随可信账单证据发生变化。
+  assert.ok(available.ok && partial.ok);
+  assert.notEqual(available.data.next_step, partial.data.next_step);
+  assert.notEqual(available.data.bill_basis.note, partial.data.bill_basis.note);
+  assert.match(available.data.bill_basis.note, /不是可投资金额/);
+  assert.match(available.data.bill_basis.note, /净流入为正/);
+  assert.match(partial.data.bill_basis.note, /覆盖不完整/);
+  assert.match(partial.data.bill_basis.note, /不代表零支出/);
+  // 账单数据只改变解释，不改写产品筛选（同一用户声明约束 → 同一候选集合）。
+  assert.deepEqual(available.data.products, partial.data.products);
+  assert.deepEqual(available.data.constraints, partial.data.constraints);
+});
+
+test('账单净现金流不会改写风险等级与投资金额', async () => {
+  const skill = createWealthSkill(createBankingCore().repository);
+  const richCtx = { status: 'available', range: { months: ['2026-07', '2026-08', '2026-09'] }, summary: { totalIncomeFen: 5000000, totalExpenseFen: 1000000, netCashFlowFen: 4000000 }, coverage: { completeness: 'unverified', missingMonths: [], insufficientMonths: false }, source: {} };
+  const result = await skill(
+    { action: 'wealth.recommend', goal: '根据账单流水推荐', max_risk_level: 'R1', horizon_days: 365, liquidity_requirement: 'T+1', amount: { amount_minor: 100000, currency: 'CNY' } },
+    { financialContext: richCtx },
+  );
+  assert.equal(result.ok, true);
+  // 用户声明的约束原样保留，净现金流没有被注入为投资金额，也没有抬高风险档位。
+  assert.equal(result.data.constraints.max_risk_level, 'R1');
+  assert.equal(result.data.constraints.amount.amount_minor, 100000);
+  assert.equal(result.data.methodology.net_cash_flow_is_investable, false);
+  assert.equal(result.data.methodology.risk_level_source, 'user_declared_constraint');
+  // 仅 R1 产品入选：净现金流再多也不把风险从 R1 抬到 R2/R3。
+  assert.deepEqual(result.data.products.map(p => p.product_ref), ['product_001']);
+  assert.ok(result.data.products.every(p => p.risk_level === 'R1'));
 });

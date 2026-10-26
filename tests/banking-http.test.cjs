@@ -153,7 +153,7 @@ test('B HTTP: 高风险转账经 verification.start/verify 验证后执行，验
   assert.equal(e.code, 'OK');
   assert.equal(e.data.status, 'succeeded');
   assert.equal(e.data.effects[0].amount_minor, 200000);
-  assert.equal(balance(), 300000);
+  assert.equal(balance(), 2800000);
 });
 
 test('B HTTP: 类型化客户端走正常路径 verification.start/verify（回归：valid() 不再静默放行）', async () => {
@@ -177,5 +177,5 @@ test('B HTTP: 类型化客户端走正常路径 verification.start/verify（回�
 
   const receipt = await client.request('action.execute', { operationId: p.operationId, previewHash: p.preview.previewHash });
   assert.equal(receipt.status, 'succeeded');
-  assert.equal(core.repository.getAccount('ACC-CHECKING').availableBalanceFen, 300000);
+  assert.equal(core.repository.getAccount('ACC-CHECKING').availableBalanceFen, 2800000);
 });

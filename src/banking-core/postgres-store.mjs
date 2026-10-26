@@ -164,6 +164,23 @@ export async function createPostgresBankingCore({ connectionString, source = see
       const rule = fromRecord(row?.record);
       return rule ? { ...rule, previewGeneration: Number(row.preview_generation) } : undefined;
     },
+    async mutateVerification(owner, operationId, apply) {
+      assertId(owner); assertId(operationId);
+      return sql.begin(async tx => {
+        const [row] = await tx.unsafe('SELECT record FROM banking_operations WHERE owner_id = $1 AND operation_id = $2 FOR UPDATE', [owner, operationId]);
+        const existing = fromRecord(row?.record);
+        if (!existing) throw new BankingError('OPERATION_NOT_FOUND', '未取得此操作的记录，请保留原编号继续核实', true);
+        // 行锁内基于新鲜记录消费一次尝试，并发校验不会丢失 attempts 计数。
+        const { error } = apply(existing);
+        await tx.unsafe(
+          `INSERT INTO banking_operations (owner_id, operation_id, action, fingerprint, state, record)
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+           ON CONFLICT (owner_id, operation_id) DO UPDATE SET record = EXCLUDED.record, updated_at = now()`,
+          [owner, existing.operationId, existing.action, existing.fingerprint, existing.state, tx.json(existing)],
+        );
+        return { error };
+      });
+    },
     async reserveScenarioPreview(owner, ruleId) {
       assertId(owner); assertId(ruleId);
       const [row] = await sql.unsafe('UPDATE banking_scenario_rules SET preview_generation = preview_generation + 1, updated_at = now() WHERE owner_id = $1 AND rule_id = $2 RETURNING preview_generation', [owner, ruleId]);
@@ -301,8 +318,13 @@ export async function createPostgresBankingCore({ connectionString, source = see
 }
 
 export async function getConfiguredBankingCore(env = process.env) {
-  // 演示默认固定验证码 DEMO_OTP_CODE（不在界面上展示，演示时口头告知）；演示视频可用 SAVEFLOW_DEMO_OTP_CODE 覆盖。
-  const demoOtpCode = env.SAVEFLOW_DEMO_OTP_CODE || DEMO_OTP_CODE;
+  // 演示固定验证码只能明确限制在合成演示环境：
+  //  - 本地临时演示（无 DATABASE_URL 且非 Netlify）默认允许固定码（DEMO_OTP_CODE，口头告知）；
+  //  - 任何持久化 / Netlify / 类生产配置，必须显式 SAVEFLOW_DEMO_OTP_ENABLED=true 才允许固定码；
+  //    否则不注入固定码 → OTP 使用随机码且无投递渠道 → 校验不可能成功 → 执行能力保持关闭（安全失败）。
+  const explicitDemoOtp = env.SAVEFLOW_DEMO_OTP_ENABLED === 'true';
+  const localEphemeralDemo = !env.DATABASE_URL && !env.NETLIFY;
+  const demoOtpCode = (explicitDemoOtp || localEphemeralDemo) ? (env.SAVEFLOW_DEMO_OTP_CODE || DEMO_OTP_CODE) : undefined;
   if (!env.DATABASE_URL) {
     if (env.NETLIFY && env.ALLOW_EPHEMERAL_BANKING !== 'true') throw Object.assign(new Error('DATABASE_URL is required for Netlify banking persistence'), { code: 'DATABASE_NOT_CONFIGURED' });
     if (demoOtpCode) {

@@ -36,6 +36,12 @@ export interface BankingOperationStore {
   put(owner: string, record: OperationRecord): MaybePromise<void>;
   fingerprint(action: string, input: unknown): string;
   close?(): MaybePromise<void>;
+  /** Atomically apply a verification transition against a fresh, row-locked read (Postgres `FOR UPDATE`).
+   *  `apply` receives the current persisted record (never a stale copy), mutates its `verification`
+   *  field in place, and returns an optional error to surface after the store has committed the
+   *  mutation. A throw from `apply` aborts the transaction without persisting. Used so concurrent
+   *  wrong-code attempts cannot lose counts. */
+  mutateVerification?(owner: string, operationId: string, apply: (record: OperationRecord) => { error?: Pick<ActionError, "code" | "message"> }): MaybePromise<{ error?: Pick<ActionError, "code" | "message"> }>;
   commitTransfer?(owner: string, record: OperationRecord, effect: TransferEffect, at: string, makeReceipt: (transaction: Transaction) => ActionReceipt): MaybePromise<ActionReceipt>;
   reserveCardPreview?(owner: string, cardId: string): MaybePromise<number>;
   commitCard?(owner: string, record: OperationRecord, effect: CardEffect, makeReceipt: () => ActionReceipt): MaybePromise<ActionReceipt>;

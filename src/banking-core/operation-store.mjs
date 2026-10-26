@@ -20,6 +20,16 @@ export class OperationStore {
     if (existing && (existing.action !== record.action || existing.fingerprint !== record.fingerprint)) throw new BankingError('IDEMPOTENCY_CONFLICT', '同一操作编号不能更改动作或参数，请先查询原操作', true);
     this.#records.set(`${owner}\0${record.operationId}`, structuredClone(record));
   }
+  /** 原子地消费一次验证码尝试（单进程内无真正并行，`get` 已返回克隆，`put` 后写回）。
+   * @param {string} owner @param {string} operationId @param {(record: import('./contracts').OperationRecord) => { error?: { code: import('./contracts').ErrorCode, message: string } }} apply */
+  mutateVerification(owner, operationId, apply) {
+    assertId(owner); assertId(operationId);
+    const existing = this.get(owner, operationId);
+    if (!existing) throw new BankingError('OPERATION_NOT_FOUND', '未取得此操作的记录，请保留原编号继续核实', true);
+    const { error } = apply(existing);
+    this.put(owner, existing);
+    return { error };
+  }
   /** @param {string} action @param {unknown} input */
   fingerprint(action, input) { return canonical({ action, input }); }
   /** @param {string} owner @param {string} ruleId */
