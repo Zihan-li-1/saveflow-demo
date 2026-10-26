@@ -15,7 +15,7 @@ function req(action, input, extra = {}) {
 }
 async function setup() {
   const { handleBanking } = await import('../server/banking.mjs');
-  const { createBankingCore } = await import('../src/banking-core/core.mjs');
+  const { createLowBalanceCore: createBankingCore } = await import('./fixtures/low-balance-core.mjs');
   const core = createBankingCore();
   const fetchImpl = async (url, init) => handleBanking(new Request(url, init), { core, env });
   const client = createBankingClient({ mode: 'http', baseUrl: 'https://demo.example', accessCode: () => env.SAVEFLOW_ACCESS_CODE, fetchImpl });

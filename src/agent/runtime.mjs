@@ -20,6 +20,7 @@ export async function dispatchParsedIntent(value, dependencies) {
     if (intent.action === 'subscription.list') return dependencies.subscriptionHandler ? await dependencies.subscriptionHandler(intent) : { ok: false, kind: 'unsupported' };
     if (intent.action.startsWith('card.')) return dependencies.cardHandler ? await dependencies.cardHandler(intent) : { ok: false, kind: 'unsupported' };
     if (intent.action.startsWith('wealth.')) return dependencies.wealthHandler ? await dependencies.wealthHandler({ action: intent.action, ...intent.slots }) : { ok: false, kind: 'unsupported' };
+    if (intent.action === 'scenario.plan_purchase') return { ok: true, kind: 'purchase_request', action: intent.action, data: { slots: intent.slots, synthetic_demo_only: true } };
     if (intent.action.startsWith('scenario.')) return dependencies.scenarioHandler ? await dependencies.scenarioHandler({ action: intent.action, ...intent.slots }) : { ok: false, kind: 'unsupported' };
     if (intent.action === 'orchestrator.goal') return dependencies.goalHandler ? await dependencies.goalHandler(intent) : { ok: false, kind: 'unsupported' };
     return { ok: false, kind: 'unsupported' };

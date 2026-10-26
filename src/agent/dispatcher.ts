@@ -49,6 +49,8 @@ export async function dispatchParsedIntent(
 
   try {
     switch (intent.action) {
+      case "scenario.plan_purchase":
+        return { ok: true, kind: "purchase_request", action: intent.action, data: { slots: intent.slots, synthetic_demo_only: true } };
       case "transfer.create":
         return await dependencies.transferHandler(intent);
       case "bill.summary":

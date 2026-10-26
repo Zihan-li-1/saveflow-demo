@@ -21,7 +21,7 @@
       "id": "ACC-CHECKING",
       "name": "模拟活期账户",
       "type": "checking",
-      "availableBalance": 5000,
+      "availableBalance": 30000,
       "currency": "CNY",
       "isRealAccount": false
     },
@@ -29,7 +29,7 @@
       "id": "ACC-SAVINGS",
       "name": "模拟储蓄账户",
       "type": "savings",
-      "availableBalance": 0,
+      "availableBalance": 10000,
       "currency": "CNY",
       "isRealAccount": false
     }
