@@ -8,6 +8,7 @@ import type {
   BillAnalyzeAction,
   SubscriptionListAction,
 } from "../schemas";
+export { summarizeBills } from './bill-summary.mjs';
 
 // 账单汇总结果
 export type BillSummary = {
@@ -213,38 +214,6 @@ function categoryMap(transactions: Transaction[]): Map<string, CategoryAmount> {
     });
   }
   return categories;
-}
-
-// 统计收入、支出和消费类别
-export function summarizeBills(
-  transactions: Transaction[]
-): BillSummary {
-  let totalIncomeFen = 0;
-  let totalExpenseFen = 0;
-
-  const categoryTotals: Record<string, number> = {};
-
-  for (const transaction of transactions) {
-    assertSafeNonNegativeFen(transaction.amountFen, "transaction.amountFen");
-    if (transaction.type === "income") {
-      totalIncomeFen += transaction.amountFen;
-    }
-
-    if (transaction.type === "expense") {
-      totalExpenseFen += transaction.amountFen;
-
-      categoryTotals[transaction.category] =
-        (categoryTotals[transaction.category] ?? 0) +
-        transaction.amountFen;
-    }
-  }
-
-  return {
-    totalIncomeFen,
-    totalExpenseFen,
-    transactionCount: transactions.length,
-    categoryTotals,
-  };
 }
 
 /** Executes the read-only bill.analyze action against Financial Context. */

@@ -123,9 +123,17 @@ test('B expiry: checked at both confirmation and execute; pending state becomes 
 
 test('B concurrent independent transfers recheck balance/version instead of overspending or stale execution', async () => {
   for (const amountFen of [50000, 400000]) {
-    const core = createBankingCore();
+    let deliveredCode;
+    const core = createBankingCore({ deliverVerificationCode: ({ code }) => { deliveredCode = code; } });
     const [a, b] = await Promise.all([prepare(core, { amountFen }), prepare(core, { amountFen })]);
-    await confirm(core, a); await confirm(core, b); unwrap(await execute(core, a));
+    await confirm(core, a); await confirm(core, b);
+    if (amountFen > 100000) {
+      for (const prepared of [a, b]) {
+        const started = unwrap(await core.startVerification(prepared.operationId, prepared.preview.previewHash));
+        unwrap(await core.verifyVerification(prepared.operationId, prepared.preview.previewHash, { challengeId: started.challengeId, code: deliveredCode }));
+      }
+    }
+    unwrap(await execute(core, a));
     assert.equal((await execute(core, b)).error.code, amountFen === 400000 ? 'INSUFFICIENT_BALANCE' : 'PREVIEW_STALE');
     assert.equal(balance(core), 500000 - amountFen);
   }

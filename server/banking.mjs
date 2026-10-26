@@ -69,6 +69,6 @@ function statusCode(code) {
   if (code === 'UNAUTHORIZED') return 401;
   if (code === 'FORBIDDEN') return 403;
   if (code === 'INTERNAL_ERROR') return 500;
-  if (['IDEMPOTENCY_CONFLICT', 'PREVIEW_STALE', 'PREVIEW_EXPIRED', 'INVALID_STATE'].includes(code)) return 409;
+  if (['IDEMPOTENCY_CONFLICT', 'PREVIEW_STALE', 'PREVIEW_EXPIRED', 'INVALID_STATE', 'CONFIRMATION_REQUIRED', 'VERIFICATION_REQUIRED'].includes(code)) return 409;
   return 400;
 }
