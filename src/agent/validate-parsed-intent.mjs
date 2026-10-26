@@ -1,5 +1,6 @@
 import { validCalendarDate, validTimezone } from '../lib/calendar.mjs';
 import { validateWealthIntent } from '../skills/wealth/wealth-action-skill.mjs';
+import { validatePurchaseAction } from '../skills/scenario/purchase-contract.mjs';
 
 export const PARSED_INTENT_SCHEMA_VERSION = '1.0.0';
 export const PARSED_INTENT_ACTIONS = Object.freeze([
@@ -19,6 +20,7 @@ export const PARSED_INTENT_ACTIONS = Object.freeze([
   'wealth.subscribe',
   'wealth.redeem',
   'scenario.create_rule',
+  'scenario.plan_purchase',
   'scenario.update_rule',
   'scenario.disable_rule',
   'scenario.review_event',
@@ -316,6 +318,12 @@ export function validateParsedIntent(value) {
 
   const slots = requireRecord(input.slots, 'slots');
   switch (input.action) {
+    case 'scenario.plan_purchase':
+      try { validatePurchaseAction(input.action, slots); } catch { fail('invalid purchase slots'); }
+      if ('funding_account_ref' in slots && /^(?:acc|account)[_-]/i.test(slots.funding_account_ref)) fail('funding_account_ref must be raw user wording');
+      requireMissingSlots(input.missingSlots, []);
+      requireStatus(input.status, 'ready_for_resolution');
+      break;
     case 'transfer.create':
       validateTransfer(input, slots);
       break;

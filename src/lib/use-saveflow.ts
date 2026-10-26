@@ -16,7 +16,7 @@ import { transferFlow, bankingContinuationToken, updateBankingFlows, type Bankin
 import { agentErrorHint, agentErrorPolicy } from "./agent-error-policy.mjs";
 import type { BankingConversation } from './banking-conversation-contract';
 
-export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_savings_inputs" | "banking_savings_plan"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
+export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "banking_purchase" | "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_savings_inputs" | "banking_savings_plan"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
 const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。可以查询模拟账单，或生成转账正式预览，例如：给张三转 500 元。" }];
 const pendingKey = "saveflow.pending-operation.v1";
 
@@ -233,6 +233,9 @@ export function useSaveflow() {
       } else if (answer.status === "card_result") {
         setBankingContinuation(null);
         addMessage({ role: "agent", kind: "banking_card", text: replyText, banking: answer });
+      } else if (answer.status === "purchase_request") {
+        setBankingContinuation(null);
+        addMessage({ role: "agent", kind: "banking_purchase", text: replyText, banking: answer });
       } else if (answer.status === "wealth_result") {
         setBankingContinuation(null);
         addMessage({ role: "agent", kind: "banking_wealth", text: replyText, banking: answer });
