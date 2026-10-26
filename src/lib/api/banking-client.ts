@@ -34,8 +34,8 @@ function scenarioEffect(v: unknown, action: string): boolean {
     rule.proposed_steps.every(step => object(step) && ['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get'].includes(String(step.action)) && object(step.parameters));
 }
 function wealthEffect(v: unknown, action: string): boolean {
-  if (!object(v) || v.kind !== "wealth_change" || v.action !== action || typeof v.productId !== "string" || typeof v.productName !== "string" || typeof v.holdingId !== "string" || !fen(v.amountFen) || Number(v.amountFen) <= 0 || !fen(v.unitsMilli) || Number(v.unitsMilli) <= 0) return false;
-  return action === "wealth.subscribe" ? typeof v.fundingAccountId === "string" && Number.isSafeInteger(v.accountVersion) && typeof v.disclosureVersion === "string" && typeof v.assessmentId === "string" : Number.isSafeInteger(v.holdingVersion) && typeof v.settlement === "string";
+  if (!object(v) || v.kind !== "wealth_change" || v.action !== action || typeof v.productId !== "string" || typeof v.productName !== "string" || typeof v.holdingId !== "string" || !fen(v.amountFen) || Number(v.amountFen) <= 0 || !fen(v.unitsMilli) || Number(v.unitsMilli) <= 0 || !fen(v.holdingAmountBeforeFen) || !fen(v.holdingAmountAfterFen)) return false;
+  return action === "wealth.subscribe" ? typeof v.fundingAccountId === "string" && Number.isSafeInteger(v.accountVersion) && fen(v.accountBalanceBeforeFen) && fen(v.accountBalanceAfterFen) && typeof v.disclosureVersion === "string" && typeof v.assessmentId === "string" : Number.isSafeInteger(v.holdingVersion) && typeof v.settlement === "string";
 }
 function cardEffect(v: unknown, action?: string): boolean {
   if (!object(v) || v.kind !== "card_change" || !["card.set_budget", "card.set_controls", "card.freeze", "card.unfreeze"].includes(String(v.action)) || (action && v.action !== action)) return false;

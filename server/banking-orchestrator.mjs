@@ -336,7 +336,7 @@ export async function runBankingConversation(body, {
   if (result.ok && result.kind === 'wealth_action_request') {
     const prepared = await core.prepare(result.data.request);
     if (!prepared.ok) return reply(statusFor(prepared.error.code), prepared.error.code, prepared.error.message, { status: 'core_error', action: result.action, ...(prepared.operationId ? { operationId: prepared.operationId } : {}), error: prepared.error });
-    return reply(200, 'OK', '模拟理财正式预览已生成，等待页面单独确认', { status: 'awaiting_confirmation', action: result.action, operationId: prepared.data.operationId, preview: prepared.data.preview, risk: prepared.data.risk, evidence: result.data.evidence });
+    return reply(200, 'OK', '模拟理财正式预览已生成，等待页面单独确认', { status: 'awaiting_confirmation', action: result.action, operationId: prepared.data.operationId, preview: prepared.data.preview, risk: prepared.data.risk, evidence: result.data.evidence, ...(result.data.disclosure ? { disclosure: result.data.disclosure } : {}), requirements: result.data.requirements });
   }
   if (result.ok && result.kind === 'goal_plan') return reply(200, 'OK', '只读财务规划已生成', { status: 'goal_plan', action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && result.kind === 'scenario_event_review') return reply(200, 'OK', '可信事件复核已生成', { status: 'scenario_event_review', action: result.action, data: result.data, evidence: result.evidence });

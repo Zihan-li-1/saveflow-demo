@@ -16,7 +16,7 @@ import { transferFlow, bankingContinuationToken, updateBankingFlows, type Bankin
 import { agentErrorHint, agentErrorPolicy } from "./agent-error-policy.mjs";
 import type { BankingConversation } from './banking-conversation-contract';
 
-export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "banking_purchase" | "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_savings_inputs" | "banking_savings_plan"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
+export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "banking_purchase" | "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_wealth_receipt" | "banking_savings_inputs" | "banking_savings_plan"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
 const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。可以查询模拟账单，或生成转账正式预览，例如：给张三转 500 元。" }];
 const pendingKey = "saveflow.pending-operation.v1";
 
@@ -335,7 +335,7 @@ export function useSaveflow() {
       const checked = await cardClient().request("action.status", { operationId: data.operationId! });
       if (generation.current !== version) return;
       if (checked.status !== "succeeded" || checked.receipt?.receiptId !== receipt.receiptId) throw new ApiError("INVALID_RESPONSE", "理财回执无法核实，请查询原操作", true);
-      addMessage({ role: "agent", text: `${receipt.message}；已核对操作回执。合成数据仅供演示。` });
+      addMessage({ role: "agent", kind: "banking_wealth_receipt", text: `${receipt.message}；已核对操作回执。`, receipt });
       return "success" as const;
     }
     if (data.action?.startsWith('scenario.')) {
