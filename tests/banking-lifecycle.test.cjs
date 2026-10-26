@@ -334,3 +334,121 @@ test('real clarification options remain usable after the Agent request ends', as
   ready(); assert.equal(flow.stage, 'answered'); assert.ok(preview().operationId);
 });
 
+test('ConversationState UI: transfer clarification survives a card query and resumes with fresh account options', async () => {
+  await mount();
+  const { buildParsedIntent } = require('../src/agent/clarification/merge-intent.mjs');
+  intent = buildParsedIntent('transfer.create', { payee_ref: '张三', amount: { amount_minor: 50000, currency: 'CNY' } });
+  await act(async () => { await flow.startDemo('给张三转500元'); });
+  const task = flow.sessionTasks.find(task => task.action === 'transfer.create');
+  const oldOptions = flow.messages.at(-1).banking.choices.map(choice => choice.optionId);
+  await start('card.get');
+  assert.equal(flow.sessionTasks.find(t => t.taskId === task.taskId).status, 'suspended');
+  await act(async () => { await flow.resumeBankingTask(task.taskId); });
+  const renewed = flow.messages.at(-1).banking;
+  assert.equal(renewed.slot, 'source_account_ref');
+  assert.ok(renewed.choices.every(choice => !oldOptions.includes(choice.optionId)));
+  await act(async () => { await flow.chooseBankingOption(renewed.choices[0].optionId, renewed.choices[0].label, renewed); });
+  assert.equal(preview().preview.exactEffects[0].amountFen, 50000);
+  ready();
+});
+
+test('ConversationState UI: bill focus preserves transfer task and editing the resumed task produces another preview', async () => {
+  await mount();
+  const { buildParsedIntent } = require('../src/agent/clarification/merge-intent.mjs');
+  const slots = { payee_ref: '张三', source_account_ref: '活期账户', amount: { amount_minor: 50000, currency: 'CNY' } };
+  intent = buildParsedIntent('transfer.create', slots);
+  await act(async () => { await flow.startDemo('从活期账户给张三转500元'); });
+  const original = preview(); const task = flow.sessionTasks.find(task => task.action === 'transfer.create');
+  intent = buildParsedIntent('bill.summary', { month: '2026-08' });
+  await act(async () => { await flow.startDemo('查看2026年8月账单'); });
+  assert.equal(flow.activeTransferOperationId, null);
+  await act(async () => { await flow.resumeBankingTask(task.taskId); });
+  const resumed = preview(); assert.notEqual(resumed.operationId, original.operationId);
+  intent = buildParsedIntent('transfer.create', { ...slots, amount: { amount_minor: 60000, currency: 'CNY' } });
+  await act(async () => { await flow.editTransferPreview(resumed, '给张三转600元'); });
+  const edited = preview(); assert.notEqual(edited.operationId, resumed.operationId);
+  assert.equal(edited.preview.exactEffects[0].amountFen, 60000);
+  assert.equal(edited.conversation.currentTask.taskId, task.taskId);
+  ready();
+});
+
+test('ConversationState UI: explicit chat resume uses the unique server task and its original credential, not a model-created draft', async () => {
+  await mount();
+  const { buildParsedIntent } = require('../src/agent/clarification/merge-intent.mjs');
+  intent = buildParsedIntent('transfer.create', { payee_ref: '张三', source_account_ref: '活期账户', amount: { amount_minor: 50000, currency: 'CNY' } });
+  await act(async () => { await flow.startDemo('从活期账户给张三转500元'); });
+  const original = preview();
+  await start('card.get');
+  intent = buildParsedIntent('clarify', {}); // No model may select or reconstruct the old task.
+  let submitted;
+  intercept = (body, run) => { submitted = body; return run(); };
+  await act(async () => { await flow.startDemo('继续刚才的转账'); });
+  assert.equal(submitted.taskMode, 'resume');
+  assert.equal(submitted.taskId, original.conversation.currentTask.taskId);
+  assert.equal(submitted.message, undefined);
+  assert.equal(preview().conversation.currentTask.taskId, original.conversation.currentTask.taskId);
+  assert.notEqual(preview().operationId, original.operationId);
+  assert.equal(preview().preview.exactEffects[0].amountFen, 50000);
+  ready();
+});
+
+test('ConversationState UI: ambiguous chat resume asks for task selection without calling the model or Core', async () => {
+  await mount();
+  const { buildParsedIntent } = require('../src/agent/clarification/merge-intent.mjs');
+  intent = buildParsedIntent('transfer.create', { payee_ref: '张三', source_account_ref: '活期账户', amount: { amount_minor: 50000, currency: 'CNY' } });
+  await act(async () => { await flow.startDemo('从活期账户给张三转500元'); });
+  act(() => flow.restartBankingFlow());
+  await act(async () => { await flow.startDemo('另给张三转500元'); });
+  await start('card.get');
+  assert.equal(flow.sessionTasks.filter(task => task.action === 'transfer.create').length, 2);
+  const before = calls.length;
+  await act(async () => { await flow.startDemo('继续刚才的转账'); });
+  assert.equal(calls.length, before);
+  assert.match(flow.validation, /选择要恢复的转账/);
+  ready();
+});
+
+test('ConversationState UI: refresh restores only an opaque token, then sync and explicit resume obtain fresh authority', async () => {
+  await mount();
+  const { buildParsedIntent } = require('../src/agent/clarification/merge-intent.mjs');
+  intent = buildParsedIntent('transfer.create', { payee_ref: '张三', source_account_ref: '活期账户', amount: { amount_minor: 50000, currency: 'CNY' } });
+  await act(async () => { await flow.startDemo('从活期账户给张三转500元'); });
+  const original = preview(); const token = original.conversation.token;
+  const raw = sessionStorage.getItem('saveflow.banking-chat.v1');
+  assert.equal(JSON.parse(raw).conversationToken, token);
+  assert.ok(!raw.includes(env.SAVEFLOW_ACCESS_CODE));
+  assert.equal(JSON.parse(raw).accessCode, undefined);
+  await act(async () => { root.unmount(); root = create(React.createElement(Home)); });
+  assert.equal(flow.sessionPhase, 'unverified'); assert.equal(flow.activeTransferOperationId, null);
+  assert.equal(flow.accessCode, ''); assert.equal(flow.consent, false);
+  const before = calls.length;
+  await act(async () => { await flow.confirmTransferOperation(preview()); });
+  assert.equal(calls.length, before);
+  await act(async () => { flow.setAccessCode(env.SAVEFLOW_ACCESS_CODE); flow.setConsent(true); });
+  await act(async () => { await flow.verifyBankingSession(); });
+  assert.equal(flow.sessionPhase, 'ready'); assert.equal(flow.activeTransferOperationId, null);
+  await act(async () => { await flow.resumeBankingTask(original.conversation.currentTask.taskId); });
+  assert.notEqual(preview().operationId, original.operationId);
+  assert.equal(preview().conversation.token, token);
+  assert.equal(preview().historySnapshot, undefined);
+  ready();
+});
+
+test('ConversationState UI: forged cached session is rejected and a new business works without clearing history', async () => {
+  await mount(); await start('card.get');
+  const key = 'saveflow.banking-chat.v1';
+  const snapshot = JSON.parse(sessionStorage.getItem(key));
+  snapshot.conversationToken = `cs1.${'A'.repeat(43)}`;
+  sessionStorage.setItem(key, JSON.stringify(snapshot));
+  await act(async () => { root.unmount(); root = create(React.createElement(Home)); });
+  await act(async () => { flow.setAccessCode(env.SAVEFLOW_ACCESS_CODE); flow.setConsent(true); });
+  await act(async () => { await flow.verifyBankingSession(); });
+  assert.equal(flow.sessionPhase, 'failed'); ready();
+  const oldCount = flow.messages.length;
+  act(() => flow.restartBankingFlow());
+  await start('card.get');
+  assert.equal(flow.sessionPhase, 'ready');
+  assert.ok(flow.messages.length > oldCount);
+  ready();
+});
+

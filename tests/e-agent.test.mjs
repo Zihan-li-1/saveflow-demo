@@ -49,5 +49,5 @@ test('E agent: scenario change is previewed, cancellation writes nothing, confir
   const receipt = await core.execute(payload.data.operationId, payload.data.preview.previewHash);
   assert.equal(receipt.ok, true); assert.equal((await core.getScenarioRule(ruleId)).status, 'active');
   const replay = await handleBankingAgent(request({ continuationToken: payload.data.continuationToken, message: '确认保存' }), { env, core, parseIntent: async () => parsed, scenarioHandler, now: () => 4002 });
-  assert.equal((await body(replay)).code, 'CONFIRMATION_REQUIRED');
+  assert.equal((await body(replay)).code, 'CONVERSATION_TASK_FINISHED');
 });

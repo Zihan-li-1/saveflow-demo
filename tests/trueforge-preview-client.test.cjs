@@ -151,7 +151,8 @@ test('actual client and unified handler preserve reply/card separation across st
       const answer = await askBankingAgent({ message: '查询2026年8月账单', replyStyle }, env.SAVEFLOW_ACCESS_CODE, new AbortController().signal);
       assert.equal(answer.reply.style, replyStyle); assert.equal(sent.at(-1).replyStyle, replyStyle);
       assert.equal(seen.at(-1).replyStyle, undefined); // Style never changes the understanding context.
-      const { reply, requestId, ...data } = answer;
+      const { reply, requestId, conversation, ...data } = answer;
+      assert.ok(conversation.token);
       assert.ok(requestId); cards.add(JSON.stringify(data)); bubbles.add(reply.text);
       rendered.add(renderToStaticMarkup(React.createElement(BankingBillCard, { data: answer })));
     }

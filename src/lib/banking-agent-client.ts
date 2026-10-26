@@ -3,11 +3,13 @@ import { isTrialOperationId } from './trial-preview.mjs';
 import { billResponseFailure, type ResponseFailure } from './bill-response-validation';
 import { agentErrorPolicy, validAgentErrorPolicy, validRecoverySlot } from './agent-error-policy.mjs';
 import type { ActionReceipt } from '../banking-core/contracts';
+import { validBankingConversation, type BankingConversation } from './banking-conversation-contract';
 
 export type BankingReply = { text: string; style: 'concise' | 'friendly' | 'professional'; safetyNotices: string[] };
 export type BankingChoice = { optionId: string; label: string };
 export type SavingsPlanInputs = { saved_amount_minor: number } | { month: string; saved_amount_minor: number; income_minor: number; category_expenses_minor: Record<string, number> };
 export type BankingAgentData = {
+  conversation?: BankingConversation;
   reply?: BankingReply;
   kind?: 'clarification';
   status: string;
@@ -39,16 +41,22 @@ export type BankingAgentData = {
   error?: { code?: string; message?: string; uncertain?: boolean; category?: string; retryable?: boolean; nextAction?: string; context?: string };
   /** UI lifecycle only; never grants Core confirmation or execution authority. */
   coreStage?: import('./flow-machine').CoreOperationStage;
+  /** Browser history is display-only until a new authoritative response arrives. */
+  historySnapshot?: boolean;
   recovery?: BankingAgentData;
 };
 
 export class BankingAgentError extends ApiError {
-  constructor(code: string, message: string, public recovery: BankingAgentData | undefined, requestId: string, public policy = agentErrorPolicy(code, { hasRecovery: !!recovery, hasChoices: !!recovery?.choices?.length })) {
-    super(code, message, false, requestId);
+  constructor(code: string, message: string, public recovery: BankingAgentData | undefined, requestId: string, public policy = agentErrorPolicy(code, { hasRecovery: !!recovery, hasChoices: !!recovery?.choices?.length }), public conversation?: BankingConversation) {
+    super(code, message, policy.nextAction === 'query_status', requestId);
   }
 }
 
 export type BankingAgentRequest = {
+  conversationToken?: string;
+  conversationRevision?: number;
+  taskId?: string;
+  taskMode?: 'auto' | 'new' | 'continue' | 'resume' | 'sync';
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   message?: string;
   continuationToken?: string;
@@ -99,6 +107,12 @@ export async function askBankingAgent(
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: '$' }, 'envelope');
   if (['ACCESS_NOT_CONFIGURED', 'CONTINUATION_CONFIG_ERROR', 'SERVICE_UNAVAILABLE'].includes(payload?.code || '')) throw new ApiError('SERVICE_UNAVAILABLE', '服务暂时不可用，请联系演示维护者。');
   const validReply = (reply: BankingReply | undefined): reply is BankingReply => !!reply && typeof reply.text === 'string' && ['concise', 'friendly', 'professional'].includes(reply.style) && Array.isArray(reply.safetyNotices) && reply.safetyNotices.every(n => typeof n === 'string');
+  if ((payload.data?.conversation !== undefined && !validBankingConversation(payload.data.conversation)) ||
+      (response.ok && body.conversationToken !== undefined && !payload.data?.conversation)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.conversation' }, 'envelope');
+  const session = payload.data?.conversation;
+  if (session && ((body.conversationToken !== undefined && session.token !== body.conversationToken) ||
+      (response.ok && body.conversationRevision !== undefined && session.revision < body.conversationRevision) ||
+      (response.ok && ['continue', 'resume'].includes(body.taskMode || '') && body.taskId !== undefined && session.currentTask?.taskId !== body.taskId))) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.conversation' }, 'envelope');
   if (!response.ok && payload.data?.recovery !== undefined) {
     const c = payload.data.recovery;
     if (!['invalid_input', 'invalid_choice', 'business_conflict', 'missing_information'].includes(agentErrorPolicy(payload.code).category) || payload.data.error?.uncertain === true ||
@@ -108,17 +122,18 @@ export async function askBankingAgent(
         !Array.isArray(c.choices) || (['card_ref', 'source_account_ref', 'payee_ref'].includes(c.slot ?? '') && !c.choices.length) || c.choices.some(v => !v || typeof v.optionId !== 'string' || !v.optionId || typeof v.label !== 'string' || !v.label || Object.keys(v).some(k => !['optionId', 'label'].includes(k))) ||
         new Set(c.choices.map(v => v.optionId)).size !== c.choices.length || Object.keys(c).some(k => !['kind', 'status', 'action', 'slot', 'question', 'source', 'choices', 'continuationToken'].includes(k))) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 恢复凭据格式异常。');
     if (payload.data.error?.category !== undefined && !validAgentErrorPolicy(payload.data.error, true, !!c.choices?.length)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.error' }, 'envelope');
-    throw new BankingAgentError(payload.code!, payload.reply?.text || payload.message || '请修改当前请求。', { ...c, reply: payload.reply }, payload.requestId);
+    throw new BankingAgentError(payload.code!, payload.reply?.text || payload.message || '请修改当前请求。', { ...c, reply: payload.reply, conversation: payload.data.conversation }, payload.requestId, undefined, payload.data.conversation);
   }
   if (!response.ok) {
     const error = payload.data?.error;
     if (error?.category !== undefined && (error.code !== payload.code || !validAgentErrorPolicy(error))) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.error' }, 'envelope');
-    throw new BankingAgentError(typeof payload.code === 'string' ? payload.code : 'BANKING_AGENT_ERROR', typeof payload.message === 'string' ? payload.message : 'Banking Agent 请求失败', undefined, payload.requestId ?? '', agentErrorPolicy(payload.code, { uncertain: error?.uncertain === true }));
+    throw new BankingAgentError(typeof payload.code === 'string' ? payload.code : 'BANKING_AGENT_ERROR', typeof payload.message === 'string' ? payload.message : 'Banking Agent 请求失败', undefined, payload.requestId ?? '', agentErrorPolicy(payload.code, { uncertain: error?.uncertain === true }), payload.data?.conversation);
   }
   if (!payload.data || !['OK', 'NEEDS_CLARIFICATION', 'NEEDS_PLAN_INPUTS', 'UNSUPPORTED'].includes(payload.code || '')) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data' }, 'envelope');
   const reply = payload.reply;
   if (!validReply(reply)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'reply' }, 'envelope');
   const data = payload.data;
+  if (body.taskMode === 'sync' && data.status !== 'conversation_state') return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.status' }, 'envelope');
   if (typeof data !== 'object' || Array.isArray(data) || typeof payload.requestId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(payload.requestId) ||
       (data.data !== undefined && (!data.data || typeof data.data !== 'object' || Array.isArray(data.data)))) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data' }, 'envelope');
   if (data.status === 'bill_result') {
@@ -175,6 +190,7 @@ export async function askBankingAgent(
   const scenarioAction = ['scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule'].includes(data.action || '');
   const enhancedSubscriptionValid = !subscriptionSummary && !subscriptionMethodology || (!!subscriptionSummary && !!subscriptionMethodology && nonnegative(subscriptionSummary.activeCount) && nonnegative(subscriptionSummary.activeMonthlyFeeFen) && nonnegative(subscriptionSummary.potentiallyUnusedCount) && nonnegative(subscriptionSummary.potentiallyUnusedMonthlyFeeFen) && nonnegative(subscriptionSummary.potentialAnnualSavingsFen) && subscriptionSummary.potentialAnnualSavingsFen === Number(subscriptionSummary.potentiallyUnusedMonthlyFeeFen) * 12 && subscriptionMethodology.usesRepositoryFlag === true && subscriptionMethodology.usesLastUsedDate === true && subscriptionMethodology.highConfidenceInactivityDays === 90 && subscriptionMethodology.historicalSubscriptionState === false && subscriptionMethodology.savingsEstimateMonths === 12 && typeof subscriptionMethodology.limitation === 'string');
   const valid = typeof payload.requestId === 'string' && trialMetadataValid && (
+    (payload.code === 'OK' && data.status === 'conversation_state' && !!data.conversation) ||
     (payload.code === 'UNSUPPORTED' && data.status === 'unsupported') ||
     (payload.code === 'OK' && data.status === 'cancelled') ||
     (payload.code === 'NEEDS_CLARIFICATION' && data.status === 'needs_clarification' && typeof data.question === 'string' && typeof data.continuationToken === 'string' && Array.isArray(data.choices) && data.choices.every(choice => typeof choice.optionId === 'string' && typeof choice.label === 'string')) ||
