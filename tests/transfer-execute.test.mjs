@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createBankingCore } from '../src/banking-core/core.mjs';
+import { createLowBalanceCore as createBankingCore } from './fixtures/low-balance-core.mjs';
 import { handleTransfer, transferRepository, prepareTransferPreview } from '../src/agent/runtime.mjs';
 
 // 端到端可行性验证：转账 agent 层（runtime.mjs）→ core.prepare → core.decide → core.execute。

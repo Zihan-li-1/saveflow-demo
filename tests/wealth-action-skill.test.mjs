@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { createFinancialContext } from '../src/banking-core/repository.mjs';
+import { createLowBalanceFinancialContext as createFinancialContext } from './fixtures/low-balance-core.mjs';
 import {
   WEALTH_ACTIONS,
   runResolvedWealthIntent,
