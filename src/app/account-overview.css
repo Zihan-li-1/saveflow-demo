@@ -2,7 +2,8 @@
 .account-overview-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
 .account-overview-header .eyebrow { color: #acb4bd; font-size: 9px; letter-spacing: .11em; }
 .account-overview-header h2 { color: #33404d; font-size: 20px; margin: 5px 0 0; }
-.account-chip { color: #2f6ec7; background: #eaf2ff; font-size: 11px; padding: 5px 10px; border-radius: 99px; }
+.account-chip { color: #2f6ec7; background: #eaf2ff; font-size: 15px; font-weight: 700; padding: 6px 12px; border-radius: 99px; }
+.account-balance-card small .account-name { color: #2a3948; font-weight: 700; font-size: 14px; }
 .account-balance-card { border: 1px solid #e9edf1; background: #fff; border-radius: 10px; padding: 16px; }
 .account-balance-card span { color: #a2abb4; font-size: 10px; display: block; }
 .account-balance-card strong { color: #2a3948; font-size: 28px; display: block; margin: 8px 0 4px; }

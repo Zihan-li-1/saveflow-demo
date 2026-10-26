@@ -19,7 +19,9 @@ export function BankingAccountOverview({ messages }: { messages: Message[] }) {
   const firstEffect = latest?.receipt.effects[0];
   const transfer = firstEffect?.kind === "transfer_out" ? (firstEffect as TransferEffect) : undefined;
   const accountName = transfer?.accountName || DEFAULT_ACCOUNT;
-  const balanceFen = latest?.verification?.availableBalanceFen ?? DEFAULT_BALANCE_FEN;
+  // 可用余额以最新回执里的转账后余额为准（回执必含 availableBalanceAfterFen），
+  // verification.availableBalanceFen 作为补充回退，最后才是种子默认值。
+  const balanceFen = latest?.verification?.availableBalanceFen ?? transfer?.availableBalanceAfterFen ?? DEFAULT_BALANCE_FEN;
 
   return <section className="account-overview">
     <header className="account-overview-header">
@@ -32,7 +34,7 @@ export function BankingAccountOverview({ messages }: { messages: Message[] }) {
     <div className="account-balance-card">
       <span>可用余额</span>
       <strong>{yuan(balanceFen)}</strong>
-      <small>合成数据 · {accountName}</small>
+      <small>合成数据 · <b className="account-name">{accountName}</b></small>
     </div>
     <div className="voucher-section">
       <div className="voucher-section-title">支出凭证</div>
