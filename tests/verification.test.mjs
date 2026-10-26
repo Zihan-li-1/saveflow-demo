@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBankingCore } from '../src/banking-core/core.mjs';
-import { generateCode, hashCode, createChallenge, verifyChallenge, VERIFICATION_MAX_ATTEMPTS, VERIFICATION_TTL_MS } from '../src/banking-core/verification.mjs';
+import { generateCode, hashCode, createChallenge, verifyChallenge, VERIFICATION_MAX_ATTEMPTS, VERIFICATION_TTL_MS, VERIFICATION_ISSUE_COOLDOWN_MS } from '../src/banking-core/verification.mjs';
 
 const unwrap = result => { assert.equal(result.ok, true, JSON.stringify(result)); return result.data; };
 const balance = core => core.repository.getAccount('ACC-CHECKING').availableBalanceFen;
@@ -98,11 +98,15 @@ test('已消费的验证码不得重放（单次有效）', async () => {
 });
 
 test('重新发起验证会作废旧验证码', async () => {
-  const { core, codes } = coreWithCapturedCodes();
+  let time = Date.parse('2026-09-22T00:00:00Z');
+  const codes = [];
+  const core = createBankingCore({ now: () => time, deliverVerificationCode: ({ code }) => codes.push(code) });
   const p = await prepare(core, 200000);
   await confirm(core, p);
-  await core.startVerification(p.operationId, p.preview.previewHash);
+  unwrap(await core.startVerification(p.operationId, p.preview.previewHash));
   const oldCode = codes[0];
+  // 冷却期内重发被拒；超过冷却期后重发作废旧码。
+  time += VERIFICATION_ISSUE_COOLDOWN_MS;
   const started2 = unwrap(await core.startVerification(p.operationId, p.preview.previewHash));
   const newCode = codes[1];
   // 旧码作废
