@@ -1,5 +1,7 @@
 import { ApiError } from './api/contracts';
 import { isTrialOperationId } from './trial-preview.mjs';
+import { billResponseFailure, type ResponseFailure } from './bill-response-validation';
+import { agentErrorPolicy, validAgentErrorPolicy, validRecoverySlot } from './agent-error-policy.mjs';
 import type { ActionReceipt } from '../banking-core/contracts';
 
 export type BankingReply = { text: string; style: 'concise' | 'friendly' | 'professional'; safetyNotices: string[] };
@@ -33,14 +35,15 @@ export type BankingAgentData = {
   previewCurrent?: boolean;
   /** 预览已执行：界面只读，不再提供确认/取消入口。 */
   executed?: boolean;
+  outcomePending?: boolean;
+  error?: { code?: string; message?: string; uncertain?: boolean; category?: string; retryable?: boolean; nextAction?: string; context?: string };
   /** UI lifecycle only; never grants Core confirmation or execution authority. */
   coreStage?: import('./flow-machine').CoreOperationStage;
-  error?: { code?: string; message?: string };
   recovery?: BankingAgentData;
 };
 
 export class BankingAgentError extends ApiError {
-  constructor(code: string, message: string, public recovery: BankingAgentData, requestId: string) {
+  constructor(code: string, message: string, public recovery: BankingAgentData | undefined, requestId: string, public policy = agentErrorPolicy(code, { hasRecovery: !!recovery, hasChoices: !!recovery?.choices?.length })) {
     super(code, message, false, requestId);
   }
 }
@@ -54,6 +57,10 @@ export type BankingAgentRequest = {
   planInputs?: SavingsPlanInputs;
 };
 
+export type BankingResponseDiagnostic = ResponseFailure & {
+  event: 'banking_response_validation_failed'; stage: 'http' | 'envelope' | 'bill'; requestId: string;
+};
+
 /** Clarifications without selectable options stay as plain chat prompts. */
 export function hasBankingChoices(data?: BankingAgentData): boolean {
   return Array.isArray(data?.choices) && data.choices.length > 0;
@@ -63,6 +70,7 @@ export async function askBankingAgent(
   body: BankingAgentRequest,
   accessCode: string,
   signal: AbortSignal,
+  options: { onDiagnostic?: (entry: BankingResponseDiagnostic) => void } = {},
 ): Promise<BankingAgentData> {
   let response: Response;
   try {
@@ -76,23 +84,48 @@ export async function askBankingAgent(
     throw new ApiError('BANKING_AGENT_NETWORK_ERROR', 'Banking Agent 连接失败，请稍后重试。');
   }
   let payload: { code?: string; message?: string; requestId?: string; reply?: BankingReply; data?: BankingAgentData };
-  try { payload = await response.json(); } catch { throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 返回格式异常。'); }
+  const invalid = (failure: ResponseFailure, stage: BankingResponseDiagnostic['stage']): never => {
+    const id = payload?.requestId ?? response.headers.get('x-request-id');
+    const requestId = typeof id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(id) ? id : 'unavailable';
+    const entry: BankingResponseDiagnostic = { event: 'banking_response_validation_failed', stage, requestId, ...failure };
+    try {
+      if (options.onDiagnostic) options.onDiagnostic(entry);
+      else if (process.env.NODE_ENV === 'development') console.warn(JSON.stringify(entry));
+    } catch { /* Diagnostics cannot bypass validation. */ }
+    throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 返回格式异常。', false, requestId);
+  };
+  try { payload = await response.json(); } catch { return invalid({ reason: 'INVALID_HTTP_RESPONSE', path: '$' }, 'http'); }
   if (response.status === 401) throw new ApiError('UNAUTHORIZED', '访问验证失败，请检查演示访问码后重试。');
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: '$' }, 'envelope');
   if (['ACCESS_NOT_CONFIGURED', 'CONTINUATION_CONFIG_ERROR', 'SERVICE_UNAVAILABLE'].includes(payload?.code || '')) throw new ApiError('SERVICE_UNAVAILABLE', '服务暂时不可用，请联系演示维护者。');
   const validReply = (reply: BankingReply | undefined): reply is BankingReply => !!reply && typeof reply.text === 'string' && ['concise', 'friendly', 'professional'].includes(reply.style) && Array.isArray(reply.safetyNotices) && reply.safetyNotices.every(n => typeof n === 'string');
-  if (response.status === 400 && payload?.code === 'INSUFFICIENT_BALANCE' && payload.data?.recovery !== undefined) {
+  if (!response.ok && payload.data?.recovery !== undefined) {
     const c = payload.data.recovery;
-    if (!validReply(payload.reply) || !c || typeof c !== 'object' || typeof payload.requestId !== 'string' || !['error', 'core_error'].includes(payload.data.status) || payload.data.error?.code !== payload.code ||
-        c.kind !== 'clarification' || c.status !== 'needs_clarification' || c.action !== 'transfer.create' || c.slot !== 'source_account_ref' ||
+    if (!['invalid_input', 'invalid_choice', 'business_conflict', 'missing_information'].includes(agentErrorPolicy(payload.code).category) || payload.data.error?.uncertain === true ||
+        !validReply(payload.reply) || !c || typeof c !== 'object' || typeof payload.requestId !== 'string' || !['error', 'core_error', 'card_error'].includes(payload.data.status) || payload.data.error?.code !== payload.code ||
+        c.kind !== 'clarification' || c.status !== 'needs_clarification' || !validRecoverySlot(c.action, c.slot) ||
         typeof c.continuationToken !== 'string' || c.continuationToken.length > 10000 || !/^(?:tfm1\.[\w-]{43}\.[\w-]{43}|[\w-]{16}\.[\w-]{22}\.[\w-]+)$/.test(c.continuationToken) || typeof c.question !== 'string' || !c.question || c.question.length > 1000 ||
-        !Array.isArray(c.choices) || !c.choices.length || c.choices.some(v => !v || typeof v.optionId !== 'string' || !v.optionId || typeof v.label !== 'string' || !v.label) ||
+        !Array.isArray(c.choices) || (['card_ref', 'source_account_ref', 'payee_ref'].includes(c.slot ?? '') && !c.choices.length) || c.choices.some(v => !v || typeof v.optionId !== 'string' || !v.optionId || typeof v.label !== 'string' || !v.label || Object.keys(v).some(k => !['optionId', 'label'].includes(k))) ||
         new Set(c.choices.map(v => v.optionId)).size !== c.choices.length || Object.keys(c).some(k => !['kind', 'status', 'action', 'slot', 'question', 'source', 'choices', 'continuationToken'].includes(k))) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 恢复凭据格式异常。');
-    throw new BankingAgentError(payload.code, payload.reply?.text || payload.message || '付款账户可用余额不足。', { ...c, reply: payload.reply }, payload.requestId);
+    if (payload.data.error?.category !== undefined && !validAgentErrorPolicy(payload.data.error, true, !!c.choices?.length)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.error' }, 'envelope');
+    throw new BankingAgentError(payload.code!, payload.reply?.text || payload.message || '请修改当前请求。', { ...c, reply: payload.reply }, payload.requestId);
   }
-  if (!payload || !response.ok || !payload.data || !['OK', 'NEEDS_CLARIFICATION', 'NEEDS_PLAN_INPUTS', 'UNSUPPORTED'].includes(payload.code || '')) throw new ApiError(String(payload?.code || 'BANKING_AGENT_ERROR'), payload?.message || 'Banking Agent 请求失败');
+  if (!response.ok) {
+    const error = payload.data?.error;
+    if (error?.category !== undefined && (error.code !== payload.code || !validAgentErrorPolicy(error))) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.error' }, 'envelope');
+    throw new BankingAgentError(typeof payload.code === 'string' ? payload.code : 'BANKING_AGENT_ERROR', typeof payload.message === 'string' ? payload.message : 'Banking Agent 请求失败', undefined, payload.requestId ?? '', agentErrorPolicy(payload.code, { uncertain: error?.uncertain === true }));
+  }
+  if (!payload.data || !['OK', 'NEEDS_CLARIFICATION', 'NEEDS_PLAN_INPUTS', 'UNSUPPORTED'].includes(payload.code || '')) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data' }, 'envelope');
   const reply = payload.reply;
-  if (!validReply(reply)) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 回复格式异常。');
+  if (!validReply(reply)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'reply' }, 'envelope');
   const data = payload.data;
+  if (typeof data !== 'object' || Array.isArray(data) || typeof payload.requestId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(payload.requestId) ||
+      (data.data !== undefined && (!data.data || typeof data.data !== 'object' || Array.isArray(data.data)))) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data' }, 'envelope');
+  if (data.status === 'bill_result') {
+    const failure = billResponseFailure(data);
+    if (failure) return invalid(failure, 'bill');
+  }
+  if (data.evidence !== undefined && (!Array.isArray(data.evidence) || data.evidence.some(e => !e || typeof e !== 'object' || Array.isArray(e)))) return invalid({ reason: 'INVALID_EVIDENCE', path: 'data.evidence' }, 'envelope');
   const card = data.data?.card as Record<string, unknown> | undefined;
   const cardPreview = data.preview as Record<string, unknown> | undefined;
   const cardEffect = Array.isArray(cardPreview?.exactEffects) ? cardPreview.exactEffects[0] as Record<string, unknown> | undefined : undefined;
@@ -140,22 +173,13 @@ export async function askBankingAgent(
   const scenarioReceiptEffect = Array.isArray(scenarioReceipt?.effects) ? scenarioReceipt.effects[0] as Record<string, unknown> | undefined : undefined;
   const scenarioReceiptAfter = scenarioReceiptEffect?.after as Record<string, unknown> | undefined;
   const scenarioAction = ['scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule'].includes(data.action || '');
-  const bill = data.data;
-  const billPeriod = bill?.period as Record<string, unknown> | undefined;
-  const monthlyBreakdown = bill?.monthlyBreakdown as Array<Record<string, unknown>> | undefined;
-  const billInsights = bill?.insights as Record<string, unknown> | undefined;
-  const validBillMonth = typeof bill?.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(bill.month);
-  const validBillPeriod = !!billPeriod && typeof billPeriod.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(billPeriod.startDate) && typeof billPeriod.endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(billPeriod.endDate) && billPeriod.startDate <= billPeriod.endDate && billPeriod.timezone === 'Asia/Shanghai' && typeof billPeriod.label === 'string' && !!billPeriod.label;
-  const validCategoryTotals = (value: unknown, total: unknown) => value !== null && typeof value === 'object' && !Array.isArray(value) && Object.entries(value).every(([name, amount]) => !!name.trim() && nonnegative(amount)) && Object.values(value).reduce((sum, amount) => sum + Number(amount), 0) === total;
   const enhancedSubscriptionValid = !subscriptionSummary && !subscriptionMethodology || (!!subscriptionSummary && !!subscriptionMethodology && nonnegative(subscriptionSummary.activeCount) && nonnegative(subscriptionSummary.activeMonthlyFeeFen) && nonnegative(subscriptionSummary.potentiallyUnusedCount) && nonnegative(subscriptionSummary.potentiallyUnusedMonthlyFeeFen) && nonnegative(subscriptionSummary.potentialAnnualSavingsFen) && subscriptionSummary.potentialAnnualSavingsFen === Number(subscriptionSummary.potentiallyUnusedMonthlyFeeFen) * 12 && subscriptionMethodology.usesRepositoryFlag === true && subscriptionMethodology.usesLastUsedDate === true && subscriptionMethodology.highConfidenceInactivityDays === 90 && subscriptionMethodology.historicalSubscriptionState === false && subscriptionMethodology.savingsEstimateMonths === 12 && typeof subscriptionMethodology.limitation === 'string');
-  const validMonthlyBreakdown = Array.isArray(monthlyBreakdown) && monthlyBreakdown.length >= 1 && monthlyBreakdown.length <= 13 && monthlyBreakdown.every(item => typeof item.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(item.month) && ['complete', 'partial', 'future'].includes(String(item.status)) && nonnegative(item.totalExpenseFen) && nonnegative(item.totalIncomeFen) && nonnegative(item.transactionCount) && validCategoryTotals(item.categoryTotals, item.totalExpenseFen));
-  const validBillInsights = !billInsights || nonnegative(billInsights.currentExpenseFen) && nonnegative(billInsights.comparisonExpenseFen) && Number.isSafeInteger(billInsights.changeFen) && (billInsights.changeRateBps === null || Number.isSafeInteger(billInsights.changeRateBps)) && typeof billInsights.comparisonAvailable === 'boolean' && typeof billInsights.note === 'string' && Array.isArray(billInsights.categoryChanges) && billInsights.categoryChanges.length <= 3 && billInsights.categoryChanges.every(item => item && typeof item.category === 'string' && nonnegative(item.currentAmountFen) && nonnegative(item.comparisonAmountFen) && Number.isSafeInteger(item.changeFen) && item.changeFen === Number(item.currentAmountFen) - Number(item.comparisonAmountFen)) && Array.isArray(billInsights.largestExpenses) && billInsights.largestExpenses.length <= 3 && billInsights.largestExpenses.every(item => item && typeof item.transactionId === 'string' && typeof item.merchant === 'string' && typeof item.category === 'string' && nonnegative(item.amountFen) && typeof item.occurredAt === 'string');
   const valid = typeof payload.requestId === 'string' && trialMetadataValid && (
     (payload.code === 'UNSUPPORTED' && data.status === 'unsupported') ||
     (payload.code === 'OK' && data.status === 'cancelled') ||
     (payload.code === 'NEEDS_CLARIFICATION' && data.status === 'needs_clarification' && typeof data.question === 'string' && typeof data.continuationToken === 'string' && Array.isArray(data.choices) && data.choices.every(choice => typeof choice.optionId === 'string' && typeof choice.label === 'string')) ||
     (payload.code === 'NEEDS_PLAN_INPUTS' && data.status === 'needs_plan_inputs' && data.action === 'orchestrator.goal' && nonnegative(data.goal?.target_amount_minor) && typeof data.goal?.deadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.goal.deadline) && /^\d{4}-(0[1-9]|1[0-2])$/.test(data.requiredMonth || '') && typeof data.continuationToken === 'string' && Array.isArray(data.categories) && data.categories.length > 0 && data.categories.every(category => typeof category === 'string' && !!category.trim()) && new Set(data.categories).size === data.categories.length && (data.recentSource === 'user_provided' || (data.recentSource === 'repository' && data.recent?.month === data.requiredMonth && nonnegative(data.recent?.income_minor) && !!data.recent?.category_expenses_minor && data.categories.every(category => nonnegative(data.recent?.category_expenses_minor[category]))))) ||
-    (payload.code === 'OK' && data.status === 'bill_result' && validBillMonth !== validBillPeriod && nonnegative(bill?.totalExpenseFen) && nonnegative(bill?.totalIncomeFen) && nonnegative(bill?.transactionCount) && validBillInsights && (!monthlyBreakdown || validMonthlyBreakdown) && (!validBillPeriod || validMonthlyBreakdown) && Array.isArray(data.evidence) && data.evidence.length > 0) ||
+    (payload.code === 'OK' && data.status === 'bill_result') ||
     (payload.code === 'OK' && data.status === 'card_result' && ['card.get', 'card.security_review'].includes(data.action || '') && typeof card?.id === 'string' && typeof card.name === 'string' && ['active', 'frozen'].includes(String(card.status)) && Number.isSafeInteger(card.monthlyBudgetFen) && Number(card.monthlyBudgetFen) >= 0 && Number.isSafeInteger(card.monthlySpentFen) && Number(card.monthlySpentFen) >= 0 && typeof card.onlinePaymentsEnabled === 'boolean' && Array.isArray(card.blockedCategories) && (card.alertThresholdFen === null || nonnegative(card.alertThresholdFen)) && (card.balanceReminderAmountFen === null || nonnegative(card.balanceReminderAmountFen)) && (card.balanceReminderPercent === null || Number.isSafeInteger(card.balanceReminderPercent) && Number(card.balanceReminderPercent) >= 1 && Number(card.balanceReminderPercent) <= 100) && !(card.balanceReminderAmountFen !== null && card.balanceReminderPercent !== null) && Number.isSafeInteger(card.version) && cardEvidenceValid && (data.action !== 'card.security_review' || (data.data?.execution_allowed === false && data.data?.requires_explicit_user_request_to_freeze === true && Array.isArray(data.data?.guidance)))) ||
     (payload.code === 'OK' && data.status === 'wealth_result' && data.action?.startsWith('wealth.') && typeof data.data?.kind === 'string' && data.data?.synthetic_demo_only === true && typeof data.data?.as_of === 'string' && typeof data.data?.context_snapshot_id === 'string' && Array.isArray(data.data?.evidence)) ||
     (payload.code === 'OK' && data.status === 'awaiting_confirmation' && ['wealth.subscribe', 'wealth.redeem'].includes(data.action || '') && typeof data.operationId === 'string' && typeof cardPreview?.previewHash === 'string' && /^[a-f0-9]{64}$/.test(cardPreview.previewHash) && Array.isArray(cardPreview.stepIds) && cardPreview.stepIds.length === 1 && cardEffect?.kind === 'wealth_change' && cardEffect.action === data.action && Number.isSafeInteger(cardEffect.amountFen) && data.risk?.allowed === true && data.risk?.riskLevel === 'L3' && Array.isArray(data.evidence)) ||
@@ -170,7 +194,7 @@ export async function askBankingAgent(
     (payload.code === 'OK' && data.status === 'awaiting_confirmation' && ['card.set_budget', 'card.set_controls', 'card.freeze', 'card.unfreeze'].includes(data.action || '') && typeof data.operationId === 'string' && typeof cardPreview?.previewHash === 'string' && /^[a-f0-9]{64}$/.test(cardPreview.previewHash) && Array.isArray(cardPreview?.stepIds) && cardPreview.stepIds.length === 1 && cardEffect?.kind === 'card_change' && cardEffect.action === data.action && typeof cardEffect.cardId === 'string' && typeof cardEffect.cardName === 'string' && Number.isSafeInteger(cardEffect.cardVersion) && Number.isSafeInteger(cardEffect.previewGeneration) && ['active', 'frozen'].includes(String(before?.status)) && Number.isSafeInteger(before?.monthlyBudgetFen) && Number(before?.monthlyBudgetFen) >= 0 && typeof before?.onlinePaymentsEnabled === 'boolean' && Array.isArray(before?.blockedCategories) && (before?.alertThresholdFen === null || nonnegative(before?.alertThresholdFen)) && (before?.balanceReminderAmountFen === null || nonnegative(before?.balanceReminderAmountFen)) && (before?.balanceReminderPercent === null || Number.isSafeInteger(before?.balanceReminderPercent) && Number(before?.balanceReminderPercent) >= 1 && Number(before?.balanceReminderPercent) <= 100) && !(before?.balanceReminderAmountFen !== null && before?.balanceReminderPercent !== null) && ['active', 'frozen'].includes(String(after?.status)) && Number.isSafeInteger(after?.monthlyBudgetFen) && Number(after?.monthlyBudgetFen) >= 0 && typeof after?.onlinePaymentsEnabled === 'boolean' && Array.isArray(after?.blockedCategories) && (after?.alertThresholdFen === null || nonnegative(after?.alertThresholdFen)) && (after?.balanceReminderAmountFen === null || nonnegative(after?.balanceReminderAmountFen)) && (after?.balanceReminderPercent === null || Number.isSafeInteger(after?.balanceReminderPercent) && Number(after?.balanceReminderPercent) >= 1 && Number(after?.balanceReminderPercent) <= 100) && !(after?.balanceReminderAmountFen !== null && after?.balanceReminderPercent !== null) && data.risk?.allowed === true && cardEvidenceValid) ||
     (payload.code === 'OK' && data.status === 'awaiting_confirmation' && data.action === 'transfer.create' && typeof data.operationId === 'string' && typeof data.continuationToken === 'string' && typeof data.preview?.previewHash === 'string' && typeof data.preview?.summary === 'string' && Array.isArray(data.preview?.exactEffects) && data.preview.exactEffects.length > 0 && data.risk?.allowed === true)
   );
-  if (!valid) throw new ApiError('BANKING_AGENT_RESPONSE_ERROR', 'Banking Agent 返回格式异常。');
+  if (!valid) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.status' }, 'envelope');
   return { ...data, reply, requestId: payload.requestId };
 }
 

@@ -5,6 +5,7 @@ import { ParsedIntentValidationError } from '../src/agent/validate-parsed-intent
 import { runBankingConversation, statusFor } from './banking-orchestrator.mjs';
 import { parseTrueforgeBankingIntent } from './trueforge-banking-runtime.mjs';
 import { bankingReply, validateReplyStyle } from './banking-reply.mjs';
+import { agentErrorPolicy } from '../src/lib/agent-error-policy.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const RATE_LIMIT = 10;
@@ -54,6 +55,10 @@ async function readBody(request) {
 }
 
 function responseEnvelope(requestId, code, message, data, style, replyContext) {
+  if (!['OK', 'NEEDS_CLARIFICATION', 'UNSUPPORTED'].includes(code)) {
+    data = { ...(data ?? { status: 'error' }), error: { ...data?.error, code, message,
+      ...agentErrorPolicy(code, { hasRecovery: !!data?.recovery, hasChoices: !!data?.recovery?.choices?.length, uncertain: data?.error?.uncertain === true }) } };
+  }
   return { code, message, requestId, reply: bankingReply({ code, message, data, replyContext }, style), ...(data ? { data } : {}) };
 }
 
@@ -77,7 +82,7 @@ export async function handleBankingAgent(
   const requestId = crypto.randomUUID();
   const reply = (status, code, message, data, replyContext) => Response.json(
     responseEnvelope(requestId, code, message, data, style, replyContext),
-    { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } },
+    { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Request-ID': requestId } },
   );
   const authFailure = (category, status, code, message) => {
     const diagnostic = { event: 'banking_auth_failure', category, requestId };
@@ -114,7 +119,7 @@ export async function handleBankingAgent(
     const repository = options.repository ?? core.repository;
     const scenarioScope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
     const result = await runBankingConversation(body, { core, repository, env, now, timezone: options.timezone ?? 'Asia/Shanghai', parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope, savingsAdvisor: options.savingsAdvisor });
-    const data = result.data?.recovery ? { ...result.data, recovery: { ...result.data.recovery, continuationToken: result.data.continuationToken } } : result.data;
+    const data = result.data?.recovery ? { ...result.data, recovery: { ...result.data.recovery, continuationToken: result.data.recovery.continuationToken ?? result.data.continuationToken } } : result.data;
     return reply(result.httpStatus, result.code, result.message, data, result.replyContext);
   } catch (error) {
     const code = typeof error?.code === 'string' ? error.code : error instanceof BankingIntentParserError || error instanceof ParsedIntentValidationError ? 'MODEL_FORMAT_ERROR' : error?.message?.includes('DATABASE_URL') ? 'DATABASE_NOT_CONFIGURED' : 'MODEL_UNAVAILABLE';

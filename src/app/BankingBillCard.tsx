@@ -19,7 +19,7 @@ export function BankingBillCard({ data }: { data?: BankingAgentData }) {
   const insightCategories = Array.isArray(insights?.categoryChanges) ? insights.categoryChanges.filter(item => item && typeof item === "object" && !Array.isArray(item)).slice(0, 3) as Array<Record<string, unknown>> : [];
   const monthly = billMonthlyBreakdown(summary.monthlyBreakdown);
   const showMonthlyChart = shouldShowMonthlyBillChart(summary.period, monthly.length);
-  const visibleMonths = monthly.filter(item => item.status !== "future");
+  const visibleMonths = monthly.filter(item => item.status !== "future" && item.status !== "unavailable");
   const completedMonths = monthly.filter(item => item.status === "complete");
   const maximumMonthlyExpense = Math.max(1, ...visibleMonths.map(item => item.totalExpenseFen));
   const periodLabel = formatBillPeriod(summary.month, summary.period);
@@ -37,7 +37,10 @@ export function BankingBillCard({ data }: { data?: BankingAgentData }) {
     .filter(item => item.changeFen !== 0)
     .sort((a, b) => Math.abs(b.changeFen) - Math.abs(a.changeFen)).slice(0, 3) : [];
   const evidence = data?.evidence?.[0];
-  const coverage = summary.coverage as { warning?: string } | undefined;
+  const coverage = summary.coverage as { warning?: string; availableMonths?: string[] } | undefined;
+  const missingMonths = monthly.filter(item => item.status === "unavailable");
+  const missingSingleMonth = typeof summary.month === "string" && Array.isArray(coverage?.availableMonths) && !coverage.availableMonths.includes(summary.month);
+  const noAvailableData = count === 0 && (missingSingleMonth || (monthly.length > 0 && missingMonths.length === monthly.length));
   const source = evidence?.source === "synthetic_demo_only" ? "模拟演示数据" : typeof evidence?.source === "string" && evidence.source ? evidence.source : "来源未知";
   const balanceTone = balance === undefined || balance === 0 ? "neutral" : balance > 0 ? "positive" : "negative";
 
@@ -47,16 +50,19 @@ export function BankingBillCard({ data }: { data?: BankingAgentData }) {
       <span className="bill-report-badge">账单报告</span>
     </header>
     {coverage?.warning && <p className="bill-report-empty">{coverage.warning}</p>}
-    <div className="bill-report-hero"><span>{isRange ? "期间总支出" : "本月总支出"}</span><strong>{formatBillMoney(expense)}</strong></div>
+    {noAvailableData && <p className="bill-report-empty">所选时间没有可用账单数据，不能视为零消费。</p>}
+    {!showMonthlyChart && missingMonths.length > 0 && <p className="bill-report-empty">缺数据：{missingMonths.map(item => billMonthLabel(item.month, spansYears)).join("、")}</p>}
+    {missingSingleMonth && <p className="bill-report-empty">本月缺数据</p>}
+    <div className="bill-report-hero"><span>{isRange ? "期间总支出" : "本月总支出"}</span><strong>{formatBillMoney(noAvailableData ? undefined : expense)}</strong></div>
     <dl className="bill-report-metrics">
-      <div className="bill-report-metric income"><dt><ArrowDownLeft size={17} aria-hidden="true" /> {isRange ? "期间收入" : "本月收入"}</dt><dd>{formatBillMoney(income)}</dd></div>
-      <div className="bill-report-metric expense"><dt><ArrowUpRight size={17} aria-hidden="true" /> {isRange ? "期间支出" : "本月支出"}</dt><dd>{formatBillMoney(expense)}</dd></div>
+      <div className="bill-report-metric income"><dt><ArrowDownLeft size={17} aria-hidden="true" /> {isRange ? "期间收入" : "本月收入"}</dt><dd>{formatBillMoney(noAvailableData ? undefined : income)}</dd></div>
+      <div className="bill-report-metric expense"><dt><ArrowUpRight size={17} aria-hidden="true" /> {isRange ? "期间支出" : "本月支出"}</dt><dd>{formatBillMoney(noAvailableData ? undefined : expense)}</dd></div>
     </dl>
     <div className="bill-report-summary">
-      <div className="bill-report-balance"><span>收支结余</span><strong className={balanceTone}>{formatBillMoney(balance, true)}</strong><p>收入 − 支出 · 不是账户可用余额</p></div>
-      <div className="bill-report-count"><span><ReceiptText size={15} aria-hidden="true" /> 总交易笔数</span><strong>{count === undefined ? "—" : new Intl.NumberFormat("zh-CN").format(count)}{count !== undefined && <span> 笔</span>}</strong></div>
+      <div className="bill-report-balance"><span>收支结余</span><strong className={balanceTone}>{formatBillMoney(noAvailableData ? undefined : balance, true)}</strong><p>收入 − 支出 · 不是账户可用余额</p></div>
+      <div className="bill-report-count"><span><ReceiptText size={15} aria-hidden="true" /> 总交易笔数</span><strong>{noAvailableData || count === undefined ? "—" : new Intl.NumberFormat("zh-CN").format(count)}{!noAvailableData && count !== undefined && <span> 笔</span>}</strong></div>
     </div>
-    {count === 0 && <p className="bill-report-empty">{monthly.length > 0 && visibleMonths.length === 0 ? "所选时间尚未到来" : isRange ? "所选期间暂无交易记录" : "本月暂无交易记录"}</p>}
+    {count === 0 && !noAvailableData && <p className="bill-report-empty">{monthly.length > 0 && monthly.every(item => item.status === "future") ? "所选时间尚未到来" : isRange ? "所选期间暂无交易记录" : "本月暂无交易记录"}</p>}
     {insights && <div className="bill-report-insights"><h4>支出变化解读<span>{insightScope}</span></h4>{comparisonAvailable && insightChange !== undefined ? <><p className={insightChange > 0 ? "up" : insightChange < 0 ? "down" : "neutral"}>支出{insightChange > 0 ? "增加" : insightChange < 0 ? "减少" : "持平"} {formatBillMoney(Math.abs(insightChange))}{insightRate !== undefined ? `（${insightRate > 0 ? "+" : ""}${(insightRate / 100).toFixed(1)}%）` : ""}</p>{insightCategories.length > 0 && <ul>{insightCategories.map(item => <li key={String(item.category)}><span>{String(item.category)}</span><strong className={Number(item.changeFen) > 0 ? "up" : "down"}>{Number(item.changeFen) > 0 ? "+" : "−"}{formatBillMoney(Math.abs(Number(item.changeFen)))}</strong></li>)}</ul>}</> : <p className="neutral">{comparisonMonth ? `${formatBillPeriod(comparisonMonth, undefined)}暂无可用记录，暂不判断涨跌。` : "上一时间段暂无可用记录，暂不判断涨跌。"}</p>}<small>{typeof insights.note === "string" ? insights.note : "仅统计支出交易。"}</small></div>}
     {showMonthlyChart && <div className="bill-report-chart"><h4>每月支出对比<span>柱形高度以支出最高月份为基准</span></h4>{highestMonth && averageExpense !== undefined && <p className="bill-report-chart-summary">最高：{billMonthLabel(highestMonth.month, spansYears)} {formatBillMoney(highestMonth.totalExpenseFen)} · 月均：{formatBillMoney(averageExpense)}{trend ? ` · ${trend}` : ""}</p>}<ul aria-label="每月支出条形图">{monthly.map(item => {
       const height = item.totalExpenseFen === 0 ? 3 : Math.max(8, Math.round((item.totalExpenseFen / maximumMonthlyExpense) * 100));

@@ -167,12 +167,14 @@ test('unknown execution never retries, retains ID and status query recovers orig
   intercept = async (body, run) => { const response = await run(); if (body.action === 'action.execute') throw new Error('lost response'); return response; };
   await act(async () => { await flow.confirmCardOperation(data); });
   assert.equal(flow.coreOperations[data.operationId], 'unknown');
-  assert.equal(flow.canStart, false); assert.equal(composer().props.disabled, true); assert.equal(loading(), false); assert.equal(flow.cardBusy, false);
+  assert.equal(flow.canStart, true); assert.equal(composer().props.disabled, false); assert.equal(loading(), false); assert.equal(flow.cardBusy, false);
   const count = calls.length;
-  await act(async () => { await flow.confirmCardOperation(data); await flow.startDemo('next'); flow.restart(); });
+  await act(async () => { await flow.confirmCardOperation(data); flow.restart(); });
   assert.equal(calls.length, count);
   assert.ok(root.root.findAllByType('button').some(node => node.children.includes('查询操作状态') && !node.props.disabled));
   intercept = null;
+  await start("card.get"); ready();
+  assert.equal(flow.coreOperations[data.operationId], "unknown");
   await act(async () => { await flow.checkCardOperation(data); });
   ready(); assert.equal(flow.coreOperations[data.operationId], 'success');
   assert.equal(calls.filter(action => action === 'action.execute').length, 1);
@@ -182,7 +184,7 @@ test('verification failure stays unknown even when read error has uncertain=fals
   await mount(); await start('card.freeze'); const data = preview();
   intercept = async (body, run) => { if (body.action === 'card.get') throw new Error('read unavailable'); return run(); };
   await act(async () => { await flow.confirmCardOperation(data); });
-  assert.equal(flow.coreOperations[data.operationId], 'unknown'); assert.equal(flow.cardBusy, false); assert.equal(flow.canStart, false);
+  assert.equal(flow.coreOperations[data.operationId], 'unknown'); assert.equal(flow.cardBusy, false); assert.equal(flow.canStart, true);
   intercept = null;
   await act(async () => { await flow.checkCardOperation(data); }); ready();
 });
@@ -238,7 +240,8 @@ test('pending status and failed status query retain unknown without resubmission
   await act(async () => { await flow.confirmCardOperation(data); });
   intercept = null;
   await act(async () => { await flow.checkCardOperation(data); });
-  assert.equal(flow.coreOperations[data.operationId], 'unknown'); assert.equal(flow.canStart, false);
+  assert.equal(flow.coreOperations[data.operationId], 'plan'); assert.equal(flow.canStart, true);
+  assert.equal(flow.activeCardOperationId, data.operationId);
   intercept = async () => { throw new Error('offline'); };
   await act(async () => { await flow.checkCardOperation(data); });
   assert.equal(flow.coreOperations[data.operationId], 'unknown'); assert.equal(flow.cardBusy, false);
@@ -251,7 +254,7 @@ test('unknown survives remount with query entry and no execution authority', asy
   await act(async () => { await flow.confirmCardOperation(data); });
   await act(async () => { root.unmount(); });
   await act(async () => { root = create(React.createElement(Home)); });
-  assert.equal(flow.coreOperations[data.operationId], 'unknown'); assert.equal(flow.canStart, false); assert.equal(flow.activeCardOperationId, null);
+  assert.equal(flow.coreOperations[data.operationId], 'unknown'); assert.equal(flow.canStart, true); assert.equal(flow.activeCardOperationId, null);
   await act(async () => { flow.setAccessCode(env.SAVEFLOW_ACCESS_CODE); });
   intercept = null;
   await act(async () => { await flow.checkCardOperation(data); }); ready();
@@ -276,7 +279,7 @@ test('transfer verification failure retains query entry and never re-executes', 
   await act(async () => { await flow.startDemo('transfer'); }); const data = preview();
   intercept = async (body, run) => { if (body.action === 'transaction.list') throw new Error('verification offline'); return run(); };
   await act(async () => { await flow.confirmTransferOperation(data); });
-  assert.equal(flow.coreOperations[data.operationId], 'unknown'); assert.equal(flow.transferBusy, false); assert.equal(flow.canStart, false);
+  assert.equal(flow.coreOperations[data.operationId], 'unknown'); assert.equal(flow.transferBusy, false); assert.equal(flow.canStart, true);
   await act(async () => { await flow.confirmTransferOperation(data); });
   intercept = null;
   await act(async () => { await flow.checkTransferOperation(data); }); ready();
@@ -298,7 +301,7 @@ test('legacy trial bridge network loss is uncertain; read-only status uses origi
     throw new Error('lost bridge response');
   };
   await act(async () => { await flow.confirmTransferOperation(data); });
-  assert.equal(flow.coreOperations[data.operationId], 'unknown'); assert.equal(flow.canStart, false);
+  assert.equal(flow.coreOperations[data.operationId], 'unknown'); assert.equal(flow.canStart, true);
   await act(async () => { await flow.confirmTransferOperation(data); });
   await act(async () => { await flow.checkTransferOperation(data); }); ready();
   assert.equal(flow.coreOperations[data.operationId], 'success');

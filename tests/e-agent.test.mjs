@@ -44,7 +44,10 @@ test('E agent: scenario change is previewed, cancellation writes nothing, confir
   const ruleId = payload.data.data.rule.id;
   const confirmed = await handleBankingAgent(request({ continuationToken: payload.data.continuationToken, message: '确认保存' }), { env, core, parseIntent: async () => parsed, scenarioHandler, now: () => 4001 });
   const confirmedPayload = await body(confirmed);
-  assert.equal(confirmedPayload.data.status, 'scenario_rule'); assert.equal((await core.getScenarioRule(ruleId)).status, 'active');
+  assert.equal(confirmedPayload.code, 'CONFIRMATION_REQUIRED'); assert.equal(await core.getScenarioRule(ruleId), undefined);
+  await core.decide(payload.data.operationId, { previewHash: payload.data.preview.previewHash, decision: 'confirm', confirmedStepIds: payload.data.preview.stepIds });
+  const receipt = await core.execute(payload.data.operationId, payload.data.preview.previewHash);
+  assert.equal(receipt.ok, true); assert.equal((await core.getScenarioRule(ruleId)).status, 'active');
   const replay = await handleBankingAgent(request({ continuationToken: payload.data.continuationToken, message: '确认保存' }), { env, core, parseIntent: async () => parsed, scenarioHandler, now: () => 4002 });
-  assert.equal((await body(replay)).data.data.rule.id, ruleId);
+  assert.equal((await body(replay)).code, 'CONFIRMATION_REQUIRED');
 });

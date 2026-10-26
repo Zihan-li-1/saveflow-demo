@@ -2,6 +2,7 @@ import { validateParsedIntent } from './validate-parsed-intent.mjs';
 import { localDate as calendarLocalDate } from '../lib/calendar.mjs';
 import { transferFromResolvedIntent } from '../banking-core/wire.mjs';
 import { handleCard } from './handlers/card-handler.mjs';
+import { agentErrorPolicy } from '../lib/agent-error-policy.mjs';
 import { buildBillInsights, previousMonth } from './bill-insights.mjs';
 
 function clarification(intent) {
@@ -22,6 +23,8 @@ export async function dispatchParsedIntent(value, dependencies) {
     if (intent.action === 'orchestrator.goal') return dependencies.goalHandler ? await dependencies.goalHandler(intent) : { ok: false, kind: 'unsupported' };
     return { ok: false, kind: 'unsupported' };
   } catch (error) {
+    if (agentErrorPolicy(error?.code).category !== 'internal') return { ok: false, kind: 'core_error', action: intent.action,
+      error: { code: error.code, message: typeof error.message === 'string' ? error.message : '当前请求未满足业务条件。', uncertain: error.uncertain === true } };
     return { ok: false, kind: 'skill_error', action: intent.action, error: { code: 'SKILL_ERROR', message: error instanceof Error && error.message.trim() ? error.message : 'Skill 处理失败，请稍后重试。' } };
   }
 }

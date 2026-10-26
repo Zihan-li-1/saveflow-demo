@@ -13,6 +13,8 @@ import { isTrialOperationId, isTrialPreview } from "./trial-preview.mjs";
 import { bankingChatKey, continuationLifetime, restoreBankingChat, saveBankingChat } from "./banking-chat-storage";
 import { transferFlow, bankingContinuationToken, updateBankingFlows, type BankingFlows } from "./banking-flow-state";
 
+import { agentErrorHint, agentErrorPolicy } from "./agent-error-policy.mjs";
+
 export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_savings_inputs" | "banking_savings_plan"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
 const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。可以查询模拟账单，或生成转账正式预览，例如：给张三转 500 元。" }];
 const pendingKey = "saveflow.pending-operation.v1";
@@ -33,6 +35,8 @@ export function useSaveflow() {
   const [consent, setConsent] = useState(false);
   const [operationId, setOperationId] = useState("");
   const [failure, setFailure] = useState<"analysis" | "plan">("analysis");
+  const [bankingFailure, setBankingFailure] = useState<ReturnType<typeof agentErrorPolicy> | null>(null);
+  const flowStartMessage = useRef("");
   const [validation, setValidation] = useState("");
   const [bankingContinuation, setBankingContinuation] = useState<string | null>(null);
   const [bankingFlows, setBankingFlows] = useState<BankingFlows>({});
@@ -49,13 +53,14 @@ export function useSaveflow() {
   const coreOperationsRef = useRef<Record<string, CoreOperationStage>>({});
   const submittedOperations = useRef(new Set<string>());
   const activePreviews = useRef<{ card: string | null; transfer: string | null }>({ card: null, transfer: null });
-  const coreBlocked = () => cardBusyRef.current || transferBusyRef.current || Object.values(coreOperationsRef.current).some(coreOperationBlocksInput);
-  const coreLocked = cardBusy || transferBusy || Object.values(coreOperations).some(coreOperationBlocksInput);
+  const coreBlocked = () => cardBusyRef.current || transferBusyRef.current || Object.values(coreOperationsRef.current).some(state => state !== "unknown" && coreOperationBlocksInput(state));
+  const coreLocked = cardBusy || transferBusy || Object.values(coreOperations).some(state => state !== "unknown" && coreOperationBlocksInput(state));
+  const hasUnresolvedWrite = () => Object.values(coreOperationsRef.current).some(coreOperationBlocksInput);
   const setCoreOperation = (id: string, state: CoreOperationStage) => {
     coreOperationsRef.current = { ...coreOperationsRef.current, [id]: state };
     setCoreOperations(coreOperationsRef.current);
     setMessages(current => current.map(message => message.banking?.operationId === id
-      ? { ...message, banking: { ...message.banking, coreStage: state } } : message));
+      ? { ...message, banking: { ...message.banking, coreStage: state, outcomePending: ["executing", "checking", "unknown"].includes(state) } } : message));
   };
   const lastBankingRequest = useRef<{ text: string; choice?: { optionId: string; label: string }; resumeFlowId?: string; savings?: { token: string; inputs: SavingsPlanInputs } } | null>(null);
   const active = useRef<AbortController | null>(null);
@@ -78,7 +83,7 @@ export function useSaveflow() {
         const recovered: Record<string, CoreOperationStage> = {};
         for (const message of saved.messages) {
           const data = message.banking;
-          if (data?.operationId && ["executing", "checking", "unknown"].includes(data.coreStage || "")) {
+          if (data?.operationId && (data.outcomePending === true || ["executing", "checking", "unknown"].includes(data.coreStage || ""))) {
             recovered[data.operationId] = "unknown";
             submittedOperations.current.add(data.operationId);
           }
@@ -133,10 +138,12 @@ export function useSaveflow() {
     if (resumeFlowId && (!resumed || resumed.expiresAt <= Date.now())) { setValidation("该预览续接已过期，请发起新转账。"); return; }
     const requestToken = savings?.token || resumed?.token || bankingContinuation || undefined;
     if (!send("START")) return;
+    setBankingFailure(null);
+    if (!requestToken && !choice && !savings) flowStartMessage.current = text;
     lastBankingRequest.current = { text, choice, resumeFlowId, savings };
     setValidation("");
     if (!choice) setInput("");
-    setMessages(current => current.filter(message => !["banking_preview", "banking_wealth_preview"].includes(message.kind || "")).map(message => message.kind === "banking_clarification" ? { ...message, banking: { ...message.banking!, choices: [] } } : message));
+    setMessages(current => current.map(message => message.kind === "banking_clarification" ? { ...message, banking: { ...message.banking!, choices: [] } } : message));
     activePreviews.current = { card: null, transfer: null };
     setActiveCardOperationId(null);
     setActiveTransferOperationId(null);
@@ -175,8 +182,9 @@ export function useSaveflow() {
         setBankingContinuation(null);
         addMessage({ role: "agent", kind: "banking_savings_plan", text: replyText, banking: answer });
       } else if (["subscription_result", "product_result", "wealth_recommendation", "wealth_comparison", "risk_assessment_required", "goal_plan", "scenario_rule_preview", "scenario_rule", "scenario_event_review"].includes(answer.status)) {
-        if (answer.status !== "scenario_rule_preview") setBankingContinuation(null);
-        addMessage({ role: "agent", kind: "banking_read", text: answer.status === "scenario_rule_preview" ? "规则变更预览已生成。请回复“确认保存”或“取消”。" : replyText, banking: answer });
+        setBankingContinuation(null);
+        if (answer.status === "scenario_rule_preview" && answer.operationId) { activePreviews.current.card = hasUnresolvedWrite() ? null : answer.operationId; setActiveCardOperationId(activePreviews.current.card); setCoreOperation(answer.operationId, "plan"); }
+        addMessage({ role: "agent", kind: "banking_read", text: answer.status === "scenario_rule_preview" ? "规则变更预览已生成。请核对后使用页面确认按钮，聊天文字不会执行操作。" : replyText, banking: answer });
       } else if (answer.status === "cancelled") {
         setBankingContinuation(null);
         addMessage({ role: "agent", text: answer.action?.startsWith("scenario.") ? "场景规则变更已取消，规则未修改。" : replyText });
@@ -186,25 +194,25 @@ export function useSaveflow() {
           addMessage({ role: "agent", kind: "banking_card_preview", text: replyText, banking: { ...answer, previewCurrent: true } });
         } else if (answer.action?.startsWith("card.")) {
           setBankingContinuation(null);
-          activePreviews.current.card = answer.operationId || null;
+          activePreviews.current.card = hasUnresolvedWrite() ? null : answer.operationId || null;
           if (answer.operationId) setCoreOperation(answer.operationId, "plan");
-          setActiveCardOperationId(answer.operationId || null);
+          setActiveCardOperationId(activePreviews.current.card);
           addMessage({ role: "agent", kind: "banking_card_preview", text: replyText, banking: answer });
         } else if (answer.action?.startsWith("wealth.")) {
           setBankingContinuation(null);
-          activePreviews.current.card = answer.operationId || null;
+          activePreviews.current.card = hasUnresolvedWrite() ? null : answer.operationId || null;
           if (answer.operationId) setCoreOperation(answer.operationId, "plan");
-          setActiveCardOperationId(answer.operationId || null);
+          setActiveCardOperationId(activePreviews.current.card);
           addMessage({ role: "agent", kind: "banking_wealth_preview", text: replyText, banking: answer });
         } else if (answer.action?.startsWith("transfer.") && !isTrialPreview(answer)) {
           setBankingContinuation(null);
-          activePreviews.current.transfer = answer.operationId || null;
+          activePreviews.current.transfer = hasUnresolvedWrite() ? null : answer.operationId || null;
           if (answer.operationId) setCoreOperation(answer.operationId, "plan");
-          setActiveTransferOperationId(answer.operationId || null);
+          setActiveTransferOperationId(activePreviews.current.transfer);
           addMessage({ role: "agent", kind: "banking_preview", text: replyText, banking: answer });
         } else {
-          activePreviews.current.transfer = answer.operationId || null;
-          setActiveTransferOperationId(answer.operationId || null);
+          activePreviews.current.transfer = hasUnresolvedWrite() ? null : answer.operationId || null;
+          setActiveTransferOperationId(activePreviews.current.transfer);
           if (answer.operationId) setCoreOperation(answer.operationId, "plan");
           addMessage({ role: "agent", kind: "banking_preview", text: replyText, banking: answer });
         }
@@ -212,12 +220,12 @@ export function useSaveflow() {
         addMessage({ role: "agent", text: replyText });
       } else {
         setFailure("analysis");
-        addMessage({ role: "agent", kind: "error", text: answer.error?.message || "Banking Agent 未返回可用结果。", errorHint: "本次请求未执行转账，可重试或修改请求。" });
+        addMessage({ role: "agent", kind: "error", text: "Banking Agent 未返回可用结果，请重新描述请求。", errorHint: "可以继续输入，无需清空聊天记录。" });
         send("FAILED");
       }
     } catch (error) {
       if (generation.current !== version) return;
-      if (error instanceof BankingAgentError) {
+      if (error instanceof BankingAgentError && error.recovery) {
         const recovery = error.recovery;
         continuationIssuedAt.current = Date.now();
         setBankingContinuation(recovery.continuationToken!);
@@ -226,9 +234,17 @@ export function useSaveflow() {
         addMessage({ role: "agent", kind: "banking_clarification", text: [recovery.reply?.text || error.message, ...(recovery.reply?.safetyNotices || [])].join("\n"), banking: recovery });
         send("CLARIFY"); return;
       }
-      const editableTrialError = requestToken?.startsWith("tfm1.") && error instanceof ApiError && ["PREVIEW_ONLY", "INVALID_AMOUNT", "INVALID_REQUEST", "INVALID_CHOICE", "CONTINUATION_ACTION_MISMATCH"].includes(error.code);
-      setFailure("analysis"); send(editableTrialError ? "ANSWER" : "FAILED");
-      addMessage({ role: "agent", kind: "error", text: error instanceof ApiError ? ["UNAUTHORIZED", "SERVICE_UNAVAILABLE"].includes(error.code) ? error.message : `${error.code}：${error.message}` : error instanceof Error ? error.message : "Banking Agent 请求失败", errorHint: "本次请求未执行资金或卡片操作，可重试或修改请求。" });
+      const policy = error instanceof BankingAgentError ? error.policy : agentErrorPolicy(error instanceof ApiError ? error.code : 'UNKNOWN_ERROR');
+      // A rule-confirmation turn can perform a write; never replay it after a lost response.
+      const previousAction = messages.findLast(m => m.banking?.continuationToken === requestToken)?.banking?.action;
+      const safePolicy = requestToken && previousAction?.startsWith('scenario.') && policy.retryable ? { ...policy, retryable: false, nextAction: 'restart_flow', context: 'clear' } : policy;
+      setBankingFailure(safePolicy);
+      if (safePolicy.context === 'clear') {
+        setBankingContinuation(null); setFocusedFlowId(null);
+        setBankingFlows(current => Object.fromEntries(Object.entries(current).filter(([id]) => id !== flowId)));
+      }
+      addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "Banking Agent 请求失败", errorHint: agentErrorHint(safePolicy) });
+      setFailure('analysis'); send('FAILED');
     } finally {
       // Only this live request may settle analyzing. A preview is an answer,
       // never evidence that a financial operation succeeded.
@@ -254,6 +270,14 @@ export function useSaveflow() {
       if (generation.current !== version) return;
       if (checked.status !== "succeeded" || checked.receipt?.receiptId !== receipt.receiptId) throw new ApiError("INVALID_RESPONSE", "理财回执无法核实，请查询原操作", true);
       addMessage({ role: "agent", text: `${receipt.message}；已核对操作回执。合成数据仅供演示。` });
+      return "success" as const;
+    }
+    if (data.action?.startsWith('scenario.')) {
+      const checked = await cardClient().request('action.status', { operationId: data.operationId! });
+      if (generation.current !== version) return;
+      const effect = receipt.effects[0];
+      if (checked.receipt?.receiptId !== receipt.receiptId || effect?.kind !== 'scenario_rule_change') throw new ApiError('INVALID_RESPONSE', '规则回执无法核实，请查询原操作');
+      addMessage({ role: 'agent', kind: 'banking_read', text: '已核对规则保存回执。规则只生成建议。', banking: { status: 'scenario_rule', action: data.action, data: { rule: effect.after } } });
       return "success" as const;
     }
     const effect = receipt.effects[0]?.kind === "card_change" ? receipt.effects[0] : undefined;
@@ -301,7 +325,7 @@ export function useSaveflow() {
     const trial = isTrialPreview(data);
     if (!id || (trial && (!isTrialOperationId(id) || kind !== "transfer" || mode === "reject"))) return;
     if (cardBusyRef.current || transferBusyRef.current || stageRef.current === "analyzing") return;
-    if (mode !== "check" && (coreBlocked() || activePreviews.current[kind] !== id || submittedOperations.current.has(id))) return;
+    if (mode !== "check" && (hasUnresolvedWrite() || coreBlocked() || activePreviews.current[kind] !== id || submittedOperations.current.has(id))) return;
     const previewHash = data.preview?.previewHash;
     const stepIds = data.preview?.stepIds;
     if (mode !== "check" && (typeof previewHash !== "string" || (!trial && (!Array.isArray(stepIds) || stepIds.some(step => typeof step !== "string"))))) return;
@@ -326,7 +350,12 @@ export function useSaveflow() {
           : await client.request("action.decide", { operationId: id, previewHash: previewHash as string, decision: "reject", confirmedStepIds: [] });
         if (!live()) return;
         if (!status.receipt) {
-          const awaiting = status.state === "awaiting_confirmation" && !submittedOperations.current.has(id);
+          const awaiting = mode === "check" && ["awaiting_confirmation", "confirmed"].includes(status.state);
+          if (awaiting) {
+            submittedOperations.current.delete(id);
+            activePreviews.current[kind] = id;
+            if (kind === "card") setActiveCardOperationId(id); else setActiveTransferOperationId(id);
+          }
           setCoreOperation(id, awaiting ? "plan" : "unknown");
           addMessage({ role: "agent", text: `操作 ${id} 状态：${status.state}，尚未取得最终回执。请查询操作状态，勿重复提交。` });
           return;
@@ -439,6 +468,8 @@ export function useSaveflow() {
   const cancelPlan = () => { if (send("CANCEL")) { setValidation(""); addMessage({ role: "agent", text: "本次计划已取消，未提交执行。" }); } };
   const restart = () => {
     if (coreBlocked() || !send("RESET")) return;
+    if (hasUnresolvedWrite()) { setInput(""); setBankingContinuation(null); setFocusedFlowId(null); setBankingFlows({}); setBankingFailure(null); setValidation("原操作结果待核实，已保留聊天记录和查询入口；可以继续其他查询。"); return; }
+    setBankingFailure(null);
     targetDeadline.current = null;
     generation.current++; active.current?.abort(); setMessages(initialMessages); setInput("");
     coreOperationsRef.current = {}; setCoreOperations({});
@@ -470,6 +501,12 @@ export function useSaveflow() {
       void startBanking(message);
     }
   };
-  return { stage, coreOperations, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, submitSavingsInputs, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId, lastBankingRequest.current.savings) : startDemo(goal.current), canStart: !coreLocked && canTransition(stage, "START"), canReset: !coreLocked && canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
+  const restartBankingFlow = () => {
+    if (!canTransition(stageRef.current, 'START')) return;
+    setBankingContinuation(null); setFocusedFlowId(null); setBankingFlows({}); setBankingFailure(null);
+    setMessages(current => current.map(m => m.kind === 'banking_clarification' ? { ...m, banking: { ...m.banking!, choices: [] } } : m));
+    setInput(flowStartMessage.current); setValidation('请重新描述或修改这项业务后发送；聊天记录已保留。');
+  };
+  return { bankingFailure, restartBankingFlow, stage, coreOperations, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, submitSavingsInputs, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" ? bankingFailure?.retryable && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId, lastBankingRequest.current.savings) : undefined : startDemo(goal.current), canStart: !coreLocked && canTransition(stage, "START"), canReset: !coreLocked && canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
 }
 

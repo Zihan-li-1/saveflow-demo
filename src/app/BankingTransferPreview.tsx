@@ -18,7 +18,7 @@ export function BankingTransferPreview({ data, active, busy, onEdit, onConfirm, 
   const effect = (data?.preview?.exactEffects as Array<Record<string, unknown>> | undefined)?.[0] || {};
   const trial = isTrialPreview(data);
   const executed = data?.executed === true;
-  const disabled = !active || busy;
+  const disabled = !active || busy || data?.outcomePending === true;
   const payee = String(effect.payeeName || effect.payeeId || "");
   const yuan = Number(effect.amountFen || 0) / 100;
   const buildEditMessage = (kind: "amount" | "payee") => {
@@ -29,7 +29,7 @@ export function BankingTransferPreview({ data, active, busy, onEdit, onConfirm, 
       : `给${v}转${yuan}元`;
   };
   return <div className="banking-preview-card">
-    <div><b>正式转账预览</b><span>{executed ? "已完成 · 已扣款" : data?.coreStage && data.coreStage !== "plan" ? stageCopy[data.coreStage] : active ? trial ? "试点预览 · 待确认执行" : "等待用户核对" : "历史预览 · 已不可操作"}</span></div>
+    <div><b>正式转账预览</b><span>{data?.outcomePending ? "结果待核实 · 请先查询" : executed ? "已完成 · 已扣款" : data?.coreStage && data.coreStage !== "plan" ? stageCopy[data.coreStage] : active ? trial ? "试点预览 · 待确认执行" : "等待用户核对" : "历史预览 · 已不可操作"}</span></div>
     <strong>¥{(Number(effect.amountFen || 0) / 100).toFixed(2)}</strong>
     <p>{String(data?.preview?.summary || "")}</p>
     <p>{String(effect.accountName || effect.fromAccountId || "付款账户")} → {String(effect.payeeName || effect.payeeId || "收款人")}</p>
@@ -42,7 +42,8 @@ export function BankingTransferPreview({ data, active, busy, onEdit, onConfirm, 
       {trial
         ? <button type="button" className="text-button" disabled={disabled} onClick={() => data && onEdit(data, "取消")}>取消</button>
         : <>{active && <button type="button" className="secondary-button" disabled={busy} onClick={() => data && onReject(data)}>取消本次转账</button>}
-          <button type="button" className="secondary-button" disabled={busy} onClick={() => data && onCheck(data)}>查询转账状态</button></>}
+          </>}
+      <button type="button" className="secondary-button" disabled={busy} onClick={() => data && onCheck(data)}>查询转账状态</button>
       <button type="button" className="primary-button" disabled={disabled} onClick={() => data && onConfirm(data)}>{busy ? "执行中…" : "确认转账"}</button>
     </div>}
     {!executed && editing && active && <form className="transfer-preview-edit" onSubmit={event => {
