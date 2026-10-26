@@ -4,6 +4,7 @@ import { transferFromResolvedIntent } from '../banking-core/wire.mjs';
 import { handleCard } from './handlers/card-handler.mjs';
 import { agentErrorPolicy } from '../lib/agent-error-policy.mjs';
 import { buildBillInsights, previousMonth } from './bill-insights.mjs';
+import { summarizeBills } from '../skills/bill/bill-summary.mjs';
 
 function clarification(intent) {
   return { ok: false, kind: 'needs_clarification', action: intent.action, source: 'parser', ...(intent.missingSlots.length ? { missingSlots: [...intent.missingSlots] } : {}) };
@@ -64,18 +65,10 @@ export async function handleBillSummary(intent, repository) {
   const period = intent.slots.period;
   if (!month && !period) throw new Error('bill.summary requires a resolved time period before dispatch');
   const localDate = occurredAt => calendarLocalDate(occurredAt, period?.timezone ?? 'Asia/Shanghai');
-  const summarize = items => items.reduce((result, transaction) => {
-    if (transaction.type === 'income') result.totalIncomeFen += transaction.amountFen;
-    if (transaction.type === 'expense') {
-      result.totalExpenseFen += transaction.amountFen;
-      result.categoryTotals[transaction.category] = (result.categoryTotals[transaction.category] ?? 0) + transaction.amountFen;
-    }
-    return result;
-  }, { totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: items.length, categoryTotals: {} });
   const transactions = month
     ? await repository.getTransactions({ month })
     : await repository.getTransactions({ startDate: period.start_date, endDate: period.end_date, timezone: period.timezone });
-  const summary = summarize(transactions);
+  const summary = summarizeBills(transactions);
   const context = await repository.getContextInfo();
   const asOfDate = localDate(context.asOf);
   const startMonth = month ?? period.start_date.slice(0, 7);
@@ -97,7 +90,7 @@ export async function handleBillSummary(intent, repository) {
       const isPartialSelection = !!period && (period.start_date > monthStart || period.end_date < monthEnd);
       return !(context.availableMonths ?? []).includes(value) ? 'unavailable' : monthStart > asOfDate ? 'future' : monthEnd >= asOfDate || isPartialSelection ? 'partial' : 'complete';
     })(),
-    ...summarize(transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(value))),
+    ...summarizeBills(transactions.filter(transaction => localDate(transaction.occurredAt).startsWith(value))),
   }));
   const comparableMonths = monthlyBreakdown.filter(item => item.status === 'complete');
   const latestComparable = comparableMonths.at(-1)?.month;
