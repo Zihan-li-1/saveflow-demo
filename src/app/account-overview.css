@@ -19,3 +19,29 @@
 .expense-voucher-row { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; color: #8e9aa6; }
 .expense-voucher-row b { color: #586675; font-weight: 500; text-align: right; }
 .expense-voucher small { display: block; color: #a0a9b3; font-size: 9px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #eef1f4; }
+.card-management { flex: 1; min-width: 0; background: #fff; padding: 32px 6%; overflow: auto; }
+.card-management-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+.card-management-header .eyebrow { color: #acb4bd; font-size: 9px; letter-spacing: .11em; }
+.card-management-header h2 { color: #33404d; font-size: 20px; margin: 5px 0 0; }
+.card-management-note { color: #7c8997; font-size: 11px; line-height: 1.7; margin: 0 0 18px; }
+.managed-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.managed-card { border: 1px solid #dce7f5; border-radius: 14px; padding: 18px; background: linear-gradient(145deg, #fbfdff, #f3f7fd); box-shadow: 0 10px 30px rgba(47, 110, 199, .06); }
+.managed-card.is-frozen { background: #f6f7f9; border-color: #e0e4e8; }
+.managed-card-title { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.managed-card-title small { color: #9ba8b5; font-size: 9px; }
+.managed-card-title h3 { color: #2d4054; margin: 4px 0 0; font-size: 16px; }
+.managed-card-title > span { color: #2f6ec7; background: #e8f1ff; border-radius: 99px; padding: 5px 9px; font-size: 9px; }
+.managed-card.is-frozen .managed-card-title > span { color: #7c8792; background: #e9ecef; }
+.managed-card-budget { margin-top: 22px; }
+.managed-card-budget > span, .managed-card-budget > small { display: block; color: #8d99a5; font-size: 10px; }
+.managed-card-budget strong { display: block; color: #263a4d; font-size: 28px; margin: 5px 0; }
+.managed-card-progress { height: 5px; background: #e5ebf2; border-radius: 99px; overflow: hidden; margin-top: 14px; }
+.managed-card-progress span { display: block; height: 100%; background: #3978df; border-radius: inherit; }
+.managed-card > p { color: #718092; font-size: 10px; margin: 7px 0 16px; }
+.managed-card > p.over-budget { color: #c66d45; }
+.managed-card dl { border-top: 1px solid #e4eaf1; margin: 0; padding-top: 12px; }
+.managed-card dl div { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0; font-size: 10px; }
+.managed-card dt { color: #929eaa; }
+.managed-card dd { color: #4e5f70; margin: 0; text-align: right; }
+.managed-card-version { color: #a0aab5; display: block; font-size: 9px; margin-top: 14px; }
+@media (max-width: 900px) { .managed-card-grid { grid-template-columns: 1fr; } }

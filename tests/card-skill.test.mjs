@@ -65,6 +65,14 @@ test('transaction controls map to a confirmation-required Core request', async (
   assert.throws(() => validateCardIntent({ action: 'card.set_controls', slots: { card_ref: '娱乐虚拟卡', alert_amount: { amount_minor: 0, currency: 'CNY' } } }), /大于 0 分/);
 });
 
+test('budget balance reminder maps amount and percentage to distinct Core fields', async () => {
+  const amount = await runResolvedCardIntent(repository(), resolved('card.set_controls', 'CARD-ENT', { balance_reminder_amount: { amount_minor: 20000, currency: 'CNY' } }));
+  assert.deepEqual(amount.data.request.input, { cardId: 'CARD-ENT', balanceReminderAmountFen: 20000 });
+  const percentage = await runResolvedCardIntent(repository(), resolved('card.set_controls', 'CARD-ENT', { balance_reminder_percentage: 20 }));
+  assert.deepEqual(percentage.data.request.input, { cardId: 'CARD-ENT', balanceReminderPercent: 20 });
+  assert.throws(() => validateCardIntent({ action: 'card.set_controls', slots: { card_ref: '娱乐虚拟卡', balance_reminder_percentage: 0 } }), /1 到 100/);
+});
+
 test('raw schema blocks padded service IDs and keeps the money object closed', () => {
   const schema = JSON.parse(readFileSync(new URL('../schemas/card-actions.schema.json', import.meta.url), 'utf8'));
   const serviceIdPattern = new RegExp(schema.$defs.cardRef.allOf[1].not.pattern);

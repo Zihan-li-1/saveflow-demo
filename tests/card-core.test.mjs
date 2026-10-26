@@ -73,6 +73,20 @@ test('card Core: security controls change only after explicit confirmation and e
   assert.equal(final.alertThresholdFen, 50000);
 });
 
+test('card Core: budget balance reminder supports amount or percentage and replaces the previous kind', async () => {
+  const core = createBankingCore();
+  const amount = value(await core.prepare({ action: 'card.set_controls', input: { cardId: 'CARD-ENT', balanceReminderAmountFen: 20000 } }));
+  assert.equal(amount.preview.exactEffects[0].after.balanceReminderAmountFen, 20000);
+  assert.equal(amount.preview.exactEffects[0].after.balanceReminderPercent, null);
+  value(await confirm(core, amount)); value(await execute(core, amount));
+  const percent = value(await core.prepare({ action: 'card.set_controls', input: { cardId: 'CARD-ENT', balanceReminderPercent: 20 } }));
+  assert.equal(percent.preview.exactEffects[0].after.balanceReminderAmountFen, null);
+  assert.equal(percent.preview.exactEffects[0].after.balanceReminderPercent, 20);
+  value(await confirm(core, percent)); value(await execute(core, percent));
+  assert.equal(core.repository.getCard('CARD-ENT').balanceReminderPercent, 20);
+  assert.equal((await core.prepare({ action: 'card.set_controls', input: { cardId: 'CARD-ENT', balanceReminderPercent: 101 } })).error.code, 'VALIDATION_ERROR');
+});
+
 test('card Core: expiry and newer preview invalidate old confirmation server-side', async () => {
   let time = 1000;
   const core = createBankingCore({ now: () => time, policy: { previewTtlMs: 1000 } });

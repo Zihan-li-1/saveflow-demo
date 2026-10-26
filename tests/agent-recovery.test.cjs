@@ -255,6 +255,8 @@ test('unknown write survives restart and bounded history/refresh with query cont
   const pending = restored.messages.find(m => m.banking?.operationId === preview.operationId);
   assert.equal(pending.banking.outcomePending, true); assert.equal(pending.banking.previewCurrent, false);
   assert.equal(restored.continuation, null);
+  const legacy = messages.map(m => m.banking?.operationId === preview.operationId ? { ...m, banking: { ...m.banking, outcomePending: undefined, coreStage: 'unknown' } } : m);
+  assert.ok(restoreBankingChat(saveBankingChat(legacy, null, 1000, 2000), 2000000)?.messages.some(m => m.banking?.operationId === preview.operationId));
 });
 
 test('rule save uses dedicated page confirmation, and a lost response recovers by querying the same operation', async t => {

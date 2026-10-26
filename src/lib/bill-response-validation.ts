@@ -15,12 +15,33 @@ const totals = (value: RecordValue) => {
 };
 const totalKeys = ['totalIncomeFen', 'totalExpenseFen', 'transactionCount', 'categoryTotals'];
 
+function validInsights(value: unknown, bill: RecordValue, entityIds: string[]): boolean {
+  if (!record(value) || !keys(value, ['comparisonPeriod', 'currentExpenseFen', 'comparisonExpenseFen', 'changeFen', 'changeRateBps', 'categoryChanges', 'largestExpenses', 'comparisonAvailable', 'note']) ||
+      !record(value.comparisonPeriod) || !keys(value.comparisonPeriod, ['month']) || !month(value.comparisonPeriod.month) ||
+      !nonnegative(value.currentExpenseFen) || !nonnegative(value.comparisonExpenseFen) || !Number.isSafeInteger(value.changeFen) ||
+      value.changeFen !== value.currentExpenseFen - value.comparisonExpenseFen || typeof value.comparisonAvailable !== 'boolean' ||
+      (!value.comparisonAvailable && value.comparisonExpenseFen !== 0) || typeof value.note !== 'string') return false;
+  const current = Array.isArray(bill.monthlyBreakdown) ? bill.monthlyBreakdown.findLast(row => row.status === 'complete') ?? bill : bill;
+  if (value.currentExpenseFen !== current.totalExpenseFen ||
+      value.changeRateBps !== (value.comparisonExpenseFen === 0 ? null : Math.round((Number(value.changeFen) * 10000) / value.comparisonExpenseFen)) ||
+      (value.changeRateBps !== null && !Number.isSafeInteger(value.changeRateBps))) return false;
+  if (!Array.isArray(value.categoryChanges) || value.categoryChanges.length > 3 || new Set(value.categoryChanges.map(row => record(row) ? row.category : null)).size !== value.categoryChanges.length ||
+      value.categoryChanges.some(row => !record(row) || !keys(row, ['category', 'currentAmountFen', 'comparisonAmountFen', 'changeFen']) || typeof row.category !== 'string' || !row.category.trim() ||
+        !nonnegative(row.currentAmountFen) || !nonnegative(row.comparisonAmountFen) || !Number.isSafeInteger(row.changeFen) || row.changeFen !== row.currentAmountFen - row.comparisonAmountFen ||
+        row.currentAmountFen !== ((current.categoryTotals as RecordValue)[row.category] ?? 0) || row.comparisonAmountFen > Number(value.comparisonExpenseFen))) return false;
+  return Array.isArray(value.largestExpenses) && value.largestExpenses.length <= 3 &&
+    new Set(value.largestExpenses.map(row => record(row) ? row.transactionId : null)).size === value.largestExpenses.length &&
+    value.largestExpenses.every(row => record(row) && keys(row, ['transactionId', 'merchant', 'category', 'amountFen', 'occurredAt']) &&
+      typeof row.transactionId === 'string' && entityIds.includes(row.transactionId) && typeof row.merchant === 'string' && typeof row.category === 'string' &&
+      nonnegative(row.amountFen) && row.amountFen <= Number(value.currentExpenseFen) && timestamp(row.occurredAt));
+}
+
 /** Validate untrusted bill data before presentation. Diagnostics contain fixed schema paths only. */
 export function billResponseFailure(data: RecordValue): ResponseFailure | undefined {
   const fail = (reason: ResponseFailure['reason'], path: string): ResponseFailure => ({ reason, path });
   if (data.action !== 'bill.summary' || !keys(data, ['status', 'action', 'data', 'evidence']) || !record(data.data)) return fail('INVALID_REPLY_ENVELOPE', 'data');
   const bill = data.data;
-  if (!keys(bill, [...totalKeys, 'month', 'period', 'monthlyBreakdown', 'coverage'])) return fail('INVALID_BILL_TOTALS', 'data.data');
+  if (!keys(bill, [...totalKeys, 'month', 'period', 'monthlyBreakdown', 'coverage', 'insights'])) return fail('INVALID_BILL_TOTALS', 'data.data');
   if (('month' in bill) === ('period' in bill)) return fail('INVALID_BILL_PERIOD', 'data.data.period');
   let startMonth: string, endMonth: string;
   if ('month' in bill) {
@@ -70,4 +91,5 @@ export function billResponseFailure(data: RecordValue): ResponseFailure | undefi
   if (!record(e) || !keys(e, ['source', 'asOf', 'entityIds']) || e.source !== 'synthetic_demo_only' || !timestamp(e.asOf) ||
       !Array.isArray(e.entityIds) || e.entityIds.length !== bill.transactionCount || e.entityIds.some(id => typeof id !== 'string' || !id.trim()) ||
       new Set(e.entityIds).size !== e.entityIds.length || (record(bill.coverage) && bill.coverage.asOf !== e.asOf)) return fail('INVALID_EVIDENCE', 'data.evidence[0]');
+  if ('insights' in bill && !validInsights(bill.insights, bill, e.entityIds)) return fail('INVALID_BILL_TOTALS', 'data.data.insights');
 }

@@ -29,7 +29,13 @@ export async function handleSubscriptionList(
   const asOfDate = context.asOf.slice(0, 10);
   const enriched = subscriptions.map(subscription => {
     const inactivityDays = calendarDays(subscription.lastUsedDate, asOfDate);
-    return { ...subscription, ...(inactivityDays === undefined ? {} : { inactivityDays }), unusedReason: explain(subscription, inactivityDays) };
+    const confidence = subscription.status !== "active" || !subscription.isPotentiallyUnused ? "not_flagged" : inactivityDays !== undefined && inactivityDays >= 90 ? "high" : "medium";
+    const recognitionSignals = [
+      subscription.isPotentiallyUnused ? "数据源标记为可能闲置" : "数据源未标记为闲置",
+      inactivityDays === undefined ? "最近使用时间无法换算" : `距最近使用 ${inactivityDays} 天`,
+      subscription.status === "active" ? "订阅仍在生效并按月计费" : "订阅已取消",
+    ];
+    return { ...subscription, ...(inactivityDays === undefined ? {} : { inactivityDays }), unusedReason: explain(subscription, inactivityDays), recognition: { confidence, signals: recognitionSignals } };
   });
   const active = subscriptions.filter(item => item.status === "active");
   const potentiallyUnused = active.filter(item => item.isPotentiallyUnused);
@@ -48,7 +54,7 @@ export async function handleSubscriptionList(
         potentiallyUnusedMonthlyFeeFen,
         potentialAnnualSavingsFen: potentiallyUnusedMonthlyFeeFen * 12,
       },
-      methodology: { usesRepositoryFlag: true, historicalSubscriptionState: false, savingsEstimateMonths: 12 },
+      methodology: { usesRepositoryFlag: true, usesLastUsedDate: true, highConfidenceInactivityDays: 90, historicalSubscriptionState: false, savingsEstimateMonths: 12, limitation: "闲置判断是规则提示，不等同于已核实的商户使用记录；取消前请由用户确认。" },
     },
     evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: subscriptions.map(item => item.id) }],
   };

@@ -1,5 +1,6 @@
 "use client";
 
+import { stageCopy } from "@/lib/flow-machine";
 import type { BankingAgentData } from "@/lib/banking-agent-client";
 import { isTrialPreview } from "@/lib/trial-preview.mjs";
 
@@ -7,9 +8,12 @@ const yuan = (fen: unknown) => `¥${(Number(fen) / 100).toFixed(2)}`;
 const cardStatus = (status: unknown) => status === "frozen" ? "已冻结" : "正常";
 
 export function BankingCardResult({ data }: { data?: BankingAgentData }) {
-  const card = data?.data?.card as { name: string; status: string; monthlyBudgetFen: number; monthlySpentFen: number; onlinePaymentsEnabled?: boolean; blockedCategories?: string[]; alertThresholdFen?: number | null; version: number } | undefined;
+  const card = data?.data?.card as { name: string; status: string; monthlyBudgetFen: number; monthlySpentFen: number; onlinePaymentsEnabled?: boolean; blockedCategories?: string[]; alertThresholdFen?: number | null; balanceReminderAmountFen?: number | null; balanceReminderPercent?: number | null; version: number } | undefined;
   if (!card) return null;
   const overBudgetFen = Math.max(0, card.monthlySpentFen - card.monthlyBudgetFen);
+  const remainingFen = Math.max(0, card.monthlyBudgetFen - card.monthlySpentFen);
+  const reminderThresholdFen = card.balanceReminderAmountFen ?? (card.balanceReminderPercent == null ? null : Math.floor(card.monthlyBudgetFen * card.balanceReminderPercent / 100));
+  const balanceAlert = remainingFen === 0 ? "预算余额已用完，请留意后续消费。" : reminderThresholdFen != null && remainingFen <= reminderThresholdFen ? `预算余额已到达提醒临界点，当前还剩 ${yuan(remainingFen)}。` : null;
   return <div className="banking-result-card">
     <b>{card.name}</b>
     <span>状态：{cardStatus(card.status)}</span>
@@ -19,6 +23,8 @@ export function BankingCardResult({ data }: { data?: BankingAgentData }) {
     <span>线上支付：{card.onlinePaymentsEnabled === false ? "已关闭" : "已开启"}</span>
     <span>已禁止的消费类别：{card.blockedCategories?.length ? card.blockedCategories.join("、") : "无"}</span>
     <span>单笔消费提醒：{card.alertThresholdFen == null ? "未设置" : `${yuan(card.alertThresholdFen)} 及以上提醒`}</span>
+    <span>预算余额提醒：{card.balanceReminderAmountFen != null ? `剩余 ${yuan(card.balanceReminderAmountFen)} 时提醒` : card.balanceReminderPercent != null ? `剩余预算的 ${card.balanceReminderPercent}% 时提醒` : "未设置（余额用完仍会提醒）"}</span>
+    {balanceAlert && <strong role="alert">{balanceAlert}</strong>}
     {data?.action === "card.security_review" && <div className="banking-notice">
       <b>安全事件处理建议（不会自动操作卡片）</b>
       {Array.isArray(data.data?.guidance) && data.data.guidance.map((item: unknown, index: number) => <span key={index}>{index + 1}. {String(item)}</span>)}
@@ -28,16 +34,16 @@ export function BankingCardResult({ data }: { data?: BankingAgentData }) {
   </div>;
 }
 
-type Effect = { kind: string; action: string; cardId: string; cardName: string; cardVersion: number; before: { status: string; monthlyBudgetFen: number; onlinePaymentsEnabled?: boolean; blockedCategories?: string[]; alertThresholdFen?: number | null }; after: { status: string; monthlyBudgetFen: number; onlinePaymentsEnabled?: boolean; blockedCategories?: string[]; alertThresholdFen?: number | null } };
+type Effect = { kind: string; action: string; cardId: string; cardName: string; cardVersion: number; before: { status: string; monthlyBudgetFen: number; onlinePaymentsEnabled?: boolean; blockedCategories?: string[]; alertThresholdFen?: number | null; balanceReminderAmountFen?: number | null; balanceReminderPercent?: number | null }; after: { status: string; monthlyBudgetFen: number; onlinePaymentsEnabled?: boolean; blockedCategories?: string[]; alertThresholdFen?: number | null; balanceReminderAmountFen?: number | null; balanceReminderPercent?: number | null } };
 export function BankingCardPreview({ data, active, busy, onConfirm, onReject, onCheck }: { data?: BankingAgentData; active: boolean; busy: boolean; onConfirm: (data: BankingAgentData) => void; onReject: (data: BankingAgentData) => void; onCheck: (data: BankingAgentData) => void }) {
   const preview = data?.preview;
   const effect = (preview?.exactEffects as Effect[] | undefined)?.[0];
   if (!data || !effect || !preview) return null;
   const trial = isTrialPreview(data);
   const operation = data.action === "card.set_budget" ? "设置月消费预算" : data.action === "card.set_controls" ? "修改交易权限与消费提醒" : data.action === "card.freeze" ? "冻结卡片" : "解冻卡片";
-  const change = data.action === "card.set_budget" ? `${yuan(effect.before.monthlyBudgetFen)} → ${yuan(effect.after.monthlyBudgetFen)}` : data.action === "card.set_controls" ? `线上支付：${effect.after.onlinePaymentsEnabled ? "开启" : "关闭"}；禁用类别：${effect.after.blockedCategories?.length ? effect.after.blockedCategories.join("、") : "无"}；单笔提醒：${effect.after.alertThresholdFen == null ? "关闭" : yuan(effect.after.alertThresholdFen)}` : `${cardStatus(effect.before.status)} → ${cardStatus(effect.after.status)}`;
+  const change = data.action === "card.set_budget" ? `${yuan(effect.before.monthlyBudgetFen)} → ${yuan(effect.after.monthlyBudgetFen)}` : data.action === "card.set_controls" ? `线上支付：${effect.after.onlinePaymentsEnabled ? "开启" : "关闭"}；禁用类别：${effect.after.blockedCategories?.length ? effect.after.blockedCategories.join("、") : "无"}；单笔提醒：${effect.after.alertThresholdFen == null ? "关闭" : yuan(effect.after.alertThresholdFen)}；余额提醒：${effect.after.balanceReminderAmountFen != null ? `剩余 ${yuan(effect.after.balanceReminderAmountFen)}` : effect.after.balanceReminderPercent != null ? `剩余 ${effect.after.balanceReminderPercent}%` : "关闭"}` : `${cardStatus(effect.before.status)} → ${cardStatus(effect.after.status)}`;
   return <div className="banking-preview-card card-action-preview">
-    <div><b>卡片操作预览</b><span>{data.outcomePending ? "结果待核实 · 请先查询" : trial ? data.previewCurrent === false ? "旧预览 · 已替换" : "仅供预览 · 尚未执行" : active ? "等待确认" : "历史预览"}</span></div>
+    <div><b>卡片操作预览</b><span>{data.outcomePending ? "结果待核实 · 请先查询" : trial ? data.previewCurrent === false ? "旧预览 · 已替换" : "仅供预览 · 尚未执行" : data.coreStage && data.coreStage !== "plan" ? stageCopy[data.coreStage] : active ? "等待确认" : "已失效"}</span></div>
     <strong>{effect.cardName}</strong>
     <p>操作：{operation}</p>
     <p>变更前后：{change}</p>

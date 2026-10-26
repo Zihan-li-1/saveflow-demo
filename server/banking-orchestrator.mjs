@@ -9,6 +9,10 @@ import { createWealthSkill } from '../src/skills/wealth/wealth-skill.mjs';
 import { handleWealth } from '../src/agent/handlers/wealth-handler.mjs';
 import { createInMemoryScenarioStore, createScenarioSkill } from '../src/skills/scenario/scenario-skill.mjs';
 import { agentErrorPolicy } from '../src/lib/agent-error-policy.mjs';
+import { calculateSavingsGoal, validatePlanInputs, validateSavedAmount } from '../src/agent/savings-plan.mjs';
+import { requestSavingsAdvice, verifySavingsAdvice } from './savings-advisor.mjs';
+import { understandingContext } from './understanding-context.mjs';
+import { collectSavingsData } from './savings-data.mjs';
 
 const scenarioStores = new Map();
 function scenarioStoreFor(scope) {
@@ -33,7 +37,7 @@ export function statusFor(code) {
   if (code === 'LIMIT_EXCEEDED') return 422;
   if (code === 'MODEL_TIMEOUT') return 504;
   if (code === 'MODEL_RATE_LIMIT') return 429;
-  if (['MODEL_AUTH_ERROR', 'MODEL_UPSTREAM_ERROR', 'MODEL_UNAVAILABLE', 'SKILL_ERROR'].includes(code)) return 502;
+  if (['MODEL_AUTH_ERROR', 'MODEL_UPSTREAM_ERROR', 'MODEL_UNAVAILABLE', 'SKILL_ERROR', 'ADVICE_REVIEW_FAILED'].includes(code)) return 502;
   if (['ACCESS_NOT_CONFIGURED', 'MODEL_NOT_CONFIGURED', 'MODEL_CONFIG_ERROR', 'CONTINUATION_CONFIG_ERROR'].includes(code)) return 503;
   return 400;
 }
@@ -76,8 +80,8 @@ function tokenError(error) {
   return Object.assign(new Error(error instanceof Error ? error.message : '续接凭据无效'), { code: 'CONTINUATION_INVALID', status: 400 });
 }
 
-function issueState({ action, slots, pendingSlot, question, choices = [], selections = {}, operation, env, now }) {
-  return issueContinuationToken({ action, slots, pendingSlot, question, choices, selections, operation }, continuationSecret(env), now());
+function issueState({ action, slots, pendingSlot, question, choices = [], selections = {}, operation, recentSource, recentSnapshotId, env, now }) {
+  return issueContinuationToken({ action, slots, pendingSlot, question, choices, selections, operation, recentSource, recentSnapshotId }, continuationSecret(env), now(), pendingSlot === '__plan_inputs' ? 30 * 60_000 : 5 * 60_000);
 }
 
 async function accountChoices(repository) {
@@ -129,7 +133,7 @@ function nextMissingSlot(intent) {
 /** Shared clarification and preview workflow. The only Core capability used is prepare(). */
 export async function runBankingConversation(body, {
   core, repository = core.repository, env = process.env, now = Date.now, timezone = 'Asia/Shanghai',
-  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, requestId = crypto.randomUUID(), origin = 'user_requested', scenarioHandler, scenarioScope = 'fixed_mock_user',
+  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, requestId = crypto.randomUUID(), origin = 'user_requested', scenarioHandler, scenarioScope = 'fixed_mock_user', savingsAdvisor = requestSavingsAdvice,
 }) {
   let replyContext = {};
   const reply = (httpStatus, code, message, data) => ({ httpStatus, code, message, data, replyContext });
@@ -152,14 +156,15 @@ export async function runBankingConversation(body, {
     throw Object.assign(new Error('续接令牌密钥未配置'), { code: 'CONTINUATION_CONFIG_ERROR', status: 503 });
   }
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw inputError('INVALID_REQUEST', '请求体必须是对象', 400);
-  const allowed = ['message', 'history', 'consent', 'continuationToken', 'choice', 'replyStyle'];
+  const allowed = ['message', 'history', 'consent', 'continuationToken', 'choice', 'replyStyle', 'planInputs'];
   if (Object.keys(body).some(key => !allowed.includes(key))) throw inputError('INVALID_REQUEST', '请求包含未注册字段', 400);
   const continuing = body.continuationToken !== undefined;
+  if (body.planInputs !== undefined && (!continuing || body.message !== undefined || body.choice !== undefined)) throw inputError('INVALID_REQUEST', '储蓄数据只能随目标续接单独提交', 400);
   if (body.choice !== undefined && (!continuing || body.message !== undefined)) throw inputError('INVALID_REQUEST', 'choice 必须与 continuationToken 一起提交，且不能同时提交 message', 400);
   if (continuing && (typeof body.continuationToken !== 'string' || body.continuationToken.length > 10000)) throw inputError('CONTINUATION_INVALID', '续接凭据无效', 400);
   if (!continuing && !initialIntent && (typeof body.message !== 'string' || !body.message.trim() || body.message.length > 2000)) throw inputError('INVALID_REQUEST', 'message 必须是 1-2000 字符的文本', 400);
   if (continuing && body.message !== undefined && (typeof body.message !== 'string' || body.message.length > 2000)) throw inputError('INVALID_REQUEST', 'message 格式无效', 400);
-  if (continuing && body.message === undefined && (!body.choice || typeof body.choice !== 'object')) throw inputError('INVALID_REQUEST', '续接请求需要 message 或 choice', 400);
+  if (continuing && body.message === undefined && body.planInputs === undefined && (!body.choice || typeof body.choice !== 'object')) throw inputError('INVALID_REQUEST', '续接请求需要 message、choice 或 planInputs', 400);
   if (body.choice !== undefined && (!body.choice || typeof body.choice !== 'object' || Array.isArray(body.choice) || typeof body.choice.optionId !== 'string' || !body.choice.optionId.trim() || Object.keys(body.choice).some(key => key !== 'optionId'))) throw inputError('INVALID_REQUEST', 'choice 只能包含非空 optionId', 400);
   if (body.consent !== undefined && body.consent !== true) throw inputError('INVALID_REQUEST', 'consent 必须明确为 true', 400);
   const history = body.history ?? [];
@@ -199,6 +204,27 @@ export async function runBankingConversation(body, {
     if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:确认|确认转账|确认执行|执行|同意)[。！!]?\s*$/.test(body.message.trim())) throw inputError('CONFIRMATION_REQUIRED', '聊天文字不能确认执行，请在页面核对预览并完成所需确认与验证。', 403);
     if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:取消|取消操作|取消本次操作|不用了)[。！!]?\s*$/.test(body.message.trim())) return reply(200, 'OK', '本次会话已取消，未执行资金或卡片操作。', { status: 'cancelled', action: continuation.action });
     if (expectedAction && continuation.action !== expectedAction) throw Object.assign(new Error('续接凭据与当前工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
+    if (body.planInputs !== undefined) {
+      if (continuation.action !== 'orchestrator.goal' || continuation.pendingSlot !== '__plan_inputs' || !continuation.slots.amount || !continuation.slots.deadline) throw inputError('CONTINUATION_INVALID', '储蓄数据与当前目标不匹配', 400);
+      const currentDate = understandingContext({ now, timezone }).currentDate;
+      const financial = await collectSavingsData(repository, currentDate);
+      if (continuation.recentSource !== financial.recentSource ||
+        continuation.recentSnapshotId !== (financial.context.snapshotId || financial.context.asOf || '')) throw inputError('SOURCE_CHANGED', '账单数据已更新，请重新发起目标请求。', 409);
+      if (!financial.categories.length) throw inputError('CAPABILITY_UNAVAILABLE', '没有可用的分类账单数据', 503);
+      const normalized = financial.recent
+        ? { savedAmountMinor: validateSavedAmount(body.planInputs), incomeMinor: financial.recent.income_minor, categoryExpensesMinor: financial.recent.category_expenses_minor }
+        : validatePlanInputs(body.planInputs, { currentDate, categories: financial.categories });
+      const calculation = calculateSavingsGoal({ targetAmountMinor: continuation.slots.amount.amount_minor, deadline: continuation.slots.deadline, ...normalized, currentDate });
+      const recent = financial.recent || { month: normalized.month, income_minor: normalized.incomeMinor, category_expenses_minor: normalized.categoryExpensesMinor };
+      const facts = { recent, history: financial.history, sources: financial.sources, required_monthly_minor: calculation.required_monthly_minor };
+      const candidate = await savingsAdvisor(facts, { env, fetchImpl });
+      const advice = verifySavingsAdvice(candidate, facts);
+      const generic = await handleGoal({ slots: continuation.slots }, repository);
+      return reply(200, 'OK', '储蓄计划已核算', { status: 'goal_plan', action: 'orchestrator.goal', data: {
+        ...generic.data, verification_status: 'verified', recent_month: recent.month, recent, recent_source: financial.recentSource,
+        calculation, advice, execution_allowed: false,
+      }, evidence: [...generic.evidence, { source: financial.recentSource === 'repository' ? financial.context.dataSource : 'user_provided', asOf: financial.sources.recent_as_of, entityIds: [] }] });
+    }
     if (continuation.pendingSlot === '__scenario_confirmation') {
       if (!continuation.operation) throw inputError('CONTINUATION_INVALID', '规则操作续接信息无效', 400);
       const answer = String(body.message || '').trim();
@@ -245,6 +271,16 @@ export async function runBankingConversation(body, {
   replyContext = { slots: parsed.slots };
   if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
   if (!continuing && parsed.choice) throw inputError('INVALID_CHOICE', '当前请求没有可选择的候选项', 400);
+  if (parsed.action === 'orchestrator.goal' && (parsed.slots.amount || parsed.slots.deadline)) {
+    for (const slot of ['amount', 'deadline']) if (!parsed.slots[slot]) return clarificationResponse(reply, { action: parsed.action, slot, question: questionFor(parsed.action, slot, body.message, parsed.slots), slots: parsed.slots, env, now });
+    const currentDate = understandingContext({ now, timezone }).currentDate;
+    const nextFullMonthStart = new Date(Date.UTC(Number(currentDate.slice(0, 4)), Number(currentDate.slice(5, 7)), 1)).toISOString().slice(0, 10);
+    if (parsed.slots.deadline < nextFullMonthStart) throw inputError('DEADLINE_TOO_SOON', '截止日前没有可安排的完整月，请延长目标期限。', 400);
+    const financial = await collectSavingsData(repository, currentDate);
+    if (!financial.categories.length) throw inputError('CAPABILITY_UNAVAILABLE', '没有可用的分类账单数据', 503);
+    const continuationToken = issueState({ action: parsed.action, slots: parsed.slots, pendingSlot: '__plan_inputs', recentSource: financial.recentSource, recentSnapshotId: financial.context.snapshotId || financial.context.asOf || '', env, now });
+    return reply(200, 'NEEDS_PLAN_INPUTS', financial.recent ? '请补充本目标已存金额' : '请补充近期分类收支和本目标已存金额', { status: 'needs_plan_inputs', action: parsed.action, goal: { target_amount_minor: parsed.slots.amount.amount_minor, deadline: parsed.slots.deadline }, requiredMonth: financial.requiredMonth, categories: financial.categories, recentSource: financial.recentSource, ...(financial.recent ? { recent: financial.recent } : {}), continuationToken });
+  }
   if (parsed.action === 'subscription.list') {
     const result = await handleSubscriptionList(parsed, repository);
     return reply(200, 'OK', '订阅分析已生成。', { status: 'subscription_result', action: result.action, data: result.data, evidence: result.evidence });
@@ -379,3 +415,4 @@ export async function runBankingConversation(body, {
     throw error;
   }
 }
+

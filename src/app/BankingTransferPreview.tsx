@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { stageCopy } from "@/lib/flow-machine";
 import type { BankingAgentData } from "@/lib/banking-agent-client";
 import { isTrialPreview } from "@/lib/trial-preview.mjs";
 
@@ -28,7 +29,7 @@ export function BankingTransferPreview({ data, active, busy, onEdit, onConfirm, 
       : `给${v}转${yuan}元`;
   };
   return <div className="banking-preview-card">
-    <div><b>正式转账预览</b><span>{data?.outcomePending ? "结果待核实 · 请先查询" : executed ? "已完成 · 已扣款" : active ? trial ? "试点预览 · 待确认执行" : "等待用户核对" : "历史预览 · 已不可操作"}</span></div>
+    <div><b>正式转账预览</b><span>{data?.outcomePending ? "结果待核实 · 请先查询" : executed ? "已完成 · 已扣款" : data?.coreStage && data.coreStage !== "plan" ? stageCopy[data.coreStage] : active ? trial ? "试点预览 · 待确认执行" : "等待用户核对" : "历史预览 · 已不可操作"}</span></div>
     <strong>¥{(Number(effect.amountFen || 0) / 100).toFixed(2)}</strong>
     <p>{String(data?.preview?.summary || "")}</p>
     <p>{String(effect.accountName || effect.fromAccountId || "付款账户")} → {String(effect.payeeName || effect.payeeId || "收款人")}</p>

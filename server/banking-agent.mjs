@@ -118,7 +118,7 @@ export async function handleBankingAgent(
     const core = options.core ?? await getConfiguredBankingCore(env);
     const repository = options.repository ?? core.repository;
     const scenarioScope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
-    const result = await runBankingConversation(body, { core, repository, env, now, timezone: options.timezone ?? 'Asia/Shanghai', parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope });
+    const result = await runBankingConversation(body, { core, repository, env, now, timezone: options.timezone ?? 'Asia/Shanghai', parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope, savingsAdvisor: options.savingsAdvisor });
     const data = result.data?.recovery ? { ...result.data, recovery: { ...result.data.recovery, continuationToken: result.data.recovery.continuationToken ?? result.data.continuationToken } } : result.data;
     return reply(result.httpStatus, result.code, result.message, data, result.replyContext);
   } catch (error) {
@@ -127,3 +127,4 @@ export async function handleBankingAgent(
     return reply(Number.isInteger(error?.status) ? error.status : code === 'DATABASE_NOT_CONFIGURED' ? 503 : statusFor(code), code, message, errorData(code, message));
   }
 }
+

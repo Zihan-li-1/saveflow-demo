@@ -75,7 +75,12 @@ test('single month, relative month, year to date, last year and cross-year bills
     const { payload, queries, turns } = await backend(slots, message);
     assert.equal(turns[0].userMessage, message);
     assert.equal(turns[0].context, undefined);
-    assert.deepEqual(queries, [slots.month ? { month: slots.month } : { startDate: slots.period.start_date, endDate: slots.period.end_date, timezone: slots.period.timezone }]);
+    const expectedFilter = slots.month ? { month: slots.month } : { startDate: slots.period.start_date, endDate: slots.period.end_date, timezone: slots.period.timezone };
+    assert.deepEqual(queries[0], expectedFilter);
+    if (slots.month) {
+      const { previousMonth } = await import('../src/agent/bill-insights.mjs');
+      assert.deepEqual(queries, [expectedFilter, { month: previousMonth(slots.month) }]);
+    } else assert.deepEqual(queries, [expectedFilter]);
     const text = render(await client(payload));
     assert.ok(text.includes(expected), `${message}: ${expected}`);
     if (message === '查看2026年8月账单') {
@@ -114,6 +119,8 @@ test('rejects unknown states, money, category mismatches, malformed statistics a
     ['INVALID_BILL_TOTALS', p => { p.data.data.monthlyBreakdown[0].categoryTotals = {}; }],
     ['INVALID_BILL_TOTALS', p => { p.data.data.totalIncomeFen += 100; }],
     ['INVALID_BILL_TOTALS', p => { p.data.data.transactionCount++; }],
+    ['INVALID_BILL_TOTALS', p => { p.data.data.insights.changeFen += 1; }],
+    ['INVALID_BILL_TOTALS', p => { p.data.data.insights.largestExpenses[0].transactionId = 'untrusted-transaction'; }],
     ['INVALID_BILL_TOTALS', p => { p.data.data.accountId = 'do-not-log-account'; }],
     ['INVALID_BILL_TOTALS', p => { p.data.data.monthlyBreakdown = [null]; }],
     ['INVALID_BILL_PERIOD', p => { p.data.data.monthlyBreakdown.reverse(); }],

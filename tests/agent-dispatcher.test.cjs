@@ -92,6 +92,10 @@ test('subscription analysis explains the flag and estimates monthly and annual s
   assert.equal(result.kind, 'subscription_result');
   assert.deepEqual(result.data.summary, { activeCount: 2, activeMonthlyFeeFen: 6000, potentiallyUnusedCount: 1, potentiallyUnusedMonthlyFeeFen: 3000, potentialAnnualSavingsFen: 36000 });
   assert.equal(result.data.methodology.historicalSubscriptionState, false);
+  assert.equal(result.data.methodology.usesLastUsedDate, true);
+  assert.equal(result.data.methodology.highConfidenceInactivityDays, 90);
+  assert.equal(['high', 'medium'].includes(result.data.subscriptions.find(item => item.isPotentiallyUnused).recognition.confidence), true);
+  assert.equal(result.data.subscriptions.every(item => item.recognition.signals.length === 3), true);
   assert.match(result.data.subscriptions.find(item => item.isPotentiallyUnused).unusedReason, /可能闲置.*未使用.*仍每月扣费/);
 });
 
@@ -125,6 +129,10 @@ test('real bill handler reads the shared repository and reflects changed transac
   assert.equal(second.data.totalExpenseFen, first.data.totalExpenseFen + 100);
   assert.equal(second.data.categoryTotals['餐饮'], first.data.categoryTotals['餐饮'] + 100);
   assert.ok(second.evidence[0].entityIds.includes('TXN-EXTRA-202608'));
+  assert.equal(second.data.insights.currentExpenseFen, second.data.totalExpenseFen);
+  assert.equal(second.data.insights.comparisonPeriod.month, '2026-07');
+  assert.equal(second.data.insights.comparisonAvailable, true);
+  assert.equal(second.data.insights.comparisonExpenseFen, 718000);
 });
 
 test('range bill includes every calendar month for monthly comparison', async () => {
