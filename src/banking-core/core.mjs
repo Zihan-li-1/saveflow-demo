@@ -96,8 +96,8 @@ export function createBankingCore(options = {}) {
   const wealthPorts = options.wealthPorts ?? (options.repository || options.store ? undefined : createWealthMockPorts({ getHoldings: context.getWealthHoldings, now }));
   const policy = Object.freeze({ version: 'mock-transfer-v1', maxTransferFen: 10000000, previewTtlMs: 300000, largeTransferFen: 100000, ...options.policy });
   assertFen(policy.maxTransferFen); assertFen(policy.previewTtlMs); assertFen(policy.largeTransferFen);
-  /** 受控测试渠道：把明文验证码交给演示投递方（默认打印到服务端控制台），绝不写进风险响应。 */
-  const deliverVerificationCode = options.deliverVerificationCode ?? (({ operationId, code, expiresAt }) => console.warn(`[SaveFlow Demo] 转账验证码 operationId=${operationId}: ${code}（有效期至 ${expiresAt}）`));
+  /** 受控测试渠道：把明文验证码交给演示投递方。默认不投递——演示验证码固定为 DEMO_OTP_CODE（不在界面上明文展示，演示时口头告知）；真实接入短信/邮件渠道时注入 options.deliverVerificationCode。明文绝不写进风险响应或日志。 */
+  const deliverVerificationCode = options.deliverVerificationCode ?? (() => {});
   /** @type {import('./contracts').AuditEvent[]} */
   const audit = [];
   /** @type {Map<string, Promise<import('./contracts').ActionResult<import('./contracts').ActionReceipt>>>} */
