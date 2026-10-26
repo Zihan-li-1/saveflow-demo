@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- CJS test exercises the ESM HTTP entry. */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createBankingCore } = require('../src/banking-core/core.mjs');
+const { createLowBalanceCore: createBankingCore } = require('./fixtures/low-balance-core.mjs');
 const { handleBankingAgent } = require('../server/banking-agent.mjs');
 
 const env = { SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen', SAVEFLOW_ACCESS_CODE: 'test-access-code-1234', CONTINUATION_TOKEN_SECRET: 'test-continuation-secret-1234' };

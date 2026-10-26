@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import seed from '../src/data/saveflow_mock_data.json' with { type: 'json' };
-import { createBankingCore } from '../src/banking-core/core.mjs';
+import { createLowBalanceCore as createBankingCore } from './fixtures/low-balance-core.mjs';
 import { OperationStore } from '../src/banking-core/operation-store.mjs';
 import { getLegacyContext, getLegacyContextAsync, legacyRequest } from '../src/banking-core/legacy-adapter.mjs';
 import { createFinancialContext } from '../src/banking-core/repository.mjs';
@@ -51,7 +51,7 @@ test('B transfer lifecycle: prepare + confirm never debit; execute creates ledge
   assert.deepEqual(unwrap(await core.getOperation(p.operationId)).receipt, receipt);
   assert.deepEqual(core.getAuditEvents().map(e => e.state), ['preparing', 'risk_check', 'awaiting_confirmation', 'confirmed', 'executing', 'succeeded']);
   assert.equal(JSON.stringify(core.getAuditEvents()).includes('张三'), false);
-  assert.equal(seed.accounts[0].availableBalance, 5000);
+  assert.equal(seed.accounts[0].availableBalance, 30000);
 });
 
 test('B risk: insufficient balance and unknown entities produce standard errors, zero debit', async () => {
@@ -160,7 +160,7 @@ test('B user scoping: shared store does not reveal another owner operation', asy
   const b = createBankingCore({ store, source }); const p = await prepare(a); await confirm(a, p); unwrap(await execute(a, p));
   assert.equal(unwrap(await b.getOperation(p.operationId)).status, 'pending');
   assert.equal((await b.execute(p.operationId, p.preview.previewHash)).error.code, 'OPERATION_NOT_FOUND');
-  assert.equal(balance(b), 500000);
+  assert.equal(balance(b), source.accounts[0].availableBalance * 100);
 });
 
 test('B legacy context is computed from raw transactions, consistent with savings progress', async () => {

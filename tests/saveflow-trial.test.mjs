@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { createFinancialContext } from '../src/banking-core/repository.mjs';
 import { createBankingCore } from '../src/banking-core/core.mjs';
+import { lowBalanceSource } from './fixtures/low-balance-core.mjs';
 import { handleBankingAgent } from '../server/banking-agent.mjs';
 import { buildParsedIntent } from '../src/agent/clarification/merge-intent.mjs';
 import seed from '../src/data/saveflow_mock_data.json' with { type: 'json' };
@@ -32,7 +33,7 @@ const callTool = async (client, name, args = {}) => {
 };
 const env = { SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen', SAVEFLOW_ACCESS_CODE: 'trial-test-access-1234', CONTINUATION_TOKEN_SECRET: 'trial-test-continuation-secret' };
 
-async function withCoreClient(verify, { source = seed, now = () => 1000 } = {}) {
+async function withCoreClient(verify, { source = lowBalanceSource(), now = () => 1000 } = {}) {
   const core = createBankingCore({ source, now });
   const calls = { prepare: 0, decide: 0, execute: 0 };
   const wrapped = {

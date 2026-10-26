@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createBankingCore } from '../src/banking-core/core.mjs';
+import { createLowBalanceCore as createBankingCore } from './fixtures/low-balance-core.mjs';
 import { executeTrialTransfer, handleExecuteTrial } from '../server/transfer-execute-bridge.mjs';
 
 // 验证「执行桥」：TrueForge 试点预览（tfpreview:）→ 授权确认 → 执行 → 回执 → 扣款。
