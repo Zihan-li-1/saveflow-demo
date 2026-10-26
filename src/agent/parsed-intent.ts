@@ -17,6 +17,7 @@ export const PARSED_INTENT_ACTIONS = [
   "wealth.subscribe",
   "wealth.redeem",
   "scenario.create_rule",
+  "scenario.plan_purchase",
   "scenario.update_rule",
   "scenario.disable_rule",
   "scenario.review_event",
@@ -92,6 +93,13 @@ export type WealthSlots = {
 export type ParsedIntent = ParsedIntentBody & { choice?: { optionId: string } };
 
 type ParsedIntentBody =
+  | {
+      schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
+      action: "scenario.plan_purchase";
+      slots: Record<string, unknown>;
+      missingSlots: [];
+      status: "ready_for_resolution";
+    }
   | {
       schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
       action: "transfer.create";

@@ -281,6 +281,9 @@ export async function runBankingConversation(body, {
   replyContext = { slots: parsed.slots };
   if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
   if (!continuing && parsed.choice) throw inputError('INVALID_CHOICE', '当前请求没有可选择的候选项', 400);
+  if (parsed.action === 'scenario.plan_purchase') return reply(200, 'OK', '请在购物流程中补齐预算和日期，再选择问答搭配或商品自选。', {
+    status: 'purchase_request', action: parsed.action, data: { slots: parsed.slots, synthetic_demo_only: true },
+  });
   if (parsed.action === 'orchestrator.goal' && (parsed.slots.amount || parsed.slots.deadline)) {
     for (const slot of ['amount', 'deadline']) if (!parsed.slots[slot]) return clarificationResponse(reply, { action: parsed.action, slot, question: questionFor(parsed.action, slot, body.message, parsed.slots), slots: parsed.slots, env, now });
     const currentDate = understandingContext({ now, timezone }).currentDate;
