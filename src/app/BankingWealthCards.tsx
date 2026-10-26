@@ -15,6 +15,7 @@ const reasonText: Record<string, string> = {
   DISCLOSURE_UNAVAILABLE: "产品披露缺失或已过期",
   CAPITAL_NOT_GUARANTEED: "无法验证本金保障",
 };
+const MAX_DISPLAYED_PRODUCTS = 5;
 const ProductTerms = () => <div className="financial-term-help"><details><summary>风险等级 <span>点此了解</span></summary><p>它表示价格波动和亏损可能性。百分比仅用于帮助理解，不是实际产品的最大亏损承诺。</p></details><details><summary>流动性 <span>点此了解</span></summary><p>它表示需要用钱时，多久能把资金取出来；越快可取，使用越灵活。</p></details></div>;
 
 export function BankingWealthResult({ data }: { data?: BankingAgentData }) {
@@ -23,10 +24,13 @@ export function BankingWealthResult({ data }: { data?: BankingAgentData }) {
   const kind = String(result.kind);
   const products = (kind === "recommendation" ? result.matches : kind === "comparison" ? result.products : []) as Array<{ product_id?: string; name: string; risk_level: string; liquidity: string; expected_yield_bps: number; minimum_amount?: { amount_minor?: number }; duration_days?: number }>;
   const excluded = (Array.isArray(result.excluded) ? result.excluded : []) as Array<{ product_id: string; product_name?: string; reason_codes?: string[] }>;
+  const displayedProducts = products.slice(0, MAX_DISPLAYED_PRODUCTS);
+  const displayedExcluded = excluded.slice(0, Math.max(0, MAX_DISPLAYED_PRODUCTS - displayedProducts.length));
+  const hiddenProductCount = Math.max(0, products.length + excluded.length - displayedProducts.length - displayedExcluded.length);
   const questionnaire = result.questionnaire as { route?: string; source?: string } | undefined;
   return <div className="banking-result-card">
     <b>{kind === "recommendation" ? "模拟产品筛选" : kind === "comparison" ? "模拟产品对比" : kind === "risk_assessment" ? "模拟风险测评" : "风险测评入口"}</b>
-    {products?.map((product, index) => <article key={product.product_id || index}>
+    {displayedProducts.map((product, index) => <article key={product.product_id || index}>
       <h3>{product.name}</h3>
       <div className="financial-data-grid">
         <p><span>可能的波动</span><strong>{riskText(product.risk_level)}</strong></p>
@@ -36,10 +40,11 @@ export function BankingWealthResult({ data }: { data?: BankingAgentData }) {
         <p><span>建议持有时间</span><strong>{durationText(product.duration_days ?? 0)}</strong></p>
       </div>
     </article>)}
-    {kind === "recommendation" && excluded.length > 0 && <details><summary>查看未入选产品及原因（{excluded.length}）</summary>{excluded.map(item => <p key={item.product_id}><strong>{item.product_name || item.product_id}</strong>：{(item.reason_codes || []).map(code => reasonText[code] || code).join("；")}</p>)}</details>}
+    {kind === "recommendation" && displayedExcluded.length > 0 && <details><summary>查看未入选产品及原因（展示 {displayedExcluded.length} 个）</summary>{displayedExcluded.map(item => <p key={item.product_id}><strong>{item.product_name || item.product_id}</strong>：{(item.reason_codes || []).map(code => reasonText[code] || code).join("；")}</p>)}</details>}
+    {hiddenProductCount > 0 && <small>为便于查看，本次最多展示 5 个产品，另有 {hiddenProductCount} 个未展示。</small>}
     {kind === "risk_assessment" && <span>测评结果：{riskText(String((result.assessment as { risk_level?: string } | undefined)?.risk_level || ""))}</span>}
     {kind === "questionnaire_required" && <><span>需由用户本人在可信页面完成风险测评，模型不能代答。</span>{questionnaire?.route && <a className="primary-button" href={questionnaire.route}>打开风险测评</a>}</>}
-    {products?.length > 0 && <ProductTerms />}
+    {displayedProducts.length > 0 && <ProductTerms />}
     {typeof result.disclaimer === "string" && <small>{result.disclaimer}</small>}
     <small>合成数据演示 · 展示收益不保证 · 截至 {String(result.as_of || "未知")}</small>
   </div>;

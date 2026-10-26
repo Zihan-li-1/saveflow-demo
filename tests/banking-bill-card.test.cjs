@@ -14,6 +14,7 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { BankingBillCard } = require('../src/app/BankingBillCard.tsx');
 const { BankingReadCard } = require('../src/app/BankingReadCards.tsx');
+const { BankingWealthResult } = require('../src/app/BankingWealthCards.tsx');
 const { formatBillMoney, formatBillAsOf, billCategories } = require('../src/lib/bill-display.ts');
 const fixture = JSON.parse(readFileSync(require.resolve('./fixtures/banking-agent/bill-result.json'), 'utf8')).data;
 const render = data => renderToStaticMarkup(React.createElement(BankingBillCard, { data }));
@@ -32,6 +33,30 @@ test('理财产品卡片用通俗语言解释风险、取用时间和月度期�
   assert.equal(value.includes('R2'), false);
   assert.equal(value.includes('T+1'), false);
   assert.equal(value.includes('180 天'), false);
+});
+
+test('理财推荐中已选和未选产品合计最多展示五个', () => {
+  const product = index => ({ product_id: `selected-${index}`, name: `已选产品${index}`, risk_level: 'R2', liquidity: 'T+1', expected_yield_bps: 200, minimum_amount: { amount_minor: 10000 }, duration_days: 90 });
+  const excluded = index => ({ product_id: `excluded-${index}`, product_name: `未选产品${index}`, reason_codes: ['RISK_TOO_HIGH'] });
+  const html = renderToStaticMarkup(React.createElement(BankingWealthResult, { data: { data: {
+    kind: 'recommendation',
+    matches: [1, 2, 3].map(product),
+    excluded: [1, 2, 3, 4].map(excluded),
+    as_of: '2026-10-26T00:00:00+08:00',
+  } } }));
+  const value = text(html);
+  for (const expected of ['已选产品1', '已选产品2', '已选产品3', '未选产品1', '未选产品2']) assert.ok(value.includes(expected), expected);
+  for (const hidden of ['未选产品3', '未选产品4']) assert.equal(value.includes(hidden), false, hidden);
+  assert.ok(value.includes('本次最多展示 5 个产品，另有 2 个未展示'));
+  assert.equal((html.match(/<article/g) || []).length + (html.match(/<p><strong>未选产品/g) || []).length, 5);
+});
+
+test('理财产品对比同样最多展示五个', () => {
+  const products = Array.from({ length: 7 }, (_, index) => ({ product_id: `p-${index + 1}`, name: `对比产品${index + 1}`, risk_level: 'R2', liquidity: 'T+1', expected_yield_bps: 200, minimum_amount: { amount_minor: 10000 }, duration_days: 90 }));
+  const html = renderToStaticMarkup(React.createElement(BankingWealthResult, { data: { data: { kind: 'comparison', products, as_of: '2026-10-26T00:00:00+08:00' } } }));
+  assert.equal((html.match(/<article/g) || []).length, 5);
+  assert.equal(text(html).includes('对比产品6'), false);
+  assert.ok(text(html).includes('另有 2 个未展示'));
 });
 
 test('August card uses structured amounts, exact signed balance, all transaction count and Chinese provenance', () => {
