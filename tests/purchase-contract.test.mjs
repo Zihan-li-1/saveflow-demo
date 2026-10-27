@@ -14,8 +14,8 @@ const valid = {
   'commerce.order.status': { operation_ref: 'op_1' },
   'scenario.purchase.cancel': { workflow_ref: 'flow_1', expected_version: 1, plan_preview_ref: 'preview_1', plan_confirmation_token: 'token_1' },
 };
-test('all nine contracts accept valid inputs and return isolated copies', () => {
-  assert.equal(purchaseActions.length, 9);
+test('four public actions are listed while legacy mock inputs remain testable internally', () => {
+  assert.deepEqual(purchaseActions, ['scenario.plan_purchase', 'scenario.purchase.save', 'scenario.purchase.update', 'scenario.purchase.cancel']);
   for (const [action, input] of Object.entries(valid)) {
     const copy = validatePurchaseAction(action, input);
     assert.deepEqual(copy, input); assert.notEqual(copy, input);
@@ -54,4 +54,6 @@ test('time windows must be valid ordered timestamps; service validates future ag
 test('published JSON Schema matches runtime contract source', async () => {
   const schema = JSON.parse(await readFile(new URL('../schemas/purchase-actions.schema.json', import.meta.url), 'utf8'));
   assert.deepEqual(schema, purchaseJsonSchema());
+  const published = JSON.stringify(schema);
+  assert.doesNotMatch(published, /commerce\.|selected_candidate_refs|address_ref/);
 });

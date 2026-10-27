@@ -1,6 +1,6 @@
 # 购物联动动作契约：预算提醒与外部搜索链接
 
-状态：2026-10-27 用户确认的范围。本文取代 2026-10-24 设计中“Agent 调购物平台建单”的部分。旧设计和 `schemas/purchase-actions.schema.json` 保留为历史 Mock 实验资料；其中的 `commerce.*` **不是当前公开接口能力**。当前没有购物平台商户接口权限。
+状态：2026-10-27 用户确认的范围。本文取代 2026-10-24 设计中“Agent 调购物平台建单”的部分。`schemas/purchase-actions.schema.json` 只列当前公开的预算动作；旧 Mock Commerce 分支只留在内部验证器和测试中。当前没有购物平台商户接口权限。
 
 ## 当前用户流程
 
@@ -25,7 +25,7 @@
 | `purchase.cancel_preview` / `scenario.purchase.cancel` | 流程引用、版本，取消时加预览引用和凭据 | 释放预留，停止未来提醒 |
 | `purchase.session.backup` / `purchase.session.recover` | 空对象或恢复码 | 演示身份恢复；恢复码不得交给模型或放进链接 |
 
-公开 `/api/purchase` 需要访问码、用户同意及同源请求。`commerce.search`、`commerce.quote`、`commerce.order.prepare`、`commerce.order.execute`、`commerce.order.status` 和 `purchase.address` 返回 `CAPABILITY_UNAVAILABLE`；生产配置不连接 Commerce Mock。旧 Mock Skill、测试及 schema 留在仓库供历史实验使用，不能从生产公开接口建单。调用方不应把旧 schema 的 Commerce 分支注册成模型工具。
+公开 `/api/purchase` 需要访问码、用户同意及同源请求。`commerce.search`、`commerce.quote`、`commerce.order.prepare`、`commerce.order.execute`、`commerce.order.status` 和 `purchase.address` 返回 `CAPABILITY_UNAVAILABLE`；生产配置不连接 Commerce Mock。旧 Mock Skill 和测试留在仓库供历史实验使用，不能从生产公开接口建单。调用方只可从当前公开 schema 注册预算动作，其中仅 `scenario.plan_purchase` 是模型可解析的意图；预算确认仍须可信页面操作。
 
 ## 搜索链接与数据边界
 
