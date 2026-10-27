@@ -85,6 +85,29 @@ function continuationSecret(env) {
   return env.CONTINUATION_TOKEN_SECRET;
 }
 
+// Narrow compatibility path. Richer wording belongs to the V2 understanding layer;
+// these exact phrases only bridge existing clients to the same server control entry.
+function deterministicTaskControl(message) {
+  if (typeof message !== 'string') return null;
+  const text = message.trim();
+  if (/^(?:取消|取消操作|取消本次操作|取消转账|不用了)[。！!]?$/.test(text)) {
+    return { kind: 'task_control', control: { command: 'cancel', target: 'current' } };
+  }
+  if (/^(?:撤回上一步操作|撤销上一步操作)[。！!]?$/.test(text)) {
+    return { kind: 'task_control', control: { command: 'undo', target: 'previous' } };
+  }
+  return null;
+}
+
+function taskControlReply(reply, result) {
+  if (result.status === 'cancelled') return reply(200, 'OK', result.previewRejected ? '已取消当前任务并使未确认预览失效。' : '已取消当前未完成任务。', result);
+  if (result.status === 'needs_clarification') return reply(200, 'NEEDS_CLARIFICATION', '存在多个仍可处理的任务，请明确要操作哪一个。', result);
+  if (result.status === 'query_required') return reply(409, 'CONVERSATION_OPERATION_LOCKED', '原操作已确认、正在执行或状态待核实，不能直接撤回；请先查询实际状态。', result);
+  if (result.status === 'cannot_undo_completed') return reply(409, 'CONVERSATION_TASK_FINISHED', '原操作已经执行成功，不能通过聊天直接撤回金融交易。', result);
+  if (result.status === 'needs_continuation') return reply(409, 'CONTINUATION_INVALID', '该任务需要使用仍有效的续接凭据继续。', result);
+  return reply(200, 'NO_ACTIVE_TASK', '当前没有可操作的未完成任务。', result);
+}
+
 function tokenError(error) {
   return Object.assign(new Error(error instanceof Error ? error.message : '续接凭据无效'), { code: 'CONTINUATION_INVALID', status: 400 });
 }
@@ -214,13 +237,20 @@ export async function runBankingConversation(body, {
       error: { code, message }, ...(recovery ? { recovery } : {}) });
   };
   try {
+  const controlProposal = deterministicTaskControl(body.message);
+  if (!continuing && controlProposal && conversation) {
+    return taskControlReply(reply, await conversation.handleTaskControl(controlProposal));
+  }
   if (continuing) {
     try { continuation = verifyContinuationToken(body.continuationToken, continuationSecret(env), now()); }
     catch (error) { throw tokenError(error); }
     if (continuation.conversation && !conversation) throw Object.assign(new Error('HTTP task credential cannot cross adapters'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
     replyContext = { slots: continuation.slots };
     if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:确认|确认转账|确认执行|执行|同意)[。！!]?\s*$/.test(body.message.trim())) throw inputError('CONFIRMATION_REQUIRED', '聊天文字不能确认执行，请在页面核对预览并完成所需确认与验证。', 403);
-    if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:取消|取消操作|取消本次操作|不用了)[。！!]?\s*$/.test(body.message.trim())) return reply(200, 'OK', '本次会话已取消，未执行资金或卡片操作。', { status: 'cancelled', action: continuation.action });
+    if (continuation.pendingSlot !== '__scenario_confirmation' && controlProposal && conversation) {
+      return taskControlReply(reply, await conversation.handleTaskControl(controlProposal));
+    }
+    if (continuation.pendingSlot !== '__scenario_confirmation' && controlProposal) return reply(200, 'OK', '本次会话已取消，未执行资金或卡片操作。', { status: 'cancelled', action: continuation.action });
     if (expectedAction && continuation.action !== expectedAction) throw Object.assign(new Error('续接凭据与当前工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
     if (body.planInputs !== undefined) {
       if (continuation.action !== 'orchestrator.goal' || continuation.pendingSlot !== '__plan_inputs' || !continuation.slots.amount || !continuation.slots.deadline) throw inputError('CONTINUATION_INVALID', '储蓄数据与当前目标不匹配', 400);

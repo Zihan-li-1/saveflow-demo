@@ -4,6 +4,7 @@ import { verifyContinuationToken, issueContinuationToken } from '../src/agent/cl
 import { validateParsedIntent } from '../src/agent/validate-parsed-intent.mjs';
 import { buildParsedIntent } from '../src/agent/clarification/merge-intent.mjs';
 import { canonical } from '../src/banking-core/errors.mjs';
+import { buildTrustedTaskContext, handleAgentTaskControl } from './agent-task-control.mjs';
 
 const stores = new WeakMap();
 const active = task => task && ['ready', 'awaiting_input', 'awaiting_confirmation'].includes(task.status);
@@ -140,6 +141,35 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
       } else if (mode === 'continue' || mode === 'resume' || body.choice || body.planInputs || body.wealthInputs || body.taskId) {
         throw error('CONTINUATION_INVALID', '补充、选择或恢复任务需要有效的原任务续接凭据。', { status: 400 });
       }
+    },
+    /** Bounded model context derived only from server-owned state; never an authorization object. */
+    taskContextSummary() {
+      state = store.read(token);
+      return buildTrustedTaskContext(state);
+    },
+    /** V2-compatible control entry. Task identity and Core references never come from the proposal. */
+    async handleTaskControl(proposal) {
+      const result = await handleAgentTaskControl(proposal, {
+        readState: () => state,
+        transition: command => commit(command),
+        hasValidContinuation: task => !!continuation && continuation.conversation?.token === token &&
+          continuation.conversation.taskId === task.taskId && continuation.action === task.action &&
+          continuation.tokenId === task.latestContinuationId && continuation.expiresAt > now(),
+        rejectPreview: async reference => {
+          const decision = await core.decide(reference.operationId, {
+            previewHash: reference.previewHash,
+            decision: 'reject',
+            confirmedStepIds: [],
+          });
+          if (!decision.ok) throw error(decision.error.code, decision.error.message, {
+            operationId: reference.operationId,
+            action: reference.action,
+            uncertain: decision.error.uncertain === true,
+          });
+        },
+      });
+      accepted = true;
+      return result;
     },
     async acceptIntent(proposal, modelOptions) {
       let intent = proposal;

@@ -2,6 +2,22 @@ import type { ActionResult, ActionState, OperationStatus } from '../src/banking-
 import type { ParsedIntent } from '../src/agent/parsed-intent';
 
 export type TaskStatus = 'ready' | 'awaiting_input' | 'awaiting_confirmation' | 'suspended' | 'completed' | 'cancelled' | 'failed' | 'expired';
+export type TrustedTaskSummary = {
+  action: string;
+  status: TaskStatus;
+  pendingSlots: string[];
+  verifiedContext?: Record<string, unknown>;
+  operationStates?: ActionState[];
+};
+export type TrustedTaskContext = {
+  currentTask: TrustedTaskSummary | null;
+  previousTasks: TrustedTaskSummary[];
+  recentResults: Array<{ action: string; status: Extract<ActionState, 'succeeded' | 'failed' | 'cancelled'> }>;
+};
+export type TaskControlProposal = {
+  kind: 'task_control';
+  control: { command: 'cancel' | 'undo' | 'modify' | 'resume'; target: 'current' | 'previous' };
+};
 export type ConversationTask = {
   taskId: string;
   action: string;
