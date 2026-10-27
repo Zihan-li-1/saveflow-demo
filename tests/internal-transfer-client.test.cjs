@@ -12,6 +12,7 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { askBankingAgent } = require('../src/lib/banking-agent-client.ts');
 const { BankingInternalTransferPreview } = require('../src/app/BankingInternalTransferPreview.tsx');
+const { BankingTransferPreview } = require('../src/app/BankingTransferPreview.tsx');
 
 const validReply = { text: '本人账户互转已识别。', style: 'concise', safetyNotices: ['只读预览，不能执行。'] };
 const internalPreview = {
@@ -62,4 +63,24 @@ test('internal transfer preview card is read-only and labels available balance, 
   for (const text of ['本人账户互转预览', '只读预览', '不能执行', '模拟活期账户', '模拟储蓄账户', '¥100.00', '转出账户可用余额', '转入账户可用余额', '预计转出后', '预计转入后']) assert.ok(html.includes(text), `${text} missing in ${html}`);
   assert.ok(!html.includes('<button'), html); // 只读卡片不提供任何执行/确认入口
   assert.ok(!html.includes('确认'), html);
+});
+
+test('browser accepts a formal Core internal-transfer preview and renders the existing confirmation controls', async () => {
+  const effect = {
+    kind: 'transfer_internal', fromAccountId: 'ACC-CHECKING', accountName: '模拟活期账户',
+    toAccountId: 'ACC-SAVINGS', targetAccountName: '模拟储蓄账户', amountFen: 10000, currency: 'CNY',
+    sourceBalanceBeforeFen: 3000000, sourceBalanceAfterFen: 2990000, sourceAvailableBalanceAfterFen: 2990000, sourceAccountVersion: 0,
+    targetBalanceBeforeFen: 1000000, targetBalanceAfterFen: 1010000, targetAvailableBalanceAfterFen: 1010000, targetAccountVersion: 0, memo: '',
+  };
+  const data = { status: 'awaiting_confirmation', action: 'transfer.create', operationId: 'op_internal_preview', continuationToken: 'opaque-token',
+    preview: { previewHash: 'a'.repeat(64), summary: '本人账户互转', exactEffects: [effect] }, risk: { allowed: true, riskLevel: 'L3' } };
+  const original = global.fetch;
+  try {
+    global.fetch = async () => Response.json({ code: 'OK', requestId: 'req_internal_3', reply: validReply, data });
+    const accepted = await askBankingAgent({ message: '从活期转到储蓄' }, 'local-test-access-code', new AbortController().signal);
+    assert.equal(accepted.status, 'awaiting_confirmation');
+    const html = renderToStaticMarkup(React.createElement(BankingTransferPreview, { data: accepted, active: true, busy: false,
+      onEdit() {}, onConfirm() {}, onReject() {}, onCheck() {} }));
+    for (const text of ['模拟活期账户', '模拟储蓄账户', '转出账户余额', '转入账户余额', '确认转账']) assert.ok(html.includes(text), `${text} missing in ${html}`);
+  } finally { global.fetch = original; }
 });

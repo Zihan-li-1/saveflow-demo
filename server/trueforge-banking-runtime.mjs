@@ -113,7 +113,8 @@ export function validateIntentGrounding(intent, message, context) {
   // Dropped details must be explicitly marked for clarification. Period
   // components may be consumed into a validated month or range.
   for (const key of Object.keys(previous)) {
-    if (!(key in intent.slots) && !intent.missingSlots.includes(key) && !(['year', 'monthNumber', 'month', 'period'].includes(key) && (intent.slots.month || intent.slots.period))) throw new Error('Lost authenticated slot');
+    const signedTransferDraft = intent.action === 'transfer.create' && context?.action === 'transfer.create' && key !== context.pendingSlot;
+    if (!(key in intent.slots) && !intent.missingSlots.includes(key) && !signedTransferDraft && !(['year', 'monthNumber', 'month', 'period'].includes(key) && (intent.slots.month || intent.slots.period))) throw new Error('Lost authenticated slot');
   }
   const compact = s => String(s).replace(/\s+/g, '');
   for (const [slot, value] of Object.entries(intent.slots)) {

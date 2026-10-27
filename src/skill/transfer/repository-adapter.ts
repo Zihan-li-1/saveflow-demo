@@ -51,6 +51,19 @@ export function createTransferRepositoryAdapter(
       if (!account) return null;
       return { id: account.id, currency: account.currency, availableBalanceFen: account.availableBalanceFen };
     },
+    async queryOwnAccounts(reference: string, selectionKey = "target_account_ref") {
+      const selected = selections[selectionKey];
+      if (selected?.entityId) {
+        const account = await repository.getAccount(selected.entityId);
+        if (!account || account.status !== "active") return [];
+        return [{ id: account.id, name: account.name, currency: account.currency, availableBalanceFen: account.availableBalanceFen }];
+      }
+      const normalized = normalize(reference);
+      return (await repository.getAccounts()).filter(account => account.status === "active" && (
+        account.id === reference || account.name === reference || normalize(account.name) === normalized ||
+        (normalized === "活期" && account.type === "checking") || (normalized === "储蓄" && account.type === "saving")
+      )).map(account => ({ id: account.id, name: account.name, currency: account.currency, availableBalanceFen: account.availableBalanceFen }));
+    },
     async queryPayeesByName(name: string): Promise<Payee[]> {
       const query = name.trim();
       const selected = selections.payee_ref;

@@ -277,11 +277,16 @@ export async function createPostgresBankingCore({ connectionString, source = see
           throw new BankingError('INVALID_STATE', '原操作未处于已确认的执行状态', true);
         }
 
-        const [account] = await tx.unsafe(
-          'SELECT * FROM banking_accounts WHERE owner_id = $1 AND account_id = $2 FOR UPDATE',
-          [owner, effect.fromAccountId],
+        const internal = effect.kind === 'transfer_internal';
+        const accountIds = internal ? [effect.fromAccountId, effect.toAccountId].sort() : [effect.fromAccountId];
+        const lockedAccounts = await tx.unsafe(
+          'SELECT * FROM banking_accounts WHERE owner_id = $1 AND account_id = ANY($2::text[]) ORDER BY account_id FOR UPDATE',
+          [owner, accountIds],
         );
-        if (!account || Number(account.version) !== effect.accountVersion || Number(account.balance_fen) !== effect.balanceBeforeFen) throw new BankingError('PREVIEW_STALE', '账户已变化，请重新预览并确认');
+        const account = lockedAccounts.find(row => row.account_id === effect.fromAccountId);
+        const target = internal ? lockedAccounts.find(row => row.account_id === effect.toAccountId) : undefined;
+        if (!account || (internal ? Number(account.version) !== effect.sourceAccountVersion || Number(account.balance_fen) !== effect.sourceBalanceBeforeFen : Number(account.version) !== effect.accountVersion || Number(account.balance_fen) !== effect.balanceBeforeFen)) throw new BankingError('PREVIEW_STALE', '账户已变化，请重新预览并确认');
+        if (internal && (!target || target.account_id === account.account_id || target.status !== 'active' || Number(target.version) !== effect.targetAccountVersion || Number(target.balance_fen) !== effect.targetBalanceBeforeFen)) throw new BankingError('PREVIEW_STALE', '本人转入账户已变化，请重新预览并确认');
         assertFen(effect.amountFen);
         if (Number(account.available_balance_fen) < effect.amountFen) throw new BankingError('INSUFFICIENT_BALANCE', '可用余额不足');
 
@@ -292,6 +297,27 @@ export async function createPostgresBankingCore({ connectionString, source = see
           'UPDATE banking_accounts SET balance_fen = $3, available_balance_fen = $4, version = $5, updated_at = now() WHERE owner_id = $1 AND account_id = $2',
           [owner, effect.fromAccountId, balanceFen, availableBalanceFen, version],
         );
+        if (internal) {
+          const targetBalanceFen = Number(target.balance_fen) + effect.amountFen;
+          const targetAvailableBalanceFen = Number(target.available_balance_fen) + effect.amountFen;
+          if (!Number.isSafeInteger(targetBalanceFen) || !Number.isSafeInteger(targetAvailableBalanceFen)) throw new BankingError('LIMIT_EXCEEDED', '转入后账户金额超出安全范围');
+          await tx.unsafe(
+            'UPDATE banking_accounts SET balance_fen = $3, available_balance_fen = $4, version = version + 1, updated_at = now() WHERE owner_id = $1 AND account_id = $2',
+            [owner, effect.toAccountId, targetBalanceFen, targetAvailableBalanceFen],
+          );
+          const debit = { id: `txn_${record.operationId}_out`, operationId: record.operationId, accountId: effect.fromAccountId, counterpartyAccountId: effect.toAccountId, occurredAt: at, type: 'internal_transfer_out', category: '本人账户互转', merchant: effect.targetAccountName, amountFen: effect.amountFen, currency: 'CNY', status: 'posted', source: 'mock_execution' };
+          const credit = { id: `txn_${record.operationId}_in`, operationId: record.operationId, accountId: effect.toAccountId, counterpartyAccountId: effect.fromAccountId, occurredAt: at, type: 'internal_transfer_in', category: '本人账户互转', merchant: effect.accountName, amountFen: effect.amountFen, currency: 'CNY', status: 'posted', source: 'mock_execution' };
+          for (const transaction of [debit, credit]) await tx.unsafe(
+            `INSERT INTO banking_transactions (owner_id, transaction_id, account_id, operation_id, occurred_at, amount_fen, record)
+             VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
+            [owner, transaction.id, transaction.accountId, transaction.operationId, transaction.occurredAt, transaction.amountFen, tx.json(transaction)],
+          );
+          const receipt = makeReceipt([debit, credit]);
+          persisted.receipt = receipt;
+          persisted.state = 'succeeded';
+          await tx.unsafe('UPDATE banking_operations SET state = $3, record = $4::jsonb, updated_at = now() WHERE owner_id = $1 AND operation_id = $2', [owner, record.operationId, persisted.state, tx.json(persisted)]);
+          return structuredClone(receipt);
+        }
         const transaction = {
           id: `txn_${record.operationId}`, operationId: record.operationId, accountId: effect.fromAccountId,
           payeeId: effect.payeeId, occurredAt: at, type: 'transfer_out', category: '转账', merchant: effect.payeeName,

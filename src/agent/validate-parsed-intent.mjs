@@ -30,7 +30,7 @@ export const PARSED_INTENT_ACTIONS = Object.freeze([
 ]);
 
 const TOP_LEVEL_KEYS = ['schemaVersion', 'action', 'slots', 'missingSlots', 'status', 'choice'];
-const TRANSFER_SLOT_KEYS = ['payee_ref', 'amount', 'source_account_ref', 'target_account_ref'];
+const TRANSFER_SLOT_KEYS = ['payee_ref', 'amount', 'source_account_ref', 'target_account_ref', 'transfer_type'];
 const BILL_SLOT_KEYS = ['month', 'period', 'year', 'monthNumber'];
 const CARD_SLOT_KEYS = ['card_ref', 'amount'];
 const WEALTH_SLOTS = {
@@ -154,14 +154,17 @@ function validateTransfer(input, slots) {
   const internal = 'target_account_ref' in slots;
   const external = 'payee_ref' in slots;
   rejectUnknownKeys(slots, TRANSFER_SLOT_KEYS, 'slots');
+  if ('transfer_type' in slots && !['internal', 'external'].includes(slots.transfer_type)) fail('slots.transfer_type must be internal or external');
   if (internal && external) fail('slots must not contain both payee_ref and target_account_ref');
+  if ((slots.transfer_type === 'internal' && external) || (slots.transfer_type === 'external' && internal)) fail('transfer_type does not match the receiving party');
   if (external) requireRawReference(slots.payee_ref, 'slots.payee_ref');
   if (internal) requireRawReference(slots.target_account_ref, 'slots.target_account_ref');
   if ('amount' in slots) validateAmount(slots.amount);
   if ('source_account_ref' in slots) requireRawReference(slots.source_account_ref, 'slots.source_account_ref');
   // 对外转账用 payee_ref，本人账户互转用 target_account_ref；两者互斥。
-  const directionKey = internal ? 'target_account_ref' : 'payee_ref';
-  const missing = ['amount', 'source_account_ref', directionKey].filter((slot) => !(slot in slots));
+  const directionKey = internal || slots.transfer_type === 'internal' ? 'target_account_ref' : external || slots.transfer_type === 'external' ? 'payee_ref' : 'transfer_type';
+  const required = directionKey === 'transfer_type' ? ['transfer_type', 'amount', 'source_account_ref'] : ['amount', 'source_account_ref', directionKey];
+  const missing = required.filter((slot) => !(slot in slots));
   requireMissingSlots(input.missingSlots, missing);
   requireStatus(input.status, missing.length === 0 ? 'ready_for_resolution' : 'needs_clarification');
 }

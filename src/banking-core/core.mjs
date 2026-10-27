@@ -11,11 +11,16 @@ import { generateCode, createChallenge, verifyChallenge, VERIFICATION_TTL_MS, VE
 function validateTransfer(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new BankingError('VALIDATION_ERROR', '转账参数无效');
   const body = /** @type {Record<string, unknown>} */ (input);
-  if (Object.keys(body).some(k => !['fromAccountId', 'payeeId', 'amountFen', 'currency', 'memo'].includes(k))) throw new BankingError('VALIDATION_ERROR', '转账包含未注册字段');
-  assertId(body.fromAccountId, '付款账户'); assertId(body.payeeId, '收款人'); assertFen(body.amountFen);
+  if (Object.keys(body).some(k => !['fromAccountId', 'payeeId', 'toAccountId', 'amountFen', 'currency', 'memo'].includes(k))) throw new BankingError('VALIDATION_ERROR', '转账包含未注册字段');
+  assertId(body.fromAccountId, '付款账户');
+  if ((typeof body.payeeId === 'string') === (typeof body.toAccountId === 'string')) throw new BankingError('VALIDATION_ERROR', '必须且只能指定第三方收款人或本人转入账户');
+  if (typeof body.payeeId === 'string') assertId(body.payeeId, '收款人');
+  if (typeof body.toAccountId === 'string') assertId(body.toAccountId, '转入账户');
+  assertFen(body.amountFen);
+  if (body.amountFen <= 0) throw new BankingError('VALIDATION_ERROR', '转账金额必须大于 0');
   if (body.currency !== 'CNY') throw new BankingError('VALIDATION_ERROR', '当前 Mock 仅支持显式 CNY 币种');
   if (body.memo !== undefined && (typeof body.memo !== 'string' || body.memo.length > 140)) throw new BankingError('VALIDATION_ERROR', '备注最多 140 字');
-  return { fromAccountId: body.fromAccountId, payeeId: body.payeeId, amountFen: body.amountFen, currency: 'CNY', memo: /** @type {string} */ (body.memo ?? '') };
+  return { fromAccountId: body.fromAccountId, ...(typeof body.payeeId === 'string' ? { payeeId: body.payeeId } : { toAccountId: /** @type {string} */ (body.toAccountId) }), amountFen: body.amountFen, currency: 'CNY', memo: /** @type {string} */ (body.memo ?? '') };
 }
 
 const cardActions = new Set(['card.set_budget', 'card.set_controls', 'card.freeze', 'card.unfreeze']);
@@ -136,12 +141,25 @@ export function createBankingCore(options = {}) {
     const result = await guard(async () => {
       validateTransfer(input);
       const account = await repository.getAccount(input.fromAccountId);
-      const payee = await repository.getPayee(input.payeeId);
       if (!account) throw new BankingError('ACCOUNT_NOT_FOUND', '找不到可访问的付款账户');
-      if (!payee) throw new BankingError('PAYEE_NOT_FOUND', '找不到收款人，请先完成实体解析');
       if (account.status !== 'active') throw new BankingError('ACCOUNT_BLOCKED', '付款账户当前不可用');
-      if (payee.status !== 'active') throw new BankingError('PAYEE_BLOCKED', '收款人当前不可用');
       if (account.availableBalanceFen < input.amountFen) throw new BankingError('INSUFFICIENT_BALANCE', '付款账户可用余额不足');
+      if ('toAccountId' in input && input.toAccountId) {
+        if (input.toAccountId === account.id) throw new BankingError('VALIDATION_ERROR', '转出账户与转入账户不能相同');
+        const target = await repository.getAccount(input.toAccountId);
+        if (!target) throw new BankingError('ACCOUNT_NOT_FOUND', '找不到可访问的本人转入账户');
+        if (target.status !== 'active') throw new BankingError('ACCOUNT_BLOCKED', '本人转入账户当前不可用');
+        if (target.currency !== account.currency || target.currency !== input.currency) throw new BankingError('VALIDATION_ERROR', '本人互转的两个账户币种必须一致');
+      } else {
+        if (!input.payeeId) throw new BankingError('VALIDATION_ERROR', '收款人无效');
+        const payee = await repository.getPayee(input.payeeId);
+        if (!payee) throw new BankingError('PAYEE_NOT_FOUND', '找不到收款人，请先完成实体解析');
+        if (payee.status !== 'active') throw new BankingError('PAYEE_BLOCKED', '收款人当前不可用');
+      }
+      if ('toAccountId' in input && input.toAccountId) {
+        const target = await repository.getAccount(input.toAccountId);
+        if (!target || !Number.isSafeInteger(target.balanceFen + input.amountFen) || !Number.isSafeInteger(target.availableBalanceFen + input.amountFen)) throw new BankingError('LIMIT_EXCEEDED', '转入后账户金额超出安全范围');
+      }
       if (input.amountFen > policy.maxTransferFen) throw new BankingError('LIMIT_EXCEEDED', '超过 Mock 单笔转账限额');
       return true;
     });
@@ -150,11 +168,18 @@ export function createBankingCore(options = {}) {
     if (largeTransfer) warnings.push(`大额转账（>¥${(policy.largeTransferFen / 100).toFixed(2)}）需一次性验证码（OTP）验证。`);
     return { allowed: result.ok, riskLevel: 'L3', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', requiredVerification: largeTransfer ? 'otp' : 'none', warnings, ...(!result.ok ? { error: result.error } : {}) };
   }
-  /** @param {import('./contracts').TransferInput} input @returns {Promise<import('./contracts').TransferEffect>} */
+  /** @param {import('./contracts').TransferInput} input @returns {Promise<import('./contracts').TransferEffect | import('./contracts').InternalTransferEffect>} */
   async function effectFor(input) {
     const account = await repository.getAccount(input.fromAccountId);
+    if (!account) throw new BankingError('PREVIEW_STALE', '付款账户已失效');
+    if ('toAccountId' in input && input.toAccountId) {
+      const target = await repository.getAccount(input.toAccountId);
+      if (!target || target.status !== 'active' || target.id === account.id) throw new BankingError('PREVIEW_STALE', '本人转入账户已失效');
+      return { kind: 'transfer_internal', fromAccountId: account.id, accountName: account.name, toAccountId: target.id, targetAccountName: target.name, amountFen: input.amountFen, currency: 'CNY', sourceBalanceBeforeFen: account.balanceFen, sourceBalanceAfterFen: account.balanceFen - input.amountFen, sourceAvailableBalanceAfterFen: account.availableBalanceFen - input.amountFen, sourceAccountVersion: account.version, targetBalanceBeforeFen: target.balanceFen, targetBalanceAfterFen: target.balanceFen + input.amountFen, targetAvailableBalanceAfterFen: target.availableBalanceFen + input.amountFen, targetAccountVersion: target.version, memo: input.memo ?? '' };
+    }
+    if (!input.payeeId) throw new BankingError('PREVIEW_STALE', '收款人已失效');
     const payee = await repository.getPayee(input.payeeId);
-    if (!account || !payee) throw new BankingError('PREVIEW_STALE', '账户或收款人已失效');
+    if (!payee) throw new BankingError('PREVIEW_STALE', '收款人已失效');
     return { kind: 'transfer_out', fromAccountId: account.id, accountName: account.name, payeeId: payee.id, payeeName: payee.name, accountNoMasked: payee.accountNoMasked, amountFen: input.amountFen, feeFen: 0, currency: 'CNY', balanceBeforeFen: account.balanceFen, balanceAfterFen: account.balanceFen - input.amountFen, availableBalanceAfterFen: account.availableBalanceFen - input.amountFen, accountVersion: account.version, memo: input.memo ?? '', arrival: 'mock_immediate' };
   }
   /** @param {import('./contracts').CardAction} action @param {import('./contracts').CardInput} input @returns {Promise<import('./contracts').CardEffect>} */
@@ -414,7 +439,7 @@ export function createBankingCore(options = {}) {
         const hashInput = canonical({ ownerId, operationId, planId, stepId, origin, effect, expiresAt, contextSnapshotId, policy });
         const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(hashInput));
         const previewHash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
-        record.preview = { planId, stepIds: [stepId], summary: `从${effect.accountName}向${effect.payeeName}（${effect.accountNoMasked}）模拟转账 ¥${(input.amountFen / 100).toFixed(2)}，手续费 ¥0.00，模拟即时到账。`, exactEffects: [effect], riskLevel: risk.riskLevel, warnings: risk.warnings, expiresAt, previewHash, contextSnapshotId };
+        record.preview = { planId, stepIds: [stepId], summary: effect.kind === 'transfer_internal' ? `从${effect.accountName}转入本人${effect.targetAccountName} ¥${(input.amountFen / 100).toFixed(2)}（模拟互转）。` : `从${effect.accountName}向${effect.payeeName}（${effect.accountNoMasked}）模拟转账 ¥${(input.amountFen / 100).toFixed(2)}，手续费 ¥0.00，模拟即时到账。`, exactEffects: [effect], riskLevel: risk.riskLevel, warnings: risk.warnings, expiresAt, previewHash, contextSnapshotId };
         await move(record, 'PREVIEWED');
         return { ok: true, data: { operationId, state: 'awaiting_confirmation', preview: structuredClone(record.preview), risk: structuredClone(risk) } };
       } catch (error) {
@@ -558,12 +583,13 @@ export function createBankingCore(options = {}) {
               await move(record, 'SUCCEEDED');
             }
           } else if (typeof store.commitTransfer === 'function') {
-            record.receipt = await store.commitTransfer(ownerId, record, /** @type {import('./contracts').TransferEffect} */ (record.preview.exactEffects[0]), at, transaction => receiptFor(record, 'succeeded', '模拟转账成功', [transaction.id]));
+            const effect = /** @type {import('./contracts').TransferEffect | import('./contracts').InternalTransferEffect} */ (record.preview.exactEffects[0]);
+            record.receipt = await store.commitTransfer(ownerId, record, effect, at, transactions => receiptFor(record, 'succeeded', '模拟转账成功', (Array.isArray(transactions) ? transactions : [transactions]).map(transaction => transaction.id)));
             record.state = transitionAction(record.state, 'SUCCEEDED');
             audit.push({ operationId: record.operationId, action: record.action, state: record.state, at: new Date(now()).toISOString() });
           } else {
-            const transaction = await commitTransfer(/** @type {import('./contracts').TransferEffect} */ (record.preview.exactEffects[0]), operationId, at);
-            record.receipt = receiptFor(record, 'succeeded', '模拟转账成功', [transaction.id]);
+            const transaction = await commitTransfer(/** @type {import('./contracts').TransferEffect | import('./contracts').InternalTransferEffect} */ (record.preview.exactEffects[0]), operationId, at);
+            record.receipt = receiptFor(record, 'succeeded', '模拟转账成功', Array.isArray(transaction) ? transaction.map(item => item.id) : [transaction.id]);
             await move(record, 'SUCCEEDED');
           }
           return record.receipt;

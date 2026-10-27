@@ -225,11 +225,13 @@ test('terminal snapshot may refresh createdAt but cannot change content or messa
 });
 
 
-test('continuation can request reclarification without preparing, and accepts conjunctions in a payee name', async () => {
+test('continuation preserves signed transfer slots when only the missing source is supplied', async () => {
   const client = runtime(input => input.context ? buildParsedIntent('transfer.create', { source_account_ref: '活期账户' }) : buildParsedIntent('transfer.create', { payee_ref: '张三', amount: { amount_minor: 50000, currency: 'CNY' } }));
   const first = await post({ message: '给张三转500元' }, { trueforgeRuntimeClient: client });
   const result = await post({ message: '活期账户', continuationToken: first.data.continuationToken }, { trueforgeRuntimeClient: client });
-  assert.equal(result.code, 'NEEDS_CLARIFICATION'); assert.equal(result.data.preview, undefined);
+  assert.equal(result.data.status, 'awaiting_confirmation');
+  assert.equal(result.data.preview.exactEffects[0].amountFen, 50000);
+  assert.ok(result.data.preview.exactEffects[0].payeeId);
   const name = await parseTrueforgeBankingIntent('从活期账户给和先生转500元', { env, client: runtime(() => buildParsedIntent('transfer.create', { source_account_ref: '活期账户', payee_ref: '和先生', amount: { amount_minor: 50000, currency: 'CNY' } })) });
   assert.equal(name.action, 'transfer.create');
 });

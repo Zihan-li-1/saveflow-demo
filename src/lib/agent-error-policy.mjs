@@ -11,7 +11,7 @@ const groups = {
 
 export function validRecoverySlot(action, slot) {
   const slots = {
-    'transfer.create': ['amount', 'payee_ref', 'source_account_ref', 'target_account_ref'], 'bill.summary': ['month'],
+    'transfer.create': ['amount', 'payee_ref', 'source_account_ref', 'target_account_ref', 'transfer_type'], 'bill.summary': ['month'],
     'card.get': ['card_ref'], 'card.freeze': ['card_ref'], 'card.unfreeze': ['card_ref'],
     'card.set_budget': ['card_ref', 'amount'], 'card.set_controls': ['card_ref'], 'card.security_review': ['card_ref', 'issue_type'],
     'wealth.recommend': ['goal', 'max_risk_level', 'horizon_days', 'liquidity_requirement'],

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ActionReceipt, TransferEffect } from "@/banking-core/contracts";
+import type { ActionReceipt, InternalTransferEffect, TransferEffect } from "@/banking-core/contracts";
 import type { Message } from "@/lib/use-saveflow";
 import { BankingExpenseVoucher, type TransferVoucher } from "./BankingExpenseVoucher";
 
@@ -18,10 +18,11 @@ export function BankingAccountOverview({ messages }: { messages: Message[] }) {
   const latest = vouchers[0];
   const firstEffect = latest?.receipt.effects[0];
   const transfer = firstEffect?.kind === "transfer_out" ? (firstEffect as TransferEffect) : undefined;
-  const accountName = transfer?.accountName || DEFAULT_ACCOUNT;
+  const internal = firstEffect?.kind === "transfer_internal" ? (firstEffect as InternalTransferEffect) : undefined;
+  const accountName = transfer?.accountName || internal?.accountName || DEFAULT_ACCOUNT;
   // 可用余额以最新回执里的转账后余额为准（回执必含 availableBalanceAfterFen），
   // verification.availableBalanceFen 作为补充回退，最后才是种子默认值。
-  const balanceFen = latest?.verification?.availableBalanceFen ?? transfer?.availableBalanceAfterFen ?? DEFAULT_BALANCE_FEN;
+  const balanceFen = latest?.verification?.availableBalanceFen ?? transfer?.availableBalanceAfterFen ?? internal?.sourceAvailableBalanceAfterFen ?? DEFAULT_BALANCE_FEN;
 
   return <section className="account-overview">
     <header className="account-overview-header">

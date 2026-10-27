@@ -44,6 +44,22 @@ test('unique transfer reaches Core and returns only its formal awaiting-confirma
   assert.equal(core.repository.getTransactions().length, beforeTransactions);
 });
 
+test('legacy Transfer Skill path also resolves本人账户互转 and passes it to the same Core transfer action', async () => {
+  const core = createBankingCore();
+  const intent = {
+    schemaVersion: '1.0.0', action: 'transfer.create',
+    slots: { target_account_ref: '活期账户', amount: { amount_minor: 10000, currency: 'CNY' }, source_account_ref: '储蓄账户' },
+    missingSlots: [], status: 'ready_for_resolution',
+  };
+  const result = await prepareTransferPreview(await dispatchedWith(core, intent), core);
+  assert.equal(result.ok, true);
+  assert.equal(result.kind, 'transfer_preview');
+  const effect = result.data.preview.exactEffects[0];
+  assert.equal(effect.kind, 'transfer_internal');
+  assert.equal(effect.fromAccountId, 'ACC-SAVINGS');
+  assert.equal(effect.toAccountId, 'ACC-CHECKING');
+});
+
 test('clarification, bill, and skill errors never call Core prepare', async () => {
   let prepares = 0;
   const core = { prepare: async () => { prepares++; throw new Error('must not prepare'); } };

@@ -174,7 +174,7 @@ export function createConversationStore(options = {}) {
   const previewReference = (status, task, at) => {
     const preview = status.preview;
     const effect = preview?.exactEffects?.[0];
-    const action = effect?.kind === 'transfer_out' ? 'transfer.create' :
+    const action = effect && ['transfer_out', 'transfer_internal'].includes(effect.kind) ? 'transfer.create' :
       effect && ['card_change', 'wealth_change', 'scenario_rule_change'].includes(effect.kind) && 'action' in effect ? effect.action : null;
     const expires = Date.parse(preview?.expiresAt ?? '');
     if (status.state !== 'awaiting_confirmation' || !preview || !Array.isArray(preview.exactEffects) || preview.exactEffects.length !== 1 || action !== task.action ||

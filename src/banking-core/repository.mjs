@@ -49,14 +49,26 @@ export function createFinancialContext(source = seed) {
     getDemoSettings: () => ({ monthlyIncomeFen: seedYuanToFen(raw.user.monthlyIncome), defaultMonthlySavingFen: 250000, monthlySavingCapFen: 300000 }),
   };
   /** Synchronous compare-and-swap: no await between checks, debit and transaction append.
-   * @param {import('./contracts').TransferEffect} effect @param {string} operationId @param {string} at */
+   * @param {import('./contracts').TransferEffect | import('./contracts').InternalTransferEffect} effect @param {string} operationId @param {string} at */
   function commitTransfer(effect, operationId, at) {
     const existing = transactions.find(t => t.operationId === operationId);
     if (existing) throw new BankingError('IDEMPOTENCY_CONFLICT', '账务已存在此操作，请查询回执', true);
     const account = accounts.find(a => a.id === effect.fromAccountId);
-    if (!account || account.version !== effect.accountVersion || account.balanceFen !== effect.balanceBeforeFen) throw new BankingError('PREVIEW_STALE', '账户已变化，请重新预览并确认');
+    const internal = effect.kind === 'transfer_internal';
+    const target = internal ? accounts.find(a => a.id === effect.toAccountId) : undefined;
+    if (!account || (internal ? account.version !== effect.sourceAccountVersion || account.balanceFen !== effect.sourceBalanceBeforeFen : account.version !== effect.accountVersion || account.balanceFen !== effect.balanceBeforeFen)) throw new BankingError('PREVIEW_STALE', '账户已变化，请重新预览并确认');
+    if (internal && (!target || target.id === account.id || target.status !== 'active' || target.version !== effect.targetAccountVersion || target.balanceFen !== effect.targetBalanceBeforeFen)) throw new BankingError('PREVIEW_STALE', '本人转入账户已变化，请重新预览并确认');
     assertFen(effect.amountFen);
     if (account.availableBalanceFen < effect.amountFen) throw new BankingError('INSUFFICIENT_BALANCE', '可用余额不足');
+    if (internal) {
+      if (!target) throw new BankingError('PREVIEW_STALE', '本人转入账户已变化，请重新预览并确认');
+      const debit = /** @type {import('./contracts').Transaction} */ ({ id: `txn_${operationId}_out`, operationId, accountId: account.id, counterpartyAccountId: target.id, occurredAt: at, type: 'internal_transfer_out', category: '本人账户互转', merchant: effect.targetAccountName, amountFen: effect.amountFen, currency: 'CNY', status: 'posted', source: 'mock_execution' });
+      const credit = /** @type {import('./contracts').Transaction} */ ({ id: `txn_${operationId}_in`, operationId, accountId: target.id, counterpartyAccountId: account.id, occurredAt: at, type: 'internal_transfer_in', category: '本人账户互转', merchant: effect.accountName, amountFen: effect.amountFen, currency: 'CNY', status: 'posted', source: 'mock_execution' });
+      account.balanceFen -= effect.amountFen; account.availableBalanceFen -= effect.amountFen; account.version++;
+      target.balanceFen += effect.amountFen; target.availableBalanceFen += effect.amountFen; target.version++;
+      transactions.push(debit, credit); revision++;
+      return structuredClone([debit, credit]);
+    }
     const transaction = /** @type {import('./contracts').Transaction} */ ({ id: `txn_${operationId}`, operationId, accountId: account.id, payeeId: effect.payeeId, occurredAt: at, type: 'transfer_out', category: '转账', merchant: effect.payeeName, amountFen: effect.amountFen, currency: 'CNY', status: 'posted', source: 'mock_execution' });
     account.balanceFen -= effect.amountFen;
     account.availableBalanceFen -= effect.amountFen;

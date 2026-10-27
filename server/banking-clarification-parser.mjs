@@ -39,9 +39,9 @@ export function parseClarificationAnswer(message, { action, slot, slots = {}, ch
     if (card) return { kind: 'slot', updates: { card_ref: card[1] } };
     if (/^(?:重新选择|改选|更换|换)(?:卡|卡片)[。！]?$/.test(message.trim())) return { kind: 'slot', updates: { card_ref: undefined } };
     const payee = message.trim().match(/^(?:收款人改成|收款人换成|改为给|改给|换成给|换给)\s*(.+?)[。！]?$/);
-    if (payee) return { kind: 'slot', updates: { payee_ref: payee[1] } };
+    if (payee) return { kind: 'slot', updates: { payee_ref: payee[1], target_account_ref: undefined, transfer_type: 'external' } };
     if (/^(?:重新选择|改选|更换)(?:付款)?账户[。！]?$/.test(message.trim())) return { kind: 'slot', updates: { source_account_ref: undefined } };
-    if (/^(?:重新选择|改选|更换)收款人[。！]?$/.test(message.trim())) return { kind: 'slot', updates: { payee_ref: undefined } };
+    if (/^(?:重新选择|改选|更换)收款人[。！]?$/.test(message.trim())) return { kind: 'slot', updates: { payee_ref: undefined, target_account_ref: undefined, transfer_type: 'external' } };
     // Explicit amount edits retain signed account/payee selections even when
     // the current clarification is asking the user to change the payer.
     if (['transfer.create', 'card.set_budget'].includes(action) && /^(?:(?:金额|预算)?改成|改为)/.test(message.trim())) {
@@ -61,6 +61,11 @@ export function parseClarificationAnswer(message, { action, slot, slots = {}, ch
   if (slot === 'product_ref' && message.trim()) return { kind: 'slot', updates: { product_ref: message.trim() } };
   if (slot === 'holding_ref' && message.trim()) return { kind: 'slot', updates: { holding_ref: message.trim() } };
   if (slot === 'source_account_ref' && message.trim()) return { kind: 'slot', updates: { source_account_ref: message.trim() } };
+  if (slot === 'transfer_type') {
+    if (/本人|自己|账户互转|内部转账/.test(message)) return { kind: 'slot', updates: { transfer_type: 'internal' } };
+    if (/他人|别人|对外|收款人/.test(message)) return { kind: 'slot', updates: { transfer_type: 'external' } };
+    return { kind: 'unrecognized' };
+  }
   if (slot === 'product_refs') {
     const refs = message.split(/[、,，和与]/).map(item => item.trim()).filter(Boolean);
     return refs.length >= 2 && refs.length <= 5 ? { kind: 'slot', updates: { product_refs: refs } } : { kind: 'unrecognized' };

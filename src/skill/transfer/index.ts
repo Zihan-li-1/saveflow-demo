@@ -59,6 +59,52 @@ export async function resolveTransferIntent(
   }
   const normalizedAmount: Amount = { amount_minor: amount.amount_minor, currency: amount.currency };
 
+  const internal = !!slots.target_account_ref || slots.transfer_type === "internal";
+  const external = !!slots.payee_ref || slots.transfer_type === "external";
+  if (!internal && !external) {
+    return needsClarification({
+      reason: "missing_transfer_type",
+      slot: "transfer_type",
+      question: "这笔转账是转给本人其他账户，还是转给他人？",
+    });
+  }
+
+  if (internal) {
+    const sourceRef = typeof slots.source_account_ref === "string" ? slots.source_account_ref.trim() : "";
+    if (!sourceRef) return needsClarification({ reason: "missing_slot", slot: "source_account_ref", question: "请确认从哪个本人账户转出。" });
+    const targetRef = typeof slots.target_account_ref === "string" ? slots.target_account_ref.trim() : "";
+    if (!targetRef) return needsClarification({ reason: "missing_slot", slot: "target_account_ref", question: "请确认转入哪个本人账户。" });
+    if (!repository.queryOwnAccounts) return needsClarification({ reason: "target_account_not_found", slot: "target_account_ref", question: "当前账户查询接口暂不支持本人账户互转，请选择其他转账方式。" });
+    const [sources, targets] = await Promise.all([
+      repository.queryOwnAccounts(sourceRef, "source_account_ref"),
+      repository.queryOwnAccounts(targetRef, "target_account_ref"),
+    ]);
+    if (!sources.length) return needsClarification({ reason: "source_account_not_found", slot: "source_account_ref", question: `转出账户「${sourceRef}」不存在或不可用。` });
+    if (sources.length > 1) return needsClarification({ reason: "ambiguous_account", slot: "source_account_ref", question: `「${sourceRef}」匹配到多个本人账户，请选择一个。` });
+    if (!targets.length) return needsClarification({ reason: "target_account_not_found", slot: "target_account_ref", question: `转入账户「${targetRef}」不存在或不可用。` });
+    if (targets.length > 1) return needsClarification({ reason: "ambiguous_account", slot: "target_account_ref", question: `「${targetRef}」匹配到多个本人账户，请选择一个。` });
+    const source = sources[0]; const target = targets[0];
+    if (source.id === target.id) return needsClarification({ reason: "same_account", slot: "target_account_ref", question: "转出账户和转入账户不能是同一个，请重新选择。" });
+    if (source.currency !== target.currency || source.currency !== normalizedAmount.currency) return needsClarification({ reason: "invalid_amount", slot: "amount", question: "本人互转的两个账户必须使用相同币种。" });
+    if (source.availableBalanceFen < normalizedAmount.amount_minor) return needsClarification({ reason: "insufficient_balance", slot: "amount", question: "转出账户可用余额不足，无法生成转账预览。" });
+    return {
+      action: "transfer.create", state: "ready_for_planning", resolved_slots: { amount: normalizedAmount },
+      references: [
+        { slot: "source_account_ref", entity_id: source.id, source: "financial_context" },
+        { slot: "target_account_ref", entity_id: target.id, source: "financial_context" },
+      ],
+      preview: {
+        kind: "internal_transfer", source_account_id: source.id, source_account_name: source.name || sourceRef,
+        target_account_id: target.id, target_account_name: target.name || targetRef,
+        amount_minor: normalizedAmount.amount_minor, currency: normalizedAmount.currency,
+        source_available_balance_minor: source.availableBalanceFen,
+        source_estimated_balance_after_minor: source.availableBalanceFen - normalizedAmount.amount_minor,
+        target_available_balance_minor: target.availableBalanceFen,
+        target_estimated_balance_after_minor: target.availableBalanceFen + normalizedAmount.amount_minor,
+      },
+    };
+  }
+
   // ② 转出账户槽位：缺失必备槽位 → needs_clarification。
   const sourceAccountRef =
     typeof slots.source_account_ref === "string" ? slots.source_account_ref.trim() : "";

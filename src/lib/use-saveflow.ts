@@ -277,9 +277,6 @@ export function useSaveflow() {
           if (answer.operationId) setCoreOperation(answer.operationId, "plan");
           addMessage({ role: "agent", kind: "banking_preview", text: replyText, banking: answer });
         }
-      } else if (answer.status === "internal_transfer_recognized") {
-        setBankingContinuation(null);
-        addMessage({ role: "agent", kind: "banking_internal_transfer", text: replyText, banking: answer });
       } else if (answer.status === "unsupported") {
         addMessage({ role: "agent", text: replyText });
       } else {
@@ -369,8 +366,21 @@ export function useSaveflow() {
       return receipt.status === "cancelled" ? "cancelled" as const : "error" as const;
     }
     const first = receipt.effects[0];
-    const effect = first?.kind === "transfer_out" ? first : undefined;
-    if (!effect) throw new ApiError("INVALID_RESPONSE", "转账回执缺少扣款效果", true);
+    const effect = first?.kind === "transfer_out" || first?.kind === "transfer_internal" ? first : undefined;
+    if (!effect) throw new ApiError("INVALID_RESPONSE", "转账回执缺少转账效果", true);
+    if (effect.kind === "transfer_internal") {
+      const [source, target] = await Promise.all([cardClient().request("account.get", { id: effect.fromAccountId }), cardClient().request("account.get", { id: effect.toAccountId })]);
+      if (generation.current !== version) return;
+      if (source.availableBalanceFen !== effect.sourceAvailableBalanceAfterFen || target.availableBalanceFen !== effect.targetAvailableBalanceAfterFen) throw new ApiError("INVALID_RESPONSE", "回执与重新查询的双账户余额不一致，请查询原操作", true);
+      const [sourceTransactions, targetTransactions] = await Promise.all([cardClient().request("transaction.list", { accountId: effect.fromAccountId }), cardClient().request("transaction.list", { accountId: effect.toAccountId })]);
+      const debit = sourceTransactions.find(transaction => receipt.transactionIds.includes(transaction.id));
+      const credit = targetTransactions.find(transaction => receipt.transactionIds.includes(transaction.id));
+      if (!debit || !credit || debit.type !== "internal_transfer_out" || credit.type !== "internal_transfer_in" || debit.amountFen !== effect.amountFen || credit.amountFen !== effect.amountFen || debit.status !== "posted" || credit.status !== "posted") throw new ApiError("INVALID_RESPONSE", "回执与本人互转的双边交易记录不一致，请查询原操作", true);
+      setMessages(current => current.map(message => message.banking?.operationId === data.operationId ? { ...message, banking: { ...message.banking!, executed: true } } : message));
+      addMessage({ role: "agent", kind: "banking_receipt", text: "本人账户互转已完成，双方余额和交易记录已核对。", receipt,
+        verification: { availableBalanceFen: source.availableBalanceFen, transactionId: debit.id, occurredAt: debit.occurredAt, amountFen: debit.amountFen, status: debit.status } });
+      return "success" as const;
+    }
     const account = await cardClient().request("account.get", { id: effect.fromAccountId });
     if (generation.current !== version) return;
     if (account.availableBalanceFen !== effect.availableBalanceAfterFen) throw new ApiError("INVALID_RESPONSE", "回执与重新查询的账户余额不一致，请查询原操作", true);

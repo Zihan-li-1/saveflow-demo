@@ -16,6 +16,10 @@ import { collectSavingsData } from './savings-data.mjs';
 import { buildFinancialAnalysisContext } from './financial-analysis-context.mjs';
 
 const scenarioStores = new Map();
+const transferTypeChoices = [
+  { optionId: 'transfer-type-internal', label: '本人账户互转', rawValue: 'internal' },
+  { optionId: 'transfer-type-external', label: '转给他人', rawValue: 'external' },
+];
 function scenarioStoreFor(scope) {
   if (!scenarioStores.has(scope)) scenarioStores.set(scope, createInMemoryScenarioStore([{ id: 'event_balance_2026_09_01', type: 'balance_changed', trusted: true, occurred_at: '2026-09-01T00:00:00+08:00', source: 'synthetic_demo_event_bus' }]));
   return scenarioStores.get(scope);
@@ -50,6 +54,7 @@ const clarificationQuestions = {
   source_account_ref: '要从哪个账户转出？',
   target_account_ref: '要转入哪个本人账户？',
   payee_ref: '要转给谁？',
+  transfer_type: '这笔转账是转给本人其他账户，还是转给他人？请选择一种方式。',
   card_ref: '请选择要查看或操作的卡片。',
   goal: '你希望这笔理财帮你实现什么？例如：未来 6 个月争取获得一些额外收益、1 年内存下 1 万元、准备应急金，或为旅行和大额购物做准备。请说说金额、用途或时间，知道多少说多少。',
   max_risk_level: '你最多能接受多大的波动？可以只回复 R1、R2、R3，或直接说：① 尽量稳妥（R1）——用波动示例理解，短期可能约亏 0%–2%；② 能接受小幅波动（R2）——阶段亏损可能约 2%–10%；③ 能接受较大波动（R3）——亏损可能超过 10%，极端情况下可能更多。百分比只是帮助理解的演示尺度，不是实际产品的亏损上限。',
@@ -129,7 +134,7 @@ function clarificationResponse(reply, { action, slot, question, choices = [], sl
 
 function nextMissingSlot(intent) {
   const order = intent.action === 'transfer.create'
-    ? ['source_account_ref', 'payee_ref', 'amount']
+    ? ['transfer_type', 'source_account_ref', 'target_account_ref', 'payee_ref', 'amount']
     : intent.action.startsWith('card.') ? ['card_ref', 'amount'] : ['month'];
   return order.find(slot => intent.missingSlots?.includes(slot)) || intent.missingSlots?.[0];
 }
@@ -197,7 +202,8 @@ export async function runBankingConversation(body, {
       choices = cardChoices(eligibleCards(state.action, cards));
     } else if (slot === 'source_account_ref' || slot === 'target_account_ref') choices = await accountChoices(repository);
     else if (slot === 'payee_ref') choices = payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active'));
-    if (['card_ref', 'source_account_ref', 'payee_ref'].includes(slot) && !choices.length) return undefined;
+    else if (slot === 'transfer_type') choices = transferTypeChoices;
+    if (['card_ref', 'source_account_ref', 'payee_ref', 'transfer_type'].includes(slot) && !choices.length) return undefined;
     const question = `${message} ${questionFor(state.action, slot, '', slots)}`;
     return clarificationResponse(reply, { action: state.action, slot, question, choices, slots, selections: selected, env, now, source: 'resolver' }).data;
   };
@@ -260,6 +266,35 @@ export async function runBankingConversation(body, {
         if (recovery) return reply(200, 'NEEDS_CLARIFICATION', recovery.question, { ...recovery, error: { code, message, ...agentErrorPolicy(code, { hasRecovery: true, hasChoices: !!recovery.choices.length }) } });
         return failure(code, message, continuation);
       }
+      // A signed continuation is the authoritative draft. Preserve its unchanged
+      // transfer slots when a model returns only the newly supplied value.
+      // Never preserve the slot currently being answered (especially amount),
+      // so an omitted/invalid replacement cannot silently reuse stale input.
+      if (parsed.action === 'transfer.create' && continuation.action === 'transfer.create') {
+        const parsedChoice = parsed.choice;
+        const slots = { ...continuation.slots };
+        delete slots[continuation.pendingSlot];
+        Object.assign(slots, parsed.slots);
+        const answer = body.message.trim();
+        if (/^(?:重新选择|改选|更换)(?:付款)?账户[。！]?$/u.test(answer)) delete slots.source_account_ref;
+        if (/^(?:重新选择|改选|更换)收款人[。！]?$/u.test(answer)) {
+          delete slots.payee_ref;
+          delete slots.target_account_ref;
+          slots.transfer_type = 'external';
+        }
+        if (slots.transfer_type === 'internal') delete slots.payee_ref;
+        if (slots.transfer_type === 'external') delete slots.target_account_ref;
+        if ('payee_ref' in parsed.slots) {
+          delete slots.target_account_ref;
+          slots.transfer_type = 'external';
+        }
+        if ('target_account_ref' in parsed.slots) {
+          delete slots.payee_ref;
+          slots.transfer_type = 'internal';
+        }
+        parsed = buildParsedIntent('transfer.create', slots);
+        if (parsedChoice) parsed.choice = parsedChoice;
+      }
       // A model cannot convert an opaque candidate selection into entity IDs.
       // Keep server selections only while their raw references remain unchanged.
       if (parsed.action === continuation.action) {
@@ -268,13 +303,14 @@ export async function runBankingConversation(body, {
       }
       if (parsed.choice) {
         const selected = resolveChoice(parsed.choice, continuation.choices);
-        if (!selected || parsed.action !== continuation.action || !continuation.pendingSlot.endsWith('_ref') || parsed.slots[continuation.pendingSlot] !== (selected.rawValue || selected.label)) throw inputError('INVALID_CHOICE', '选项不存在或已失效', 400);
-        selections[continuation.pendingSlot] = { entityId: selected.entityId, optionId: selected.optionId };
+        if (!selected || parsed.action !== continuation.action || (!continuation.pendingSlot.endsWith('_ref') && continuation.pendingSlot !== 'transfer_type') || parsed.slots[continuation.pendingSlot] !== (selected.rawValue || selected.label)) throw inputError('INVALID_CHOICE', '选项不存在或已失效', 400);
+        if (continuation.pendingSlot !== 'transfer_type') selections[continuation.pendingSlot] = { entityId: selected.entityId, optionId: selected.optionId };
       }
     } else {
       const selected = resolveChoice(body.choice, continuation.choices);
       if (!selected) return failure('INVALID_CHOICE', '选项不存在或已失效，请重新选择。', continuation);
-      selections = { ...continuation.selections, [continuation.pendingSlot]: { entityId: selected.entityId, optionId: selected.optionId } };
+      selections = { ...continuation.selections };
+      if (continuation.pendingSlot !== 'transfer_type') selections[continuation.pendingSlot] = { entityId: selected.entityId, optionId: selected.optionId };
       parsed = buildParsedIntent(continuation.action, mergeSlots(continuation.slots, { [continuation.pendingSlot]: selected.rawValue || selected.label }));
     }
   } else {
@@ -357,11 +393,6 @@ export async function runBankingConversation(body, {
     const continuationToken = issueState({ action: result.action, slots: parsed.slots, pendingSlot: result.action === 'card.set_budget' ? 'amount' : 'card_ref', selections, env, now });
     return reply(200, 'OK', '卡片正式预览已生成，等待页面确认', { status: 'awaiting_confirmation', action: result.action, operationId: prepared.data.operationId, preview: prepared.data.preview, risk: prepared.data.risk, evidence: result.data.evidence, continuationToken });
   }
-  if (result.ok && result.kind === 'internal_transfer_recognized') {
-    return reply(200, 'OK', '本人账户互转已识别，正式账务执行能力待 Banking Core 负责人确认后开放。', {
-      status: 'internal_transfer_recognized', action: result.action, preview: result.data.preview, previewOnly: true, executionAllowed: false,
-    });
-  }
   if (result.ok && result.kind === 'transfer_preview') {
     const continuationToken = issueState({ action: 'transfer.create', slots: parsed.slots, pendingSlot: 'amount', selections, env, now });
     const settings = await repository.getDemoSettings();
@@ -382,7 +413,7 @@ export async function runBankingConversation(body, {
     const slot = result.slot || nextMissingSlot(parsed) || (result.candidates ? 'payee_ref' : undefined);
     // Re-read even resolver candidates: states/eligibility may have changed since resolution.
     const cards = slot === 'card_ref' ? eligibleCards(action, await repository.getCards()) : [];
-    const choices = slot === 'card_ref' ? cardChoices(cards.filter(card => !result.candidates?.length || result.candidates.some(candidate => candidate.id === card.id))) : result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' || slot === 'target_account_ref' ? await accountChoices(repository) : slot === 'payee_ref' && !slots.payee_ref ? payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active')) : [];
+    const choices = slot === 'card_ref' ? cardChoices(cards.filter(card => !result.candidates?.length || result.candidates.some(candidate => candidate.id === card.id))) : result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' || slot === 'target_account_ref' ? await accountChoices(repository) : slot === 'payee_ref' && !slots.payee_ref ? payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active')) : slot === 'transfer_type' ? transferTypeChoices : [];
     return clarificationResponse(reply, {
       action,
       slot,

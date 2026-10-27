@@ -23,7 +23,9 @@ const required = {
 };
 
 function transferRequiredSlots(slots) {
-  const internal = 'target_account_ref' in slots;
+  const internal = 'target_account_ref' in slots || slots.transfer_type === 'internal';
+  const external = 'payee_ref' in slots || slots.transfer_type === 'external';
+  if (!internal && !external) return ['transfer_type', 'amount', 'source_account_ref'];
   return ['amount', 'source_account_ref', internal ? 'target_account_ref' : 'payee_ref'];
 }
 

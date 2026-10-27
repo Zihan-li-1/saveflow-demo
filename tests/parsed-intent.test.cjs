@@ -55,6 +55,13 @@ test('requires clarification when source account is absent', () => {
   assert.doesNotThrow(() => validateParsedIntent(intent));
 });
 
+test('ambiguous transfer direction requires an explicit transfer_type and validates its value', () => {
+  const ambiguous = base('transfer.create', { amount: { amount_minor: 10000, currency: 'CNY' } }, ['transfer_type', 'source_account_ref'], 'needs_clarification');
+  assert.doesNotThrow(() => validateParsedIntent(ambiguous));
+  assert.throws(() => validateParsedIntent(base('transfer.create', { transfer_type: 'maybe', amount: { amount_minor: 10000, currency: 'CNY' } }, ['source_account_ref', 'payee_ref'], 'needs_clarification')), ParsedIntentValidationError);
+  assert.throws(() => validateParsedIntent(base('transfer.create', { transfer_type: 'internal', target_account_ref: '储蓄', payee_ref: '张三', amount: { amount_minor: 10000, currency: 'CNY' } }, ['source_account_ref'], 'needs_clarification')), ParsedIntentValidationError);
+});
+
 test('accepts missingSlots regardless of array order and rejects duplicates', () => {
   assert.doesNotThrow(() => validateParsedIntent(
     base('transfer.create', { payee_ref: '张三' }, ['source_account_ref', 'amount'], 'needs_clarification'),
