@@ -136,6 +136,22 @@ function transferRepository(repository, selections = {}) {
       });
       return account ? { id: account.id, currency: account.currency, availableBalanceFen: account.availableBalanceFen } : null;
     },
+    // 本人账户互转用：按原始称谓解析“本人可用账户”候选，仅保留 active；返回全部匹配（供歧义判断）。
+    async queryOwnAccounts(reference, selectionKey = 'target_account_ref') {
+      const query = reference.trim();
+      const selected = selections[selectionKey];
+      if (selected?.entityId) {
+        const account = await repository.getAccount(selected.entityId);
+        if (!account || account.status !== 'active') return [];
+        return [{ id: account.id, name: account.name, currency: account.currency, availableBalanceFen: account.availableBalanceFen }];
+      }
+      const normalized = normalize(query);
+      const accounts = await repository.getAccounts();
+      return accounts.filter(candidate => candidate.status === 'active' && (
+        candidate.id === query || candidate.name === query || normalize(candidate.name) === normalized ||
+        (normalized === '活期' && candidate.type === 'checking') || (normalized === '储蓄' && candidate.type === 'saving')
+      )).map(account => ({ id: account.id, name: account.name, currency: account.currency, availableBalanceFen: account.availableBalanceFen }));
+    },
     async queryPayeesByName(name) {
       const query = name.trim();
       const selected = selections.payee_ref;
@@ -154,6 +170,9 @@ async function resolveTransferIntent(repository, slots) {
   if (!amount) return { state: 'needs_clarification', clarification: { reason: 'missing_slot', slot: 'amount', question: '请告诉我转账金额。' } };
   if (!Number.isSafeInteger(amount.amount_minor) || amount.amount_minor <= 0) return { state: 'needs_clarification', clarification: { reason: 'invalid_amount', slot: 'amount', question: '转账金额必须是大于 0 的整数分。' } };
   if (amount.currency !== 'CNY') return { state: 'needs_clarification', clarification: { reason: 'invalid_amount', slot: 'amount', question: '目前仅支持人民币（CNY）转账。' } };
+  const targetRef = typeof slots.target_account_ref === 'string' ? slots.target_account_ref.trim() : '';
+  if (targetRef) return resolveInternalTransfer(repository, amount, slots, targetRef);
+  // —— 对外转账（既有路径，保持不变）——
   const source = typeof slots.source_account_ref === 'string' ? slots.source_account_ref.trim() : '';
   if (!source) return { state: 'needs_clarification', clarification: { reason: 'missing_slot', slot: 'source_account_ref', question: '请确认从哪个账户转出。' } };
   const payeeRef = typeof slots.payee_ref === 'string' ? slots.payee_ref.trim() : '';
@@ -173,9 +192,53 @@ async function resolveTransferIntent(repository, slots) {
   };
 }
 
+// 本人账户之间的资金互转：只做只读方向解析与确定性校验，停在 Banking Core 契约边界。
+// 不调用 core.prepare/decide/execute，不生成可执行预览，也不伪造任何资金效果。
+async function resolveInternalTransfer(repository, amount, slots, targetRef) {
+  const source = typeof slots.source_account_ref === 'string' ? slots.source_account_ref.trim() : '';
+  if (!source) return { state: 'needs_clarification', clarification: { reason: 'missing_slot', slot: 'source_account_ref', question: '请确认从哪个账户转出。' } };
+
+  const sourceMatches = await repository.queryOwnAccounts(source, 'source_account_ref');
+  if (!sourceMatches.length) return { state: 'needs_clarification', clarification: { reason: 'source_account_not_found', slot: 'source_account_ref', question: `转出账户「${source}」不存在或不可用。` } };
+  if (sourceMatches.length > 1) return { state: 'needs_clarification', clarification: { reason: 'ambiguous_account', slot: 'source_account_ref', question: `「${source}」匹配到多个本人账户，请确认。` } };
+
+  const targetMatches = await repository.queryOwnAccounts(targetRef, 'target_account_ref');
+  if (!targetMatches.length) return { state: 'needs_clarification', clarification: { reason: 'target_account_not_found', slot: 'target_account_ref', question: `转入账户「${targetRef}」不存在或不是本人可用账户。` } };
+  if (targetMatches.length > 1) return { state: 'needs_clarification', clarification: { reason: 'ambiguous_account', slot: 'target_account_ref', question: `「${targetRef}」匹配到多个本人账户，请确认。` } };
+
+  const sourceAccount = sourceMatches[0];
+  const targetAccount = targetMatches[0];
+  if (sourceAccount.id === targetAccount.id) return { state: 'needs_clarification', clarification: { reason: 'same_account', slot: 'target_account_ref', question: '转出账户与转入账户不能是同一个账户，请重新指定。' } };
+  if (sourceAccount.availableBalanceFen < amount.amount_minor) return { state: 'needs_clarification', clarification: { reason: 'insufficient_balance', slot: 'amount', question: `转出账户可用余额不足，无法转出 ¥${(amount.amount_minor / 100).toFixed(2)}。` } };
+
+  return {
+    action: 'transfer.create',
+    state: 'internal_transfer_recognized',
+    resolved_slots: { amount: { amount_minor: amount.amount_minor, currency: amount.currency } },
+    references: [
+      { slot: 'source_account_ref', entity_id: sourceAccount.id, source: 'financial_context' },
+      { slot: 'target_account_ref', entity_id: targetAccount.id, source: 'financial_context' },
+    ],
+    preview: {
+      kind: 'internal_transfer',
+      source_account_id: sourceAccount.id,
+      source_account_name: sourceAccount.name,
+      target_account_id: targetAccount.id,
+      target_account_name: targetAccount.name,
+      amount_minor: amount.amount_minor,
+      currency: amount.currency,
+      source_available_balance_minor: sourceAccount.availableBalanceFen,
+      source_estimated_balance_after_minor: sourceAccount.availableBalanceFen - amount.amount_minor,
+      target_available_balance_minor: targetAccount.availableBalanceFen,
+      target_estimated_balance_after_minor: targetAccount.availableBalanceFen + amount.amount_minor,
+    },
+  };
+}
+
 export async function handleTransfer(intent, repository) {
   const resolved = await resolveTransferIntent(repository, intent.slots);
   if (resolved.state === 'needs_clarification') return { ok: false, kind: 'needs_clarification', action: 'transfer.create', source: 'resolver', question: resolved.clarification.question, slot: resolved.clarification.slot, reason: resolved.clarification.reason, ...(resolved.clarification.candidates ? { candidates: resolved.clarification.candidates } : {}) };
+  if (resolved.state === 'internal_transfer_recognized') return { ok: true, kind: 'internal_transfer_recognized', action: 'transfer.create', data: resolved };
   return { ok: true, kind: 'transfer_resolution', action: 'transfer.create', data: resolved };
 }
 
