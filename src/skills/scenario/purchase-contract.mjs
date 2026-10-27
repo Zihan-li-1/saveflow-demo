@@ -47,7 +47,15 @@ const schemas = {
   'commerce.order.status': z.strictObject({ operation_ref: ref }),
   'scenario.purchase.cancel': z.strictObject({ workflow_ref: ref, expected_version: version, ...confirmation }),
 };
-export const purchaseActions = Object.freeze(Object.keys(schemas));
+const publicSchemas = {
+  'scenario.plan_purchase': schemas['scenario.plan_purchase'],
+  'scenario.purchase.save': schemas['scenario.purchase.save'],
+  'scenario.purchase.update': z.strictObject({ workflow_ref: ref, expected_version: version,
+    changes: z.strictObject({ selection_mode: mode.optional(), preferences: preferences.optional() })
+      .refine(value => Object.keys(value).length > 0, '修改不能为空') }),
+  'scenario.purchase.cancel': schemas['scenario.purchase.cancel'],
+};
+export const purchaseActions = Object.freeze(Object.keys(publicSchemas));
 
 export function validatePurchaseAction(action, input) {
   const result = Object.hasOwn(schemas, action) ? schemas[action].safeParse(input) : null;
@@ -56,9 +64,9 @@ export function validatePurchaseAction(action, input) {
 }
 
 export function purchaseJsonSchema() {
-  const schema = z.toJSONSchema(z.discriminatedUnion('action', Object.entries(schemas).map(([action, input]) =>
+  const schema = z.toJSONSchema(z.discriminatedUnion('action', Object.entries(publicSchemas).map(([action, input]) =>
     z.strictObject({ action: z.literal(action), input }))));
-  schema.title = 'Gift purchase actions';
-  schema.$comment = 'Runtime additionally enforces distinct categories/references, nonempty changes, and ordered delivery windows. Reference ownership, trusted-clock freshness and confirmation validity are enforced by the service, never by JSON Schema alone.';
+  schema.title = 'Public shopping budget actions';
+  schema.$comment = 'Legacy Commerce Mock actions are intentionally absent. Runtime also enforces ownership, trusted-clock freshness, budget and confirmation validity.';
   return schema;
 }

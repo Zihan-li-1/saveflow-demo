@@ -2,7 +2,6 @@ import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { createPurchaseStore } from '../src/skills/scenario/purchase-store.mjs';
 import { createPurchaseSkill } from '../src/skills/scenario/purchase-skill.mjs';
-import { createCommerceClient } from '../src/skills/commerce/commerce-client.mjs';
 import { validateParsedIntent } from '../src/agent/validate-parsed-intent.mjs';
 import { parseTrueforgeBankingIntent } from './trueforge-banking-runtime.mjs';
 import { parseBankingIntent } from './banking-intent-parser.mjs';
@@ -21,15 +20,15 @@ const helperSchemas = {
   'purchase.understand': z.strictObject({ message: z.string().trim().min(1).max(1000), workflow_ref: ref.optional(), expected_version: version.optional() }),
   'purchase.draft.update': z.strictObject({ workflow_ref: ref, expected_version: version, slots: z.record(z.string(), z.unknown()) }),
   'purchase.plan_preview': z.strictObject({ workflow_ref: ref, expected_version: version, manual_finance: z.strictObject({ available_minor: z.number().int().min(0).max(1e9), obligations_minor: z.number().int().min(0).max(1e9) }).optional() }),
+  'purchase.balance_check': z.strictObject({ workflow_ref: ref, manual_finance: z.strictObject({ available_minor: z.number().int().min(0).max(1e9), obligations_minor: z.number().int().min(0).max(1e9) }) }),
   'purchase.cancel_preview': z.strictObject({ workflow_ref: ref, expected_version: version }),
-  'purchase.address': z.strictObject({ workflow_ref: ref, expected_version: version, address: z.unknown() }),
 };
 const messages = { PERSISTENCE_UNAVAILABLE: '购物流程数据库未配置，尚未保存预约。', SCHEDULER_UNAVAILABLE: '后台预约服务未运行，尚未安排任务。',
-  PLATFORM_NOT_CONNECTED: '购物模拟服务未连接。', FINANCIAL_DATA_REQUIRED: '缺少近期余额和待付义务，请在表单补充用于预算规划的数据。',
+  CAPABILITY_UNAVAILABLE: '当前只提供购物链接，请自行在平台下单；Agent 不创建或查询订单。', FINANCIAL_DATA_REQUIRED: '缺少近期余额和待付义务，请在表单补充用于预算规划的数据。',
   DATE_AMBIGUOUS: '请填写明确日期和开始、结束时间，并选择下单日或送达日。', DATE_IN_PAST: '请选择未来日期。',
   CONFIRMATION_INVALID: '确认凭据无效，请重新核对预览。', PREVIEW_STALE: '内容已变化，请刷新报价并重新确认。', PREVIEW_EXPIRED: '确认窗口已过期，请刷新报价。',
   VERSION_CONFLICT: '流程已有更新，请刷新后继续。', BUDGET_EXCEEDED: '商品和全部费用超过剩余预算，请重新选择。',
-  INSUFFICIENT_PLANNING_BALANCE: '可规划余额不足，已考虑其他预留和待付义务。', ORDER_EXISTS: '该品类已有订单，请先查询原订单状态。',
+  INSUFFICIENT_PLANNING_BALANCE: '可规划余额不足，未预留资金或设置提醒。请减少预留金额，或核对可用余额及近期待付义务。', ORDER_EXISTS: '该品类已有订单，请先查询原订单状态。',
   OUTSIDE_ORDER_WINDOW: '尚未到约定下单时间，或已错过窗口。', SESSION_INVALID: '购物会话已失效，请重新进入。', MISSING_SLOTS: '请补齐预算、账户、日期和品类。' };
 let configured;
 export async function configuredPurchaseSkill({ env = process.env, now = Date.now } = {}) {
@@ -42,8 +41,7 @@ export async function configuredPurchaseSkill({ env = process.env, now = Date.no
   const store = configured.store;
   const heartbeat = await store.transaction('purchase_worker_system', state => state.events.heartbeat);
   const schedulerEnabled = env.PURCHASE_WORKER_ENABLED === 'true' && heartbeat?.at > now() - 120000;
-  const commerce = env.COMMERCE_MOCK_URL && env.COMMERCE_MOCK_TOKEN ? createCommerceClient({ baseUrl: env.COMMERCE_MOCK_URL, token: env.COMMERCE_MOCK_TOKEN }) : undefined;
-  return createPurchaseSkill({ store, commerce, schedulerEnabled, now,
+  return createPurchaseSkill({ store, schedulerEnabled, now,
     financialContext: async (_owner, rawAccount) => purchaseFinancialContext((await getConfiguredBankingCore(env)).repository, rawAccount) });
 }
 function sessionCookie(owner, secret, now, origin) {
@@ -84,6 +82,9 @@ export async function handlePurchaseRequest(request, options = {}) {
     const body = await readBody(request);
     if (body?.consent !== true) return reply(403, 'CONSENT_REQUIRED');
     if (!body || Object.keys(body).some(k => !['action', 'input', 'consent'].includes(k)) || typeof body.action !== 'string') fail('VALIDATION_ERROR');
+    if (body.action.startsWith('commerce.') || body.action === 'purchase.address') return reply(409, 'CAPABILITY_UNAVAILABLE');
+    if (body.action === 'scenario.purchase.update' && body.input?.changes &&
+        Object.keys(body.input.changes).some(key => !['selection_mode', 'preferences'].includes(key))) fail('VALIDATION_ERROR');
     if (body.action === 'purchase.session.recover') {
       const input = helperSchemas[body.action].safeParse(body.input); if (!input.success) fail('SESSION_INVALID');
       const [owner] = input.data.recovery_code.split('.');
@@ -102,15 +103,16 @@ export async function handlePurchaseRequest(request, options = {}) {
       if (body.action === 'purchase.read') data = await skill.read(current.owner, input.workflow_ref);
       if (body.action === 'purchase.list') data = await skill.list(current.owner);
       if (body.action === 'purchase.plan_preview') data = await skill.previewPlan(current.owner, input.workflow_ref, input.expected_version, input.manual_finance);
+      if (body.action === 'purchase.balance_check') data = await skill.checkBudget(current.owner, input.workflow_ref, input.manual_finance);
       if (body.action === 'purchase.cancel_preview') data = await skill.previewCancel(current.owner, input.workflow_ref, input.expected_version);
-      if (body.action === 'purchase.address') data = await skill.saveAddress(current.owner, input.workflow_ref, input.expected_version, input.address);
       if (body.action === 'purchase.draft.update') data = await skill.reviseDraft(current.owner, input.workflow_ref, input.expected_version, input.slots);
       if (body.action === 'purchase.understand') {
         const wf = input.workflow_ref ? await skill.read(current.owner, input.workflow_ref) : undefined;
         if (wf && wf.version !== input.expected_version) fail('VERSION_CONFLICT');
         const parseIntent = options.parseIntent ?? (env.SAVEFLOW_BANKING_RUNTIME === 'legacy-qwen' ? parseBankingIntent : parseTrueforgeBankingIntent);
-        // Only business slots are sent: never address objects, order previews,
-        // confirmation credentials, account balances or browser history.
+        // Send the user's raw message and existing business slots to the model.
+        // Never attach stored address objects, order previews, confirmation credentials,
+        // account balances or browser history. User-typed private text is not filtered.
         const intent = validateParsedIntent(await parseIntent(input.message, { env, now, history: [],
           context: wf ? { action: 'scenario.plan_purchase', slots: wf.slots, pendingSlot: 'preferences', question: nextPurchaseQuestion(wf.slots) } : undefined }));
         if (intent.action !== 'scenario.plan_purchase') fail('PURCHASE_INTENT_REQUIRED');

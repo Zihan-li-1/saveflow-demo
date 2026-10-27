@@ -14,22 +14,19 @@ export type PurchaseWorkflow = {
 };
 export type PurchaseCandidate = { candidate_ref: string; sku_ref: string; product_ref: string; category: 'flowers' | 'cake'; name: string;
   price_minor: number; delivery_fee_minor: number; packaging_fee_minor: number; allergens_known: boolean; ingredients: string[]; canonical_url: string };
-export type PurchaseQuote = { quote_ref: string; category: string; product_name: string; sku_ref: string; quantity: number;
-  total: { amount_minor: number; currency: 'CNY' }; items_amount_minor: number; delivery_fee_minor: number; packaging_fee_minor: number;
-  expires_at: string; delivery_window: { starts_at: string; ends_at: string }; cancellation_terms: string; merchant_ref: string; merchant_name: string; payment_mode: string };
 export type FinancialBasis = { source: string; as_of: string; available_minor: number; obligations_minor: number; repository_as_of?: string };
-export type PlanPreview = { plan_preview_ref: string; plan_confirmation_token: string; preview?: { slots: PurchaseSlots; context: FinancialBasis }; notice: string };
-export type OrderPreview = { operation_ref: string; preview_hash: string; confirmation_token: string; workflow_version: number;
-  preview: PurchaseQuote & { delivery: { recipient: string; phone: string; address: string; region: string } } };
+export type PlanPreview = { plan_preview_ref: string; plan_confirmation_token: string; preview?: { slots: PurchaseSlots; context: FinancialBasis; reminder_due_at: string }; notice: string };
+export type PurchaseBudgetCheck = { coverage_status: 'enough' | 'shortfall'; required_minor: number; available_for_plan_minor: number;
+  shortfall_minor: number; source: 'user_provided'; financial_as_of: string; reservation_unchanged: true; bank_balance_changed: false };
 
 export async function purchaseRequest<T>(action: string, input: unknown, accessCode: string, consent: boolean): Promise<T> {
   if (!consent) throw new Error('请先勾选本次演示和模型使用同意项。');
   let response: Response;
   try { response = await fetch('/api/purchase', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Saveflow-Access': accessCode },
     body: JSON.stringify({ action, input, consent }), signal: AbortSignal.timeout(30000) }); }
-  catch { throw new Error(action === 'commerce.order.execute' ? '下单结果待核实，请使用原订单编号查询，勿重复下单。' : '购物服务连接失败，请稍后重试。'); }
+  catch { throw new Error('购物预算服务连接失败，请稍后重试。'); }
   let body;
-  try { body = await response.json(); } catch { throw new Error('无法核实服务响应；若已点击下单，请查询原订单。'); }
+  try { body = await response.json(); } catch { throw new Error('无法核实购物预算服务响应，请刷新后查询原预算。'); }
   if (!response.ok || body?.code !== 'OK') throw new Error(body?.message || '购物请求未完成。');
   if (!body.data || body.data.synthetic_demo_only !== true || body.data.execution_environment !== 'mock') throw new Error('购物响应环境无法核实。');
   return body.data as T;

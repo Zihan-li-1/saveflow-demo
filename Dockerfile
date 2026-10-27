@@ -31,8 +31,7 @@ COPY --from=build /app/out ./out
 COPY server ./server
 COPY src ./src
 COPY scripts/serve-container.mjs ./scripts/serve-container.mjs
-COPY scripts/purchase-worker.mjs scripts/dev-commerce.mjs ./scripts/
-RUN mkdir -p /commerce-state && chown node:node /commerce-state
+COPY scripts/purchase-worker.mjs ./scripts/
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]

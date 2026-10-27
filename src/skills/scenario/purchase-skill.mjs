@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { validatePurchaseAction } from './purchase-contract.mjs';
-import { reserveBudget, amendBudget, allocateOrder, recordOrderOutcome, cancelBudget } from './purchase-budget.mjs';
+import { reserveBudget, amendBudget, allocateOrder, recordOrderOutcome, cancelBudget, planningAvailable } from './purchase-budget.mjs';
 import { validCalendarDate } from '../../lib/calendar.mjs';
 import { matchesGiftPreferences } from '../commerce/gift-filters.mjs';
 
@@ -70,13 +70,37 @@ export function createPurchaseSkill({ store, commerce, financialContext, now = D
     if (missing(wf.slots).length) fail('MISSING_SLOTS');
     if (wf.status !== 'draft' && !(wf.status === 'active' && wf.amendment)) fail('INVALID_TRANSITION');
     const window = timing(wf.slots, now()), context = await finance(owner, wf, manual);
-    const token = randomUUID(), preview_ref = randomUUID();
+    const reminder_due_at = wf.slots.date_meaning === 'deliver_on'
+      ? new Date(Math.max(now(), Date.parse(window.starts_at) - 3 * 86400000)).toISOString() : window.starts_at;
     return store.transaction(owner, state => {
       const current = workflow(state, id, version);
-      const preview = { action: 'scenario.purchase.save', workflow_version: version, slots: current.amendment?.slots ?? current.slots, window, context };
+      const slots = current.amendment?.slots ?? current.slots;
+      const probe = structuredClone(state);
+      const budgetInput = { workflow_ref: id, amount_minor: slots.budget.amount_minor, ...context };
+      if (current.status === 'active') amendBudget(probe, budgetInput); else reserveBudget(probe, budgetInput);
+      const token = randomUUID(), preview_ref = randomUUID();
+      const preview = { action: 'scenario.purchase.save', workflow_version: version, slots: current.amendment?.slots ?? current.slots, window, context, reminder_due_at };
       current.plan_preview = { preview_ref, token_hash: hash(token), preview_hash: hash(preview), preview, expires: now() + 300000 };
       return stamped({ plan_preview_ref: preview_ref, plan_confirmation_token: token, preview,
-        bank_balance_changed: false, notice: '仅预留应用内购物预算；银行余额不变，提醒不要挪用。' });
+        bank_balance_changed: false, notice: '仅预留应用内购物预算，银行余额不变。请注意其他花费；到期只提醒你自行下单。' });
+    });
+  }
+  async function checkBudget(owner, id, manual) {
+    const current = await store.transaction(owner, state => workflow(state, id));
+    if (current.status !== 'active') fail('INVALID_TRANSITION');
+    const context = await finance(owner, current, manual);
+    return store.transaction(owner, state => {
+      const wf = workflow(state, id), reservation = state.reservations[id];
+      if (wf.status !== 'active' || !reservation) fail('INVALID_TRANSITION');
+      if (context.account_ref !== reservation.account_ref) fail('FUNDING_ACCOUNT_CHANGE_REQUIRES_NEW_PLAN');
+      const probe = structuredClone(state);
+      delete probe.reservations[id];
+      const available_for_plan_minor = planningAvailable(probe, context);
+      const required_minor = reservation.unallocated_minor + reservation.occupied_minor;
+      const shortfall_minor = Math.max(0, required_minor - available_for_plan_minor);
+      return stamped({ workflow_ref: id, coverage_status: shortfall_minor ? 'shortfall' : 'enough',
+        required_minor, available_for_plan_minor, shortfall_minor, source: context.source,
+        financial_as_of: context.as_of, reservation_unchanged: true, bank_balance_changed: false });
     });
   }
   async function saveAddress(owner, id, version, input) {
@@ -103,7 +127,7 @@ export function createPurchaseSkill({ store, commerce, financialContext, now = D
       const wf = workflow(state, id, version), token = randomUUID(), preview_ref = randomUUID();
       wf.cancel_preview = { preview_ref, token_hash: hash(token), version, expires: now() + 300000 };
       return stamped({ plan_preview_ref: preview_ref, plan_confirmation_token: token,
-        notice: '取消计划将释放未占用预算；已有订单和结果待核实订单需分别处理。' });
+        notice: '释放可用预留；外部平台订单须由你自行管理，旧版模拟订单占用仍单独显示。' });
     });
   }
   async function perform(owner, action, input) {
@@ -135,7 +159,7 @@ export function createPurchaseSkill({ store, commerce, financialContext, now = D
         for (const job of Object.values(state.jobs)) if (job.workflow_ref === wf.workflow_ref) job.status = 'cancelled';
         wf.window = p.preview.window; wf.status = 'active'; wf.version++; p.used = true;
         const job_ref = `${wf.workflow_ref}_v${wf.version}`;
-        state.jobs[job_ref] = { job_ref, workflow_ref: wf.workflow_ref, due_at: wf.window.starts_at, ends_at: wf.window.ends_at, status: 'scheduled' };
+        state.jobs[job_ref] = { job_ref, workflow_ref: wf.workflow_ref, due_at: p.preview.reminder_due_at, ends_at: wf.window.ends_at, status: 'scheduled' };
         return stamped({ ...safeWorkflow(state, wf), bank_balance_changed: false, scheduler_enabled: true, financial_source: context.source });
       });
     }
@@ -251,7 +275,7 @@ export function createPurchaseSkill({ store, commerce, financialContext, now = D
   }
   const list = owner => store.transaction(owner, state => stamped({ workflows: Object.values(state.workflows)
     .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? '')).slice(0, 100).map(wf => safeWorkflow(state, wf)) }));
-  return { perform, read, list, previewPlan, saveAddress, reviseDraft, previewCancel };
+  return { perform, read, list, previewPlan, checkBudget, saveAddress, reviseDraft, previewCancel };
 }
 
 /** No external calls: the atomic due event is a request for fresh user review. */
