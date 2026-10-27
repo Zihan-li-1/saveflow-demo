@@ -4,7 +4,7 @@
 
 ## 当前用户流程
 
-1. 用户说出目标、金额、品类和日期；`purchase.understand` 仅把购物目标与偏好交给模型解析。模型不能提交预算或下单。
+1. 用户说出目标、金额、品类和日期；`purchase.understand` 把本次自由文本原文及已有购物草案槽位交给已配置模型解析。用户不要在自由文本中填写电话、地址或恢复码。模型不能提交预算或下单。
 2. 用户核对账户称谓、预算月份、日期含义与时间窗，填写近期可用余额和待付义务。金额使用 `{amount_minor,currency:"CNY"}`，整数分；用户填报的财务数据标注 `user_provided`，不冒充银行事实。
 3. `purchase.plan_preview` 先校验可规划余额，再生成预算及提醒预览；用户保存演示身份恢复码并确认，`scenario.purchase.save` 在 PostgreSQL 中预留**应用内预算**和提醒任务。银行余额不变，也不会限制其他消费。预算不足返回 `INSUFFICIENT_PLANNING_BALANCE`，没有确认凭据、预留或提醒；财务数据缺失、数据库或 worker 不可用时也不能保存成功。确认保存时重新核算同账户的其他预留；用户填报的余额在两次检查间不会自动刷新。
 4. 用户可用 `scenario.purchase.update` 切换问答搭配与商品自选，或补充鲜花颜色、花材、蛋糕口味和人数等偏好。页面按品类和偏好生成购物平台**搜索链接**，用户在平台自行挑选商品、核对价格、库存、运费、配送与过敏原，并自行创建订单和付款。搜索链接不代表已核实的商品或推荐承诺。
@@ -17,7 +17,7 @@
 | 动作 | 主要输入 | 输出或约束 |
 |---|---|---|
 | `scenario.plan_purchase` | 可逐步补齐的 `budget`、`budget_month`、`funding_account_ref`、`date_expression`、`date_meaning`、`items`、`selection_mode`、`preferences` | 草案及缺失字段；没有预算占用 |
-| `purchase.understand` | `message`，已有流程时加 `workflow_ref`、`expected_version` | 只提取业务槽位，不发送地址、电话、恢复码或确认凭据给模型 |
+| `purchase.understand` | `message`，已有流程时加 `workflow_ref`、`expected_version` | 原文与已有草案槽位会发送至模型；服务端不主动附加配送地址、恢复码或确认凭据，但不会过滤用户自行写入原文的私密信息 |
 | `purchase.draft.update` | `workflow_ref`、`expected_version`、完整草案槽位 | 更新草案；生效计划的修订须重新预览确认 |
 | `purchase.plan_preview` | `workflow_ref`、`expected_version`、可选 `manual_finance` | 精确金额、财务来源和 `reminder_due_at`，带短时有效的确认凭据 |
 | `purchase.balance_check` | `workflow_ref`、`manual_finance`（当前自填余额、待付义务，整数分） | 返回 `coverage_status=enough\|shortfall`、所需金额、可覆盖金额和差额；不更改预留 |

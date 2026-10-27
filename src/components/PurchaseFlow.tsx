@@ -74,7 +74,7 @@ export function PurchaseFlow({ accessCode = '', consent = false, initialSlots = 
         setWf(next);
       })}>恢复购物预算</button></details>}
     {!wf || wf.status === 'draft' || editing ? <>
-      <label>描述你的购物目标（不要填写电话、地址等私密信息）
+      <label>描述你的购物目标（使用模型理解时会发送这段原文；不要填写电话、地址或恢复码）
         <textarea value={message} onChange={event => setMessage(event.target.value)} maxLength={1000} placeholder="预留1000元，11月1日给妈妈买鲜花和蛋糕……" /></label>
       <button disabled={busy || !message.trim()} onClick={() => run(async () => syncDraft(await call<PurchaseWorkflow>('purchase.understand', {
         message, ...(wf ? { workflow_ref: wf.workflow_ref, expected_version: wf.version } : {}) }))) }>用模型理解目标</button>

@@ -110,8 +110,9 @@ export async function handlePurchaseRequest(request, options = {}) {
         const wf = input.workflow_ref ? await skill.read(current.owner, input.workflow_ref) : undefined;
         if (wf && wf.version !== input.expected_version) fail('VERSION_CONFLICT');
         const parseIntent = options.parseIntent ?? (env.SAVEFLOW_BANKING_RUNTIME === 'legacy-qwen' ? parseBankingIntent : parseTrueforgeBankingIntent);
-        // Only business slots are sent: never address objects, order previews,
-        // confirmation credentials, account balances or browser history.
+        // Send the user's raw message and existing business slots to the model.
+        // Never attach stored address objects, order previews, confirmation credentials,
+        // account balances or browser history. User-typed private text is not filtered.
         const intent = validateParsedIntent(await parseIntent(input.message, { env, now, history: [],
           context: wf ? { action: 'scenario.plan_purchase', slots: wf.slots, pendingSlot: 'preferences', question: nextPurchaseQuestion(wf.slots) } : undefined }));
         if (intent.action !== 'scenario.plan_purchase') fail('PURCHASE_INTENT_REQUIRED');
