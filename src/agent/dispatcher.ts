@@ -49,6 +49,10 @@ export async function dispatchParsedIntent(
 
   try {
     switch (intent.action) {
+      case "task.cancel":
+        // This control action is consumed by the conversation layer, which owns
+        // task identity and pending Core previews. Skills must never fake an undo.
+        return { ok: false, kind: "unsupported" };
       case "transfer.create":
         return await dependencies.transferHandler(intent);
       case "bill.summary":

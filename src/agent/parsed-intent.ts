@@ -2,6 +2,7 @@
 export const PARSED_INTENT_SCHEMA_VERSION = "1.0.0" as const;
 
 export const PARSED_INTENT_ACTIONS = [
+  "task.cancel",
   "transfer.create",
   "bill.summary",
   "subscription.list",
@@ -92,6 +93,14 @@ export type WealthSlots = {
 export type ParsedIntent = ParsedIntentBody & { choice?: { optionId: string } };
 
 type ParsedIntentBody =
+  | {
+      schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
+      /** Cancels the current unfinished conversation task; it never reverses a completed side effect. */
+      action: "task.cancel";
+      slots: Record<string, never>;
+      missingSlots: [];
+      status: "ready_for_resolution";
+    }
   | {
       schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
       action: "transfer.create";

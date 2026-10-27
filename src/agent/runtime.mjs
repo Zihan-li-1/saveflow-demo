@@ -11,6 +11,7 @@ function clarification(intent) {
 
 export async function dispatchParsedIntent(value, dependencies) {
   const intent = validateParsedIntent(value);
+  if (intent.action === 'task.cancel') return { ok: false, kind: 'unsupported' };
   if (intent.status === 'needs_clarification') return clarification(intent);
   if (intent.status === 'unsupported') return { ok: false, kind: 'unsupported' };
   try {

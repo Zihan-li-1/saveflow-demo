@@ -78,6 +78,11 @@ test('parses bill summary with only the month slot', async () => {
   assert.deepEqual(value, intent('bill.summary', { month: '2026-08' }, [], 'ready_for_resolution'));
 });
 
+test('parses explicit cancellation as task.cancel instead of unsupported', async () => {
+  const value = intent('task.cancel', {}, [], 'ready_for_resolution');
+  assert.deepEqual(await parse(value, '取消转账'), value);
+});
+
 test('preserves model period interpretation and never overwrites it with phrase rules', async () => {
   const modelValue = intent('bill.summary', { period: { start_date: '2026-07-01', end_date: '2026-12-31', timezone: 'Asia/Shanghai', label: '下半年' } }, [], 'ready_for_resolution');
   assert.deepEqual(await parse(modelValue, '查下半年账单', { now: () => Date.parse('2026-10-22T04:00:00Z') }), modelValue);

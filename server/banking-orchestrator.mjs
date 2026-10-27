@@ -205,7 +205,13 @@ export async function runBankingConversation(body, {
     if (continuation.conversation && !conversation) throw Object.assign(new Error('HTTP task credential cannot cross adapters'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
     replyContext = { slots: continuation.slots };
     if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:确认|确认转账|确认执行|执行|同意)[。！!]?\s*$/.test(body.message.trim())) throw inputError('CONFIRMATION_REQUIRED', '聊天文字不能确认执行，请在页面核对预览并完成所需确认与验证。', 403);
-    if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:取消|取消操作|取消本次操作|不用了)[。！!]?\s*$/.test(body.message.trim())) return reply(200, 'OK', '本次会话已取消，未执行资金或卡片操作。', { status: 'cancelled', action: continuation.action });
+    if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:取消|取消操作|取消本次操作|取消转账|算了|不用了|停止当前操作)[。！!]?\s*$/.test(body.message.trim())) {
+      const cancellation = conversation ? await conversation.cancelCurrentTask() : { cancelled: true, action: continuation.action };
+      return reply(200, 'OK', cancellation.cancelled ? '已取消当前任务；尚未执行的操作不会继续。' : '当前没有可取消的未完成任务。', {
+        status: cancellation.cancelled ? 'cancelled' : 'no_active_task', action: cancellation.action ?? continuation.action,
+        ...(cancellation.operationId ? { operationId: cancellation.operationId } : {}),
+      });
+    }
     if (expectedAction && continuation.action !== expectedAction) throw Object.assign(new Error('续接凭据与当前工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
     if (body.planInputs !== undefined) {
       if (continuation.action !== 'orchestrator.goal' || continuation.pendingSlot !== '__plan_inputs' || !continuation.slots.amount || !continuation.slots.deadline) throw inputError('CONTINUATION_INVALID', '储蓄数据与当前目标不匹配', 400);
@@ -274,6 +280,13 @@ export async function runBankingConversation(body, {
   }
   // Apply exactly the same boundary to all configured/injected understanders.
   parsed = validateParsedIntent(parsed);
+  if (parsed.action === 'task.cancel') {
+    const cancellation = conversation ? await conversation.cancelCurrentTask() : { cancelled: false, reason: 'no_conversation' };
+    return reply(200, 'OK', cancellation.cancelled ? '已取消当前任务；尚未执行的操作不会继续。' : '当前没有可取消的未完成任务。', {
+      status: cancellation.cancelled ? 'cancelled' : 'no_active_task', action: cancellation.action ?? 'task.cancel',
+      ...(cancellation.operationId ? { operationId: cancellation.operationId } : {}),
+    });
+  }
   if (conversation) {
     parsed = await conversation.acceptIntent(parsed, modelOptions);
     if (continuation && parsed.action !== continuation.action) selections = {};

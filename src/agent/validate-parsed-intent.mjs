@@ -3,6 +3,7 @@ import { validateWealthIntent } from '../skills/wealth/wealth-action-skill.mjs';
 
 export const PARSED_INTENT_SCHEMA_VERSION = '1.0.0';
 export const PARSED_INTENT_ACTIONS = Object.freeze([
+  'task.cancel',
   'transfer.create',
   'bill.summary',
   'subscription.list',
@@ -316,6 +317,11 @@ export function validateParsedIntent(value) {
 
   const slots = requireRecord(input.slots, 'slots');
   switch (input.action) {
+    case 'task.cancel':
+      rejectUnknownKeys(slots, [], 'slots');
+      requireMissingSlots(input.missingSlots, []);
+      requireStatus(input.status, 'ready_for_resolution');
+      break;
     case 'transfer.create':
       validateTransfer(input, slots);
       break;

@@ -101,6 +101,25 @@ test('ambiguous input can only produce canonical clarify or unsupported intents'
   ), ParsedIntentValidationError);
 });
 
+test('task.cancel is a canonical control intent with no model-supplied target or undo authority', () => {
+  const intent = base('task.cancel', {}, [], 'ready_for_resolution');
+  assert.equal(validateParsedIntent(intent), intent);
+  for (const slots of [
+    { action: 'transfer.create' },
+    { taskId: 'task_forged' },
+    { operationId: 'op_forged' },
+  ]) {
+    assert.throws(
+      () => validateParsedIntent(base('task.cancel', slots, [], 'ready_for_resolution')),
+      ParsedIntentValidationError,
+    );
+  }
+  assert.throws(
+    () => validateParsedIntent(base('task.cancel', {}, ['action'], 'needs_clarification')),
+    ParsedIntentValidationError,
+  );
+});
+
 test('rejects model-injected tool, confirmation, risk, operation and entity fields', () => {
   const valid = base('transfer.create', {
     payee_ref: '张三',

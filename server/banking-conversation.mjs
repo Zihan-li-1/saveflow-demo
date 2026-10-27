@@ -162,6 +162,48 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
       accepted = true;
       return intent;
     },
+    /** Cancel the server-owned current task. Pending Core previews are rejected;
+     * completed or in-flight effects are never represented as reversible. */
+    async cancelCurrentTask() {
+      let task = state.currentTask;
+      if (!task || !active(task)) return { cancelled: false, reason: 'no_active_task' };
+      await refresh(state.operationReferences.filter(ref => ref.taskId === task.taskId && !['succeeded', 'failed', 'cancelled'].includes(ref.coreState)));
+      task = state.currentTask;
+      if (!task || !active(task)) return { cancelled: false, reason: 'task_already_finished' };
+      const references = state.operationReferences.filter(ref => ref.taskId === task.taskId);
+      const blocked = references.find(ref => protectedStates.has(ref.coreState));
+      if (blocked) locked(blocked);
+      if (references.some(ref => ref.coreState === 'succeeded')) {
+        throw error('CONVERSATION_TASK_FINISHED', '该操作已经执行成功，不能用“取消任务”回滚；请查询回执或发起对应的后续业务。');
+      }
+      const preview = references.find(ref => ref.coreState === 'awaiting_confirmation');
+      if (preview) {
+        const decision = await core.decide(preview.operationId, {
+          previewHash: preview.previewHash,
+          decision: 'reject',
+          confirmedStepIds: [],
+        });
+        if (!decision.ok) {
+          await refresh([preview]);
+          const latest = state.operationReferences.find(ref => ref.operationId === preview.operationId);
+          if (!latest || !['failed', 'cancelled'].includes(latest.coreState)) {
+            throw error(decision.error.code, decision.error.message, {
+              status: 409,
+              operationId: preview.operationId,
+              action: task.action,
+              uncertain: decision.error.uncertain === true,
+            });
+          }
+        } else {
+          await commit({ type: 'observe_operation', operationId: preview.operationId });
+        }
+      }
+      if (active(state.currentTask) && state.currentTask.taskId === task.taskId) {
+        await commit({ type: 'end_task', taskId: task.taskId, outcome: 'cancelled' });
+      }
+      accepted = true;
+      return { cancelled: true, action: task.action, taskId: task.taskId, ...(preview ? { operationId: preview.operationId } : {}) };
+    },
     async prepare(request) {
       if (!accepted || !active(state.currentTask)) throw error('CONVERSATION_INVALID_TRANSITION');
       await guardWrites();

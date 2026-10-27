@@ -1,6 +1,7 @@
 import { validateParsedIntent } from '../validate-parsed-intent.mjs';
 
 const required = {
+  'task.cancel': [],
   clarify: ['action'],
   'transfer.create': ['payee_ref', 'amount', 'source_account_ref'],
   'bill.summary': ['month'],
