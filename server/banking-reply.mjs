@@ -38,6 +38,9 @@ export function bankingReply({ code, message, data, replyContext = {} }, style =
     text = style === 'friendly' ? '查好了，结果在下方卡片中。' : style === 'professional' ? '查询已完成，详见结果卡片。' : '查询完成。';
   } else if (data?.status === 'unsupported' || code === 'UNSUPPORTED') {
     text = '暂不支持该请求。可以查询账单、卡片、订阅或产品，或生成转账及卡片操作预览；请一次描述一个动作。';
+  } else if (data?.status === 'internal_transfer_recognized') {
+    text = style === 'friendly' ? '这是本人账户之间的资金划转，目前只生成只读预览，还不能执行。' : style === 'professional' ? '本人账户互转已识别，当前仅提供只读预览，正式执行能力待 Core 负责人确认。' : '本人账户互转已识别，当前为只读预览，暂不支持执行。';
+    safetyNotices.push('本人账户互转的正式执行能力尚未接入 Banking Core，此预览不会产生任何资金变动。');
   }
   if (data?.status === 'bill_result' && data.data?.coverage?.warning) text += ` ${data.data.coverage.warning} 数据截至 ${data.data.coverage.asOf}。`;
   return { text, style, safetyNotices: [...new Set(safetyNotices)] };

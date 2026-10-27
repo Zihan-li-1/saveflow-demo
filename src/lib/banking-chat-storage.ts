@@ -7,7 +7,7 @@ export const bankingChatKey = "saveflow.banking-chat.v1";
 const retentionMs = 30 * 60 * 1000;
 const continuationMs = 5 * 60 * 1000;
 const planContinuationMs = 30 * 60 * 1000;
-const kinds = new Set(["normal", "error", "banking_clarification", "banking_bill", "banking_preview", "banking_card", "banking_card_preview", "banking_read", "banking_receipt", "banking_wealth", "banking_wealth_preview", "banking_savings_inputs", "banking_savings_plan"]);
+const kinds = new Set(["normal", "error", "banking_clarification", "banking_bill", "banking_preview", "banking_card", "banking_card_preview", "banking_read", "banking_receipt", "banking_wealth", "banking_wealth_preview", "banking_savings_inputs", "banking_savings_plan", "banking_internal_transfer"]);
 export const continuationLifetime = (messages: Message[], token: string | null) => messages.some(message => message.banking?.status === "needs_plan_inputs" && message.banking.continuationToken === token) ? planContinuationMs : continuationMs;
 type Snapshot = { version: 1 | 2; savedAt: number; messages: Message[]; continuation: string | null; continuationExpiresAt: number; flows: BankingFlows; focusedFlowId: string | null; conversationToken?: string };
 const sessionToken = (token: unknown): token is string => typeof token === 'string' && /^cs1\.[A-Za-z0-9_-]{43}$/.test(token);
