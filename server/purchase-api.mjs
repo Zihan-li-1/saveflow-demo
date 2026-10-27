@@ -27,7 +27,7 @@ const messages = { PERSISTENCE_UNAVAILABLE: '购物流程数据库未配置，�
   DATE_AMBIGUOUS: '请填写明确日期和开始、结束时间，并选择下单日或送达日。', DATE_IN_PAST: '请选择未来日期。',
   CONFIRMATION_INVALID: '确认凭据无效，请重新核对预览。', PREVIEW_STALE: '内容已变化，请刷新报价并重新确认。', PREVIEW_EXPIRED: '确认窗口已过期，请刷新报价。',
   VERSION_CONFLICT: '流程已有更新，请刷新后继续。', BUDGET_EXCEEDED: '商品和全部费用超过剩余预算，请重新选择。',
-  INSUFFICIENT_PLANNING_BALANCE: '可规划余额不足，已考虑其他预留和待付义务。', ORDER_EXISTS: '该品类已有订单，请先查询原订单状态。',
+  INSUFFICIENT_PLANNING_BALANCE: '可规划余额不足，未预留资金或设置提醒。请减少预留金额，或核对可用余额及近期待付义务。', ORDER_EXISTS: '该品类已有订单，请先查询原订单状态。',
   OUTSIDE_ORDER_WINDOW: '尚未到约定下单时间，或已错过窗口。', SESSION_INVALID: '购物会话已失效，请重新进入。', MISSING_SLOTS: '请补齐预算、账户、日期和品类。' };
 let configured;
 export async function configuredPurchaseSkill({ env = process.env, now = Date.now } = {}) {

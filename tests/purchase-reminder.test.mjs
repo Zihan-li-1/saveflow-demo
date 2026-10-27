@@ -27,3 +27,23 @@ test('desired delivery date creates an early reminder without creating an order'
   assert.equal(Object.values(state.events)[0].status, 'awaiting_user_review');
   assert.equal(Object.keys(state.operations).length, 0);
 });
+
+test('insufficient planning balance fails before a confirmation preview exists', async () => {
+  const clock = Date.parse('2026-10-26T00:00:00Z');
+  const store = createPurchaseTestStore();
+  const skill = createPurchaseSkill({ store, now: () => clock, schedulerEnabled: true, financialContext: async () => ({
+    account_ref: 'test-account', available_minor: 90000, obligations_minor: 10000,
+    source: 'user_provided', as_of: new Date(clock).toISOString(),
+  }) });
+  const draft = await skill.perform('owner', 'scenario.plan_purchase', {
+    budget: { amount_minor: 100000, currency: 'CNY' }, budget_month: '2026-10', funding_account_ref: '我的活期',
+    date_expression: '2026-11-01 09:00-12:00', date_meaning: 'order_on',
+    items: [{ category: 'flowers', quantity: 1 }], selection_mode: 'browse',
+  });
+  await assert.rejects(skill.previewPlan('owner', draft.workflow_ref, draft.version), { code: 'INSUFFICIENT_PLANNING_BALANCE' });
+  const state = await store.transaction('owner', value => value);
+  assert.equal(state.workflows[draft.workflow_ref].status, 'draft');
+  assert.equal(state.workflows[draft.workflow_ref].plan_preview, undefined);
+  assert.equal(Object.keys(state.reservations).length, 0);
+  assert.equal(Object.keys(state.jobs).length, 0);
+});

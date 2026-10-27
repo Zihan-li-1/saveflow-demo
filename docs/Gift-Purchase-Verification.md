@@ -18,6 +18,8 @@
 4. 尝试公开调用 `commerce.order.execute` 或 `purchase.address`，应得到 `CAPABILITY_UNAVAILABLE`。修改偏好可以；使用旧候选/地址字段修改生效计划应被拒绝。
 5. 到期后运行 worker 并刷新页面，看到一条待办提醒；重复运行不能产生重复待办。取消预算后未来任务停用，外部平台的订单不受影响。
 
+2026-10-27 实际浏览器抽查：按当前链接生成器的“鲜花花束 粉色 玫瑰”和“生日蛋糕 水果 6人”两个搜索词打开京东，均进入了对应搜索结果页并显示商品列表。该检查证明这两条示例链接当时可用；页面内容包括广告、动态价格与用户所在地区的配送结果，不能证明任意时刻、地区或商品详情页都可用，也不是本应用的商品推荐或报价验证。
+
 ## 自动化检查
 
 运行 `node --test tests/purchase-*.test.mjs tests/purchase-ui.test.cjs`、`npm test`、`npm run typecheck`，并对修改文件运行 ESLint。`PURCHASE_TEST_DATABASE_URL` 是独立测试数据库的可选配置；缺失时数据库集成测试会跳过。旧 Mock 订单路径的通过不代表当前公开下单能力。

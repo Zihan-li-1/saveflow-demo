@@ -72,9 +72,13 @@ export function createPurchaseSkill({ store, commerce, financialContext, now = D
     const window = timing(wf.slots, now()), context = await finance(owner, wf, manual);
     const reminder_due_at = wf.slots.date_meaning === 'deliver_on'
       ? new Date(Math.max(now(), Date.parse(window.starts_at) - 3 * 86400000)).toISOString() : window.starts_at;
-    const token = randomUUID(), preview_ref = randomUUID();
     return store.transaction(owner, state => {
       const current = workflow(state, id, version);
+      const slots = current.amendment?.slots ?? current.slots;
+      const probe = structuredClone(state);
+      const budgetInput = { workflow_ref: id, amount_minor: slots.budget.amount_minor, ...context };
+      if (current.status === 'active') amendBudget(probe, budgetInput); else reserveBudget(probe, budgetInput);
+      const token = randomUUID(), preview_ref = randomUUID();
       const preview = { action: 'scenario.purchase.save', workflow_version: version, slots: current.amendment?.slots ?? current.slots, window, context, reminder_due_at };
       current.plan_preview = { preview_ref, token_hash: hash(token), preview_hash: hash(preview), preview, expires: now() + 300000 };
       return stamped({ plan_preview_ref: preview_ref, plan_confirmation_token: token, preview,

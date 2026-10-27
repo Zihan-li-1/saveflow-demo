@@ -32,7 +32,7 @@ export type ParsedIntentStatus =
   | "needs_clarification"
   | "unsupported";
 
-export type TransferSlotName = "payee_ref" | "amount" | "source_account_ref";
+export type TransferSlotName = "payee_ref" | "amount" | "source_account_ref" | "target_account_ref";
 /** The model-facing bill slot is the time filter; account IDs are resolver output. */
 export type BillSlotName = "month";
 export type CardSlotName = "card_ref" | "amount";
@@ -51,6 +51,8 @@ export interface TransferCreateSlots {
   amount?: ParsedAmount;
   /** Raw user wording, resolved later by Financial Context. */
   source_account_ref?: string;
+  /** Raw user wording for the user's own receiving account (本人账户互转). Mutually exclusive with payee_ref. */
+  target_account_ref?: string;
 }
 
 export interface BillSummarySlots {

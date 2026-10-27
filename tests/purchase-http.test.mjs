@@ -30,6 +30,30 @@ test('public shopping API rejects legacy candidate and address selection fields'
   }
   assert.equal(called, false);
 });
+test('insufficient balance returns an actionable error before confirmation', async () => {
+  const now = () => Date.parse('2026-10-26T00:00:00Z');
+  const store = createPurchaseTestStore();
+  const skill = createPurchaseSkill({ store, now, schedulerEnabled: true });
+  const options = { env, now, getSkill: async () => skill };
+  const draftResponse = await handlePurchaseRequest(request({ action: 'scenario.plan_purchase', input: {
+    budget: { amount_minor: 100000, currency: 'CNY' }, budget_month: '2026-10', funding_account_ref: '我的活期',
+    date_expression: '2026-11-01 09:00-12:00', date_meaning: 'order_on',
+    items: [{ category: 'flowers', quantity: 1 }], selection_mode: 'browse',
+  } }), options);
+  const cookie = draftResponse.headers.get('set-cookie').split(';')[0];
+  const draft = (await draftResponse.json()).data;
+  const previewResponse = await handlePurchaseRequest(request({ action: 'purchase.plan_preview', input: {
+    workflow_ref: draft.workflow_ref, expected_version: draft.version,
+    manual_finance: { available_minor: 90000, obligations_minor: 10000 },
+  } }, cookie), options);
+  assert.equal(previewResponse.status, 400);
+  const body = await previewResponse.json();
+  assert.equal(body.code, 'INSUFFICIENT_PLANNING_BALANCE');
+  assert.match(body.message, /未预留资金或设置提醒/);
+  const state = await store.transaction(cookie.split('=')[1].split('.')[0], value => value);
+  assert.equal(Object.keys(state.reservations).length, 0);
+  assert.equal(Object.keys(state.jobs).length, 0);
+});
 test('server-signed persistent demo session isolates workflows and private address never reaches parser', async () => {
   const store = createPurchaseTestStore(), skill = createPurchaseSkill({ store });
   let seen;

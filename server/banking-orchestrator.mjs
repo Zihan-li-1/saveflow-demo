@@ -48,6 +48,7 @@ export function statusFor(code) {
 const clarificationQuestions = {
   amount: '要转多少钱？例如 500 元。',
   source_account_ref: '要从哪个账户转出？',
+  target_account_ref: '要转入哪个本人账户？',
   payee_ref: '要转给谁？',
   card_ref: '请选择要查看或操作的卡片。',
   goal: '你希望这笔理财帮你实现什么？例如：未来 6 个月争取获得一些额外收益、1 年内存下 1 万元、准备应急金，或为旅行和大额购物做准备。请说说金额、用途或时间，知道多少说多少。',
@@ -194,7 +195,7 @@ export async function runBankingConversation(body, {
     if (slot === 'card_ref') {
       const cards = await repository.getCards();
       choices = cardChoices(eligibleCards(state.action, cards));
-    } else if (slot === 'source_account_ref') choices = await accountChoices(repository);
+    } else if (slot === 'source_account_ref' || slot === 'target_account_ref') choices = await accountChoices(repository);
     else if (slot === 'payee_ref') choices = payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active'));
     if (['card_ref', 'source_account_ref', 'payee_ref'].includes(slot) && !choices.length) return undefined;
     const question = `${message} ${questionFor(state.action, slot, '', slots)}`;
@@ -356,6 +357,11 @@ export async function runBankingConversation(body, {
     const continuationToken = issueState({ action: result.action, slots: parsed.slots, pendingSlot: result.action === 'card.set_budget' ? 'amount' : 'card_ref', selections, env, now });
     return reply(200, 'OK', '卡片正式预览已生成，等待页面确认', { status: 'awaiting_confirmation', action: result.action, operationId: prepared.data.operationId, preview: prepared.data.preview, risk: prepared.data.risk, evidence: result.data.evidence, continuationToken });
   }
+  if (result.ok && result.kind === 'internal_transfer_recognized') {
+    return reply(200, 'OK', '本人账户互转已识别，正式账务执行能力待 Banking Core 负责人确认后开放。', {
+      status: 'internal_transfer_recognized', action: result.action, preview: result.data.preview, previewOnly: true, executionAllowed: false,
+    });
+  }
   if (result.ok && result.kind === 'transfer_preview') {
     const continuationToken = issueState({ action: 'transfer.create', slots: parsed.slots, pendingSlot: 'amount', selections, env, now });
     const settings = await repository.getDemoSettings();
@@ -376,7 +382,7 @@ export async function runBankingConversation(body, {
     const slot = result.slot || nextMissingSlot(parsed) || (result.candidates ? 'payee_ref' : undefined);
     // Re-read even resolver candidates: states/eligibility may have changed since resolution.
     const cards = slot === 'card_ref' ? eligibleCards(action, await repository.getCards()) : [];
-    const choices = slot === 'card_ref' ? cardChoices(cards.filter(card => !result.candidates?.length || result.candidates.some(candidate => candidate.id === card.id))) : result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' ? await accountChoices(repository) : slot === 'payee_ref' && !slots.payee_ref ? payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active')) : [];
+    const choices = slot === 'card_ref' ? cardChoices(cards.filter(card => !result.candidates?.length || result.candidates.some(candidate => candidate.id === card.id))) : result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' || slot === 'target_account_ref' ? await accountChoices(repository) : slot === 'payee_ref' && !slots.payee_ref ? payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active')) : [];
     return clarificationResponse(reply, {
       action,
       slot,

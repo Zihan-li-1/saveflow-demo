@@ -120,7 +120,7 @@ export function PurchaseFlow({ accessCode = '', consent = false, initialSlots = 
         })}>确认预留金额并保存提醒</button></div>}
     </> : <>
       {wf.reservation && <div className={styles.totals}><span>本月预留 {yuan(wf.reservation.total_minor)}</span><span>仍可用于本计划 {yuan(wf.reservation.unallocated_minor)}</span></div>}
-      <p>这笔钱仍在原账户中。查看或购买其他商品前，请记得扣除这笔预留和必要开支；平台实际支付不会自动同步到此预算。</p>
+      <p>这笔钱仍在原账户中。查看或购买其他商品前，请记得扣除这笔预留和必要开支。余额变化和平台支付不会自动同步；下单前请重新核对实际可用金额。</p>
       {wf.financial_basis && <p>规划数据：{wf.financial_basis.source === 'user_provided' ? '用户填报，未与银行核对' : '合成演示数据'} · 截至 {wf.financial_basis.as_of}</p>}
       <button disabled={busy} onClick={() => run(async () => setWf(await call<PurchaseWorkflow>('purchase.read', { workflow_ref: wf.workflow_ref })))}>刷新预算与提醒</button>
       {active && <>
@@ -137,7 +137,7 @@ export function PurchaseFlow({ accessCode = '', consent = false, initialSlots = 
         <div className={styles.grid}>{links.map(link => <article key={link.category}><b>{link.category === 'flowers' ? '鲜花' : '蛋糕'}</b>
           <p>平台搜索词：{link.query}</p><a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}，自行选择并下单</a>
           {link.check_before_order.length > 0 && <p>下单前请人工核对排除项：{link.check_before_order.join('、')}。搜索结果不能证明商品符合要求。</p>}</article>)}</div>
-        <p>链接只是搜索入口，商品、库存、总价、运费、配送时间和过敏原请以平台页面为准；SaveFlow 不创建或查询平台订单。</p>
+        <p>每个品类只有一条搜索入口；SaveFlow 尚未筛选具体商品，也没有按价格分档推荐。商品、库存、总价、运费、配送时间和过敏原请以平台页面为准；SaveFlow 不创建或查询平台订单。</p>
         <button disabled={busy} onClick={() => run(async () => setPlan(await call<PlanPreview>('purchase.cancel_preview', { workflow_ref: wf.workflow_ref, expected_version: wf.version })))}>预览释放预留预算</button>
         {plan && <div className={styles.preview}><p>{plan.notice}</p><button disabled={busy} onClick={() => run(async () => {
           setWf(await call<PurchaseWorkflow>('scenario.purchase.cancel', { workflow_ref: wf.workflow_ref, expected_version: wf.version,

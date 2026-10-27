@@ -27,7 +27,7 @@ test('active flow gives preference-based links and leaves checkout to user', () 
       preferences: { flower_colors: ['pink'], cake_flavors: ['fruit'], ingredient_exclusions: ['nuts'] },
     }, orders: [], reservation: { total_minor: 100000, unallocated_minor: 100000, occupied_minor: 0, consumed_minor: 0, released_minor: 0 },
   } }));
-  for (const copy of ['本月预留', '银行', '问答搭配', '商品自选', 'search.jd.com', '自行选择并下单', '坚果', '过敏原']) assert.ok(html.includes(copy), copy);
+  for (const copy of ['本月预留', '银行', '问答搭配', '商品自选', 'search.jd.com', '自行选择并下单', '坚果', '过敏原', '只有一条搜索入口', '没有按价格分档推荐', '重新核对实际可用金额']) assert.ok(html.includes(copy), copy);
   assert.doesNotMatch(html, /查询订单|确认购买|填写配送地址/);
 });
 

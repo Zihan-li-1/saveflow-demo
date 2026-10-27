@@ -2,7 +2,7 @@ import { validateParsedIntent } from '../validate-parsed-intent.mjs';
 
 const required = {
   clarify: ['action'],
-  'transfer.create': ['payee_ref', 'amount', 'source_account_ref'],
+  // transfer.create 的必需槽位是动态的：本人互转用 target_account_ref，对外转账用 payee_ref（见 transferRequiredSlots）。
   'bill.summary': ['month'],
   'card.get': ['card_ref'],
   'card.set_budget': ['card_ref', 'amount'],
@@ -22,8 +22,13 @@ const required = {
   'orchestrator.goal': ['goal_text'],
 };
 
+function transferRequiredSlots(slots) {
+  const internal = 'target_account_ref' in slots;
+  return ['amount', 'source_account_ref', internal ? 'target_account_ref' : 'payee_ref'];
+}
+
 export function buildParsedIntent(action, slots) {
-  const needed = required[action] ?? [];
+  const needed = action === 'transfer.create' ? transferRequiredSlots(slots) : (required[action] ?? []);
   const missingSlots = action === 'bill.summary' && (slots.month !== undefined || slots.period !== undefined) ? [] : needed.filter(slot => slots[slot] === undefined || slots[slot] === null || slots[slot] === '');
   const candidate = {
     schemaVersion: '1.0.0', action, slots, missingSlots,
