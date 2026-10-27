@@ -17,6 +17,7 @@ export const PARSED_INTENT_ACTIONS = [
   "wealth.subscribe",
   "wealth.redeem",
   "scenario.create_rule",
+  "scenario.plan_purchase",
   "scenario.update_rule",
   "scenario.disable_rule",
   "scenario.review_event",
@@ -67,7 +68,13 @@ export interface CardReferenceSlots {
 export interface CardBudgetSlots extends CardReferenceSlots {
   amount?: ParsedAmount;
 }
-export interface CardControlSlots extends CardReferenceSlots { online_payments_enabled?: boolean; blocked_categories?: string[]; alert_amount?: ParsedAmount | null }
+export interface CardControlSlots extends CardReferenceSlots {
+  online_payments_enabled?: boolean;
+  blocked_categories?: string[];
+  alert_amount?: ParsedAmount | null;
+  balance_reminder_amount?: ParsedAmount | null;
+  balance_reminder_percentage?: number | null;
+}
 export interface CardSecurityReviewSlots extends CardReferenceSlots { issue_type?: "card_details_exposed" | "unauthorized_transaction" | "device_lost" }
 
 export type WealthAction = "wealth.recommend" | "wealth.compare" | "wealth.assess_risk" | "wealth.subscribe" | "wealth.redeem";
@@ -86,6 +93,13 @@ export type WealthSlots = {
 export type ParsedIntent = ParsedIntentBody & { choice?: { optionId: string } };
 
 type ParsedIntentBody =
+  | {
+      schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
+      action: "scenario.plan_purchase";
+      slots: Record<string, unknown>;
+      missingSlots: [];
+      status: "ready_for_resolution";
+    }
   | {
       schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
       action: "transfer.create";

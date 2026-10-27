@@ -15,7 +15,7 @@ function req(action, input, extra = {}) {
 }
 async function setup() {
   const { handleBanking } = await import('../server/banking.mjs');
-  const { createBankingCore } = await import('../src/banking-core/core.mjs');
+  const { createLowBalanceCore: createBankingCore } = await import('./fixtures/low-balance-core.mjs');
   const core = createBankingCore();
   const fetchImpl = async (url, init) => handleBanking(new Request(url, init), { core, env });
   const client = createBankingClient({ mode: 'http', baseUrl: 'https://demo.example', accessCode: () => env.SAVEFLOW_ACCESS_CODE, fetchImpl });
@@ -123,4 +123,59 @@ test('B browser Mock client uses the same validated dispatch path', async () => 
   const p = await confirmed(client);
   const receipt = await client.request('action.execute', { operationId: p.operationId, previewHash: p.preview.previewHash });
   assert.equal(receipt.status, 'succeeded');
+});
+
+test('B HTTP: 高风险转账经 verification.start/verify 验证后执行，验证码不入响应', async () => {
+  const { handleBanking } = await import('../server/banking.mjs');
+  const { createBankingCore } = await import('../src/banking-core/core.mjs');
+  const core = createBankingCore({ demoOtpCode: '123456' });
+  const wire = (action, input, headers = {}) => new Request(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Saveflow-Access': env.SAVEFLOW_ACCESS_CODE, Origin: 'https://demo.example', ...headers }, body: JSON.stringify({ schema_version: '1.1.0', action, input }) });
+  const balance = () => core.repository.getAccount('ACC-CHECKING').availableBalanceFen;
+
+  const p = await (await handleBanking(wire('transfer.prepare', { source_account_id: 'ACC-CHECKING', payee_id: 'payee_001', amount_minor: 200000, currency: 'CNY' }), { env, core })).json();
+  assert.equal(p.code, 'OK');
+  assert.equal(p.data.risk.required_verification, 'otp');
+  assert.equal(p.data.risk.verification_code, undefined); // 验证码走受控渠道，不入风险响应
+  const operationId = p.data.operation_id;
+  const previewHash = p.data.preview.preview_hash;
+
+  assert.equal((await (await handleBanking(wire('action.decide', { operation_id: operationId, preview_hash: previewHash, decision: 'confirm', confirmed_step_ids: p.data.preview.step_ids }), { env, core })).json()).code, 'OK');
+
+  const s = await (await handleBanking(wire('verification.start', { operation_id: operationId, preview_hash: previewHash }), { env, core })).json();
+  assert.equal(s.code, 'OK');
+  assert.match(s.data.challenge_id, /^otp_/);
+
+  const v = await (await handleBanking(wire('verification.verify', { operation_id: operationId, preview_hash: previewHash, challenge_id: s.data.challenge_id, code: '123456' }), { env, core })).json();
+  assert.equal(v.code, 'OK');
+  assert.equal(v.data.verified, true);
+
+  const e = await (await handleBanking(wire('action.execute', { operation_id: operationId, preview_hash: previewHash }, { 'Idempotency-Key': operationId }), { env, core })).json();
+  assert.equal(e.code, 'OK');
+  assert.equal(e.data.status, 'succeeded');
+  assert.equal(e.data.effects[0].amount_minor, 200000);
+  assert.equal(balance(), 2800000);
+});
+
+test('B HTTP: 类型化客户端走正常路径 verification.start/verify（回归：valid() 不再静默放行）', async () => {
+  const { handleBanking } = await import('../server/banking.mjs');
+  const { createBankingCore } = await import('../src/banking-core/core.mjs');
+  const core = createBankingCore({ demoOtpCode: '123456' });
+  const fetchImpl = async (url, init) => handleBanking(new Request(url, init), { core, env });
+  const client = createBankingClient({ mode: 'http', baseUrl: 'https://demo.example', accessCode: () => env.SAVEFLOW_ACCESS_CODE, fetchImpl });
+
+  const p = await client.request('transfer.prepare', { fromAccountId: 'ACC-CHECKING', payeeId: 'payee_001', amountFen: 200000, currency: 'CNY' });
+  assert.equal(p.risk.requiredVerification, 'otp');
+  assert.equal(p.risk.verificationCode, undefined); // 验证码不入响应
+
+  await client.request('action.decide', { operationId: p.operationId, previewHash: p.preview.previewHash, decision: 'confirm', confirmedStepIds: p.preview.stepIds });
+
+  const started = await client.request('verification.start', { operationId: p.operationId, previewHash: p.preview.previewHash });
+  assert.match(started.challengeId, /^otp_/);
+
+  const verified = await client.request('verification.verify', { operationId: p.operationId, previewHash: p.preview.previewHash, challengeId: started.challengeId, code: '123456' });
+  assert.equal(verified.verified, true);
+
+  const receipt = await client.request('action.execute', { operationId: p.operationId, previewHash: p.preview.previewHash });
+  assert.equal(receipt.status, 'succeeded');
+  assert.equal(core.repository.getAccount('ACC-CHECKING').availableBalanceFen, 2800000);
 });

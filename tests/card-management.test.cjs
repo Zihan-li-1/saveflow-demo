@@ -9,7 +9,8 @@ require.extensions['.ts'] = (module, filename) => {
 };
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { budgetBalanceAlert, synchronizeManagedCards } = require('../src/lib/card-management.ts');
+const { budgetBalanceAlert, cardActivities, synchronizeManagedCards } = require('../src/lib/card-management.ts');
+const { currentSubscriptions } = require('../src/lib/subscription-overview.ts');
 
 const cards = [
   { id: 'CARD-MAIN', name: '日常虚拟卡', status: 'active', monthlyBudgetFen: 500000, monthlySpentFen: 0, onlinePaymentsEnabled: true, blockedCategories: [], alertThresholdFen: null, balanceReminderAmountFen: null, balanceReminderPercent: null, version: 1 },
@@ -41,4 +42,18 @@ test('card management ignores unknown cards and does not mutate initialization d
   assert.deepEqual(result.map(card => card.id), ['CARD-MAIN', 'CARD-ENT']);
   result[0].blockedCategories.push('游戏');
   assert.deepEqual(cards[0].blockedCategories, []);
+});
+
+test('card management lists write previews and reflects their operation state', () => {
+  const message = { id: 3, role: 'agent', text: 'preview', kind: 'banking_card_preview', banking: { operationId: 'op-card-1', status: 'awaiting_confirmation', action: 'card.set_budget', preview: { exactEffects: [{ kind: 'card_change', cardName: '娱乐虚拟卡', before: { monthlyBudgetFen: 80000 }, after: { monthlyBudgetFen: 100000 } }] } } };
+  assert.deepEqual(cardActivities([message], {}), [{ id: 'op-card-1', cardName: '娱乐虚拟卡', label: '调整月预算', detail: '新预算 ¥1000.00', status: '待确认' }]);
+  assert.equal(cardActivities([message], { 'op-card-1': 'success' })[0].status, '已完成');
+});
+
+test('subscription overview starts with initialized data and follows the latest query result', () => {
+  const initial = [{ id: 's1', name: '视频会员', monthlyFeeFen: 3000, status: 'active', isPotentiallyUnused: true }];
+  assert.deepEqual(currentSubscriptions(initial, []), initial);
+  const latest = [{ id: 's2', name: '云存储', monthlyFeeFen: 2000, status: 'cancelled', isPotentiallyUnused: false }];
+  const messages = [{ id: 1, role: 'agent', kind: 'banking_read', banking: { status: 'subscription_result', data: { subscriptions: initial } } }, { id: 2, role: 'agent', kind: 'banking_read', banking: { status: 'subscription_result', data: { subscriptions: latest } } }];
+  assert.deepEqual(currentSubscriptions(initial, messages), latest);
 });

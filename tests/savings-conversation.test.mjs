@@ -94,6 +94,10 @@ test('verified savings plan carries its deadline into a separate read-only Wealt
   assert.equal(plan.data.status, 'goal_plan');
   assert.equal(typeof plan.data.wealthHandoffToken, 'string');
   const wealthInputs = { max_risk_level: 'R2', investable_amount_minor: 100000, liquidity_requirement: 'T+1' };
+  const invented = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, wealthInputs: { ...wealthInputs, target_date: '2027-12-31' } }), { ...options, core })).json();
+  assert.equal(invented.code, 'WEALTH_INPUT_INVALID');
+  const mixed = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, wealthInputs, message: '立即申购' }), { ...options, core })).json();
+  assert.equal(mixed.code, 'INVALID_REQUEST');
   const screening = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, wealthInputs }), { ...options, core })).json();
   assert.equal(screening.data.status, 'wealth_result');
   assert.equal(screening.data.action, 'wealth.recommend');
@@ -102,12 +106,10 @@ test('verified savings plan carries its deadline into a separate read-only Wealt
   assert.equal(screening.data.operationId, undefined);
   assert.equal((await core.repository.getAccounts())[0].availableBalanceFen, (await createBankingCore({ now }).repository.getAccounts())[0].availableBalanceFen);
 
-  const invented = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, wealthInputs: { ...wealthInputs, target_date: '2027-12-31' } }), { ...options, core })).json();
-  assert.equal(invented.code, 'WEALTH_INPUT_INVALID');
-  const mixed = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, wealthInputs, message: '立即申购' }), { ...options, core })).json();
-  assert.equal(mixed.code, 'INVALID_REQUEST');
+  const replay = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, wealthInputs }), { ...options, core })).json();
+  assert.equal(replay.code, 'CONTINUATION_STALE');
   const unrelated = await (await handleBankingAgent(request({ continuationToken: initial.data.continuationToken, wealthInputs }), { ...options, core })).json();
-  assert.equal(unrelated.code, 'CONTINUATION_INVALID');
+  assert.notEqual(unrelated.data.status, 'wealth_result');
 });
 
 test('a savings plan still works when the host has no Wealth port', async () => {

@@ -77,7 +77,7 @@ test('transfer controls: trial preview offers confirm via bridge; non-trial keep
   assert.ok(!current.includes('确认转账（未开放）'), current);
   assert.equal((current.match(/disabled=""/g) || []).length, 0);
   assert.equal((render(false).match(/disabled=""/g) || []).length, 4);
-  assert.equal((render(true, true).match(/disabled=""/g) || []).length, 4);
+  assert.equal((render(true, true).match(/disabled=""/g) || []).length, 5);
   const direct = render(true, false, false);
   for (const text of ['确认转账', '取消本次转账', '查询转账状态', '修改金额', '修改收款人']) assert.ok(direct.includes(text), direct);
   assert.ok(!direct.includes('确认转账（未开放）'), direct);
@@ -151,7 +151,8 @@ test('actual client and unified handler preserve reply/card separation across st
       const answer = await askBankingAgent({ message: '查询2026年8月账单', replyStyle }, env.SAVEFLOW_ACCESS_CODE, new AbortController().signal);
       assert.equal(answer.reply.style, replyStyle); assert.equal(sent.at(-1).replyStyle, replyStyle);
       assert.equal(seen.at(-1).replyStyle, undefined); // Style never changes the understanding context.
-      const { reply, requestId, ...data } = answer;
+      const { reply, requestId, conversation, ...data } = answer;
+      assert.ok(conversation.token);
       assert.ok(requestId); cards.add(JSON.stringify(data)); bubbles.add(reply.text);
       rendered.add(renderToStaticMarkup(React.createElement(BankingBillCard, { data: answer })));
     }

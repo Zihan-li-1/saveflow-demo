@@ -5,6 +5,8 @@ import { ParsedIntentValidationError } from '../src/agent/validate-parsed-intent
 import { runBankingConversation, statusFor } from './banking-orchestrator.mjs';
 import { parseTrueforgeBankingIntent } from './trueforge-banking-runtime.mjs';
 import { bankingReply, validateReplyStyle } from './banking-reply.mjs';
+import { agentErrorPolicy } from '../src/lib/agent-error-policy.mjs';
+import { openBankingConversation } from './banking-conversation.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const RATE_LIMIT = 10;
@@ -54,6 +56,10 @@ async function readBody(request) {
 }
 
 function responseEnvelope(requestId, code, message, data, style, replyContext) {
+  if (!['OK', 'NEEDS_CLARIFICATION', 'UNSUPPORTED'].includes(code)) {
+    data = { ...(data ?? { status: 'error' }), error: { ...data?.error, code, message,
+      ...agentErrorPolicy(code, { hasRecovery: !!data?.recovery, hasChoices: !!data?.recovery?.choices?.length, uncertain: data?.error?.uncertain === true }) } };
+  }
   return { code, message, requestId, reply: bankingReply({ code, message, data, replyContext }, style), ...(data ? { data } : {}) };
 }
 
@@ -74,11 +80,18 @@ export async function handleBankingAgent(
 ) {
   const { env = process.env, fetchImpl = fetch, now = Date.now } = options;
   let style = 'concise';
+  let conversation;
   const requestId = crypto.randomUUID();
-  const reply = (status, code, message, data, replyContext) => Response.json(
-    responseEnvelope(requestId, code, message, data, style, replyContext),
-    { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } },
-  );
+  const reply = (status, code, message, data, replyContext) => {
+    const metadata = conversation?.metadata();
+    const envelope = responseEnvelope(requestId, code, message, metadata ? { ...(data ?? { status: 'error' }), conversation: metadata } : data, style, replyContext);
+    const response = Response.json(
+      envelope,
+      { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Request-ID': requestId } },
+    );
+    conversation?.remember(response, envelope);
+    return response;
+  };
   const authFailure = (category, status, code, message) => {
     const diagnostic = { event: 'banking_auth_failure', category, requestId };
     if (options.onAuthDiagnostic) options.onAuthDiagnostic(diagnostic);
@@ -108,18 +121,25 @@ export async function handleBankingAgent(
     // Dependency injection is for tests/hosts, never supplied by the request.
     const parseIntent = options.parseIntent ?? (implementation === 'legacy-qwen' ? defaultParseBankingIntent :
       (message, context) => parseTrueforgeBankingIntent(message, { ...context, signal: request.signal, client: options.trueforgeRuntimeClient }));
-    // Retired MCP pilot tokens cannot silently enter another implementation.
-    if (/^tf[mb]1\./.test(body?.continuationToken || '')) throw Object.assign(new Error('Retired continuation'), { code: 'CONTINUATION_INVALID', status: 400, userMessage: '旧试点会话已失效，请开始新请求。' });
+    // Conversation binding rejects retired/unbound tokens before any understanding.
     const core = options.core ?? await getConfiguredBankingCore(env);
     const repository = options.repository ?? core.repository;
+    conversation = openBankingConversation(body, { core, env, now, parseIntent, conversationHost: options.conversationHost });
+    const replay = await conversation.begin();
+    if (replay) return replay;
+    if (conversation.syncOnly) return reply(200, 'OK', '已核验服务端会话，历史预览不会自动执行。', { status: 'conversation_state' });
     const scenarioScope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
-    const result = await runBankingConversation(body, { core, repository, env, now, timezone: options.timezone ?? 'Asia/Shanghai', parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope, savingsAdvisor: options.savingsAdvisor });
-    const data = result.data?.recovery ? { ...result.data, recovery: { ...result.data.recovery, continuationToken: result.data.continuationToken } } : result.data;
+    const result = await conversation.finish(await runBankingConversation(conversation.body, { core: { ...core, prepare: request => conversation.prepare(request) }, repository, env, now, timezone: options.timezone ?? 'Asia/Shanghai', parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope, savingsAdvisor: options.savingsAdvisor, conversation, resumeOnly: conversation.resumeOnly }));
+    const data = result.data?.recovery ? { ...result.data, recovery: { ...result.data.recovery, continuationToken: result.data.recovery.continuationToken ?? result.data.continuationToken } } : result.data;
     return reply(result.httpStatus, result.code, result.message, data, result.replyContext);
   } catch (error) {
     const code = typeof error?.code === 'string' ? error.code : error instanceof BankingIntentParserError || error instanceof ParsedIntentValidationError ? 'MODEL_FORMAT_ERROR' : error?.message?.includes('DATABASE_URL') ? 'DATABASE_NOT_CONFIGURED' : 'MODEL_UNAVAILABLE';
-    const message = error.userMessage ?? (error instanceof BankingIntentParserError ? error.message : publicMessage(code, '请求未取得可靠结果，请稍后重试。'));
-    return reply(Number.isInteger(error?.status) ? error.status : code === 'DATABASE_NOT_CONFIGURED' ? 503 : statusFor(code), code, message, errorData(code, message));
+    const message = error.userMessage ?? (code.startsWith('CONVERSATION_') ? '会话已更新或暂时不可用，请重新选择或开始当前业务；聊天记录可以保留。' : error instanceof BankingIntentParserError ? error.message : publicMessage(code, '请求未取得可靠结果，请稍后重试。'));
+    const data = errorData(code, message);
+    if (error.uncertain) { data.error.uncertain = true; data.operationId = error.operationId; data.action = error.action; data.status = 'core_error'; }
+    return reply(Number.isInteger(error?.status) ? error.status : code === 'DATABASE_NOT_CONFIGURED' ? 503 : statusFor(code), code, message, data);
+  } finally {
+    conversation?.release();
   }
 }
 

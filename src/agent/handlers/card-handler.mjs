@@ -9,7 +9,7 @@ export async function handleCard(intent, repository, selections = {}) {
     ? { kind: 'resolved', cardId: selected.entityId, reference: { slot: 'card_ref', entity_type: 'card', entity_id: selected.entityId, source: 'user_selection' } }
     : await resolveCardReference(repository, intent.slots.card_ref);
   if (resolution.kind !== 'resolved') {
-    return { ok: false, kind: 'needs_clarification', action: intent.action, source: 'resolver', slot: 'card_ref', question: resolution.reason === 'CARD_AMBIGUOUS' ? '找到多张同名卡，请选择。' : '请选择要操作的卡片。', candidates: resolution.candidates };
+    return { ok: false, kind: 'needs_clarification', action: intent.action, source: 'resolver', slot: 'card_ref', question: resolution.reason === 'CARD_AMBIGUOUS' ? '找到多张同名卡，请选择。' : '没有找到唯一匹配的卡片，请从以下卡片中重新选择。', candidates: resolution.candidates };
   }
 
   const resolvedSlots = { card_id: resolution.cardId };
@@ -24,7 +24,7 @@ export async function handleCard(intent, repository, selections = {}) {
     intent_id: `intent_${randomUUID()}`, action: intent.action, state: 'ready_for_planning',
     resolved_slots: resolvedSlots, references: [resolution.reference], missing_slots: [],
   });
-  if (!result.ok) return { ok: false, kind: 'card_error', action: intent.action, error: result.error };
+  if (!result.ok) return { ok: false, kind: 'card_error', action: intent.action, error: result.error, cardId: resolution.cardId };
 
   const context = await repository.getContextInfo();
   const evidence = [{ source: context.dataSource, asOf: context.asOf, entityIds: [resolution.cardId] }];

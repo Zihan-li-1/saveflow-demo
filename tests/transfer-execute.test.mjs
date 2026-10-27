@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createBankingCore } from '../src/banking-core/core.mjs';
+import { createLowBalanceCore as createBankingCore } from './fixtures/low-balance-core.mjs';
 import { handleTransfer, transferRepository, prepareTransferPreview } from '../src/agent/runtime.mjs';
 
 // 端到端可行性验证：转账 agent 层（runtime.mjs）→ core.prepare → core.decide → core.execute。
@@ -44,14 +44,14 @@ test('transfer confirm-execute 后端闭环：预览不扣款，确认后执行�
   assert.equal(core.repository.getAccount('ACC-CHECKING').availableBalanceFen, 450000); // 执行后扣款
 });
 
-test('权限分级：≤1000元 只需确认；>1000元 需短信验证码强验证', async () => {
+test('权限分级：≤1000元 只需确认；>1000元 需一次性验证码（OTP）', async () => {
   const core = createBankingCore();
   const small = unwrap(await core.prepare({ action: 'transfer_money', input: { fromAccountId: 'ACC-CHECKING', payeeId: 'payee_001', amountFen: 50000, currency: 'CNY' } }));
   assert.equal(small.risk.requiredVerification, 'none');
   assert.equal(small.risk.verificationCode, undefined);
   const large = unwrap(await core.prepare({ action: 'transfer_money', input: { fromAccountId: 'ACC-CHECKING', payeeId: 'payee_001', amountFen: 200000, currency: 'CNY' } }));
-  assert.equal(large.risk.requiredVerification, 'mock_sms');
-  assert.equal(large.risk.verificationCode, '123456');
+  assert.equal(large.risk.requiredVerification, 'otp');
+  assert.equal(large.risk.verificationCode, undefined); // 验证码不再写进风险结果
 });
 
 test('改金额 = 新预览（新 operationId + 新 hash），旧 hash 无法确认新操作', async () => {

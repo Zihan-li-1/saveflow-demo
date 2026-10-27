@@ -7,9 +7,27 @@ import { validCalendarDate, transactionMatchesPeriod } from '../src/lib/calendar
 import { validateParsedIntent } from '../src/agent/validate-parsed-intent.mjs';
 import { buildParsedIntent } from '../src/agent/clarification/merge-intent.mjs';
 import { parseBankingIntent } from '../server/banking-intent-parser.mjs';
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 for (const [i, definition] of languageCases.entries()) test(`wiring only ${i + 1}: ${definition.message} ${definition.answer ?? ''}`, async () => {
   await exerciseLanguageCase(definition);
+});
+
+test('real-model verifier reports missing configuration as skipped, never passed or a mocked model run', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'saveflow-no-model-'));
+  const env = { ...process.env };
+  delete env.TRUEFORGE_BASE_URL; delete env.TRUEFORGE_MODEL;
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/verify-natural-language.mjs', import.meta.url))], {
+    cwd: directory, env, encoding: 'utf8', timeout: 10000, windowsHide: true,
+  });
+  assert.equal(result.status, 0);
+  const report = JSON.parse(await readFile(path.join(directory, 'docs/verification/natural-language/real-model.json'), 'utf8'));
+  assert.equal(report.passed, 0); assert.equal(report.failed, 0); assert.equal(report.skipped, languageCases.length);
+  assert.ok(report.cases.every(item => item.skipped && !item.passed));
 });
 
 test('clock uses injected timezone across date/year boundaries independently from financial data', () => {

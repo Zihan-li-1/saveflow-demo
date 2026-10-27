@@ -10,7 +10,7 @@ export type BankingRequestMap = {
   "card.list": Record<string, never>;
   "card.get": { id: string };
   "card.set_budget": { cardId: string; monthlyBudgetFen: number };
-  "card.set_controls": { cardId: string; onlinePaymentsEnabled?: boolean; blockedCategories?: string[]; alertThresholdFen?: number | null };
+  "card.set_controls": { cardId: string; onlinePaymentsEnabled?: boolean; blockedCategories?: string[]; alertThresholdFen?: number | null; balanceReminderAmountFen?: number | null; balanceReminderPercent?: number | null };
   "card.freeze": { cardId: string };
   "card.unfreeze": { cardId: string };
   "subscription.list": Record<string, never>;
@@ -18,6 +18,8 @@ export type BankingRequestMap = {
   "action.decide": DecisionInput & { operationId: string };
   "action.execute": { operationId: string; previewHash: string };
   "action.status": { operationId: string };
+  "verification.start": { operationId: string; previewHash: string };
+  "verification.verify": { operationId: string; previewHash: string; challengeId: string; code: string };
 };
 export type BankingResultMap = {
   "context.get": ContextInfo;
@@ -38,5 +40,7 @@ export type BankingResultMap = {
   "action.decide": OperationStatus;
   "action.execute": ActionReceipt;
   "action.status": OperationStatus;
+  "verification.start": { challengeId: string; expiresAt: string; remainingAttempts: number; deliveryHint: string };
+  "verification.verify": { verified: true; operationId: string };
 };
 export type BankingAction = keyof BankingRequestMap;

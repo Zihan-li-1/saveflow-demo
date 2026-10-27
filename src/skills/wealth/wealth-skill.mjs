@@ -73,12 +73,20 @@ function productView(product) {
   };
 }
 
+/** @param {number} fen @returns {string} */
+function fenToYuanText(fen) {
+  const abs = Math.abs(Number(fen) || 0);
+  return `${fen < 0 ? '-' : ''}¥${(abs / 100).toFixed(2)}`;
+}
+
 /** @param {import('../../banking-core/contracts').FinancialContextRepository} repository */
 export function createWealthSkill(repository) {
   if (!repository || typeof repository.getInvestmentProducts !== 'function' || typeof repository.getContextInfo !== 'function') throw new TypeError('Wealth Skill 需要 FinancialContextRepository');
-  return async function runWealthAction(/** @type {unknown} */ raw) {
+  return async function runWealthAction(/** @type {unknown} */ raw, /** @type {{financialContext?: any}} */ options = {}) {
     try {
       const input = validateWealthAction(raw);
+      /** @type {any} */
+      const financialContext = options.financialContext;
       if (input.action === 'wealth.subscribe' || input.action === 'wealth.redeem') {
         return { ok: false, kind: 'unsupported', action: input.action, error: { code: 'CAPABILITY_UNAVAILABLE', message: input.action === 'wealth.subscribe' ? '当前没有风险测评、适当性校验和理财申购执行能力，仅可提供产品比较与建议。' : '当前没有可信持仓与赎回执行能力，不能生成赎回成功结果。', uncertain: false } };
       }
@@ -106,7 +114,50 @@ export function createWealthSkill(repository) {
       const maxLiquidityDelay = LIQUIDITY_ORDER[/** @type {'T+0'|'T+1'|'AT_MATURITY'} */ (input.liquidity_requirement)];
       const eligible = products.filter(product => RISK_ORDER[product.riskLevel] <= maxRisk && LIQUIDITY_ORDER[product.liquidity] <= maxLiquidityDelay && product.durationDays <= input.horizon_days && (!input.amount || product.minimumAmountFen <= input.amount.amount_minor));
       evidence[0].entity_ids = eligible.map(product => product.id);
-      return { ok: true, kind: 'wealth_recommendation', action: input.action, data: { goal: input.goal, constraints: { max_risk_level: input.max_risk_level, horizon_days: input.horizon_days, liquidity_requirement: input.liquidity_requirement, amount: input.amount ?? null }, products: eligible.map(productView), no_match: eligible.length === 0, methodology: { filters_only: true, personalized_suitability_completed: false, risk_level_source: 'user_declared_constraint' }, next_step: eligible.length ? '完成正式风险测评后再决定是否申购。' : '放宽期限、流动性或金额条件前，请先确认新的约束。', disclaimer: '这是按用户声明条件生成的产品筛选，不是个性化投资建议，预期收益不保证。' }, evidence };
+      const financial = /** @type {any} */ (financialContext);
+      const hasSummary = !!financial?.summary;
+      const summary = financial?.summary;
+      const coverage = financial?.coverage;
+      const months = Array.isArray(financial?.range?.months) ? financial.range.months : [];
+      // 账单状态归类：无上下文 / 不可用 / 部分覆盖 / 可用。只陈述「观察到什么」，绝不据此改写风险或金额。
+      const billState = !financial?.status ? 'none' : !summary ? 'unavailable' : String(financial.status);
+      const baseStep = eligible.length ? '完成正式风险测评后再决定是否申购。' : '放宽期限、流动性或金额条件前，请先确认新的约束。';
+      /** @type {string} */
+      let note;
+      /** @type {string} */
+      let nextStep = baseStep;
+      if (billState === 'none') {
+        note = '本次未传入账单流水分析，推荐仅按你声明的风险、期限与流动性条件筛选。';
+      } else if (billState === 'unavailable') {
+        note = '当前没有可用的账单流水，本次推荐未使用账单分析作为依据；风险、期限与流动性仅按你声明的条件筛选。';
+      } else {
+        // 有可观察账单依据：只描述观察到的现金流，不推断风险，不把净现金流当作可投资金额。
+        const netText = summary.netCashFlowFen > 0 ? '净流入为正' : summary.netCashFlowFen < 0 ? '净流出（支出大于收入）' : '收支接近';
+        note = `最近 ${months.length} 个月账单显示：收入 ${fenToYuanText(summary.totalIncomeFen)}、消费支出 ${fenToYuanText(summary.totalExpenseFen)}、净现金流 ${fenToYuanText(summary.netCashFlowFen)}（${netText}，收入减消费支出、不含转账）。这是观察到的历史现金流，不是可投资金额，也不能据此判断你的风险承受能力。`;
+        if (billState === 'partial') {
+          const missing = Array.isArray(coverage?.missingMonths) && coverage.missingMonths.length ? `（缺 ${coverage.missingMonths.join('、')}）` : '';
+          note += ` 账单覆盖不完整${missing}，以上现金流仅代表可观察到的入账记录，不代表完整财务能力；缺月或无记录不代表零支出。`;
+          nextStep = `${baseStep} 若希望推荐更贴合你的账单，可先补充更完整月份的账单。`;
+        } else {
+          nextStep = `${baseStep} 可结合账单现金流确认可用于投资的金额，再决定是否申购。`;
+        }
+      }
+      /** @type {any} */
+      const billBasis = billState === 'none' ? undefined : {
+        status: billState === 'unavailable' ? 'unavailable' : financial.status, range: financial.range,
+        ...(summary ? { summary } : {}),
+        coverage: financial.coverage, source: financial.source, note,
+      };
+      return { ok: true, kind: 'wealth_recommendation', action: input.action, data: {
+        goal: input.goal,
+        constraints: { max_risk_level: input.max_risk_level, horizon_days: input.horizon_days, liquidity_requirement: input.liquidity_requirement, amount: input.amount ?? null },
+        products: eligible.map(productView),
+        no_match: eligible.length === 0,
+        ...(billBasis ? { bill_basis: billBasis } : {}),
+        methodology: { filters_only: true, personalized_suitability_completed: false, risk_level_source: 'user_declared_constraint', financial_analysis_used: hasSummary, net_cash_flow_is_investable: false },
+        next_step: nextStep,
+        disclaimer: '这是按用户声明条件生成的产品筛选，不是个性化投资建议，预期收益不保证。',
+      }, evidence };
     } catch (error) {
       const safe = error instanceof WealthSkillError ? error : new WealthSkillError('INTERNAL_ERROR', '理财 Skill 未能生成可靠结果');
       return { ok: false, kind: 'skill_error', error: safe.toJSON() };

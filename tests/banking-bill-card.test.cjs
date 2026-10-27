@@ -41,6 +41,14 @@ test('August card uses structured amounts, exact signed balance, all transaction
   assert.ok(!value.includes('synthetic_demo_only'));
 });
 
+test('bill insights explain the change in plain language and keep unavailable comparisons honest', () => {
+  const insight = { comparisonPeriod: { month: '2026-07' }, currentExpenseFen: 846000, comparisonExpenseFen: 700000, changeFen: 146000, changeRateBps: 2086, comparisonAvailable: true, categoryChanges: [{ category: '餐饮', currentAmountFen: 156000, comparisonAmountFen: 100000, changeFen: 56000 }], largestExpenses: [], note: '与紧邻的等长上一时间段比较；仅统计支出交易。' };
+  const value = text(render({ ...fixture, data: { ...fixture.data, insights: insight } }));
+  for (const expected of ['支出变化解读', '2026 年 8 月与2026 年 7 月比较', '支出增加 ¥1,460.00（+20.9%）', '餐饮', '+¥560.00', '仅统计支出交易']) assert.ok(value.includes(expected), expected);
+  const unavailable = text(render({ ...fixture, data: { ...fixture.data, insights: { ...insight, comparisonExpenseFen: 0, changeFen: 846000, changeRateBps: null, comparisonAvailable: false, categoryChanges: [], note: '上一时间段没有可用交易记录，无法计算可靠涨跌比例。' } } }));
+  assert.ok(unavailable.includes('2026 年 7 月暂无可用记录，暂不判断涨跌'));
+});
+
 test('zero month has honest zeros and no category section; missing/invalid categories are hidden', () => {
   const zero = { ...fixture, data: { month: '2026-01', totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: 0, categoryTotals: {} } };
   const html = render(zero);
@@ -97,7 +105,7 @@ test('range longer than two months renders a monthly expense bar chart', () => {
   };
   const html = render(range);
   const value = text(html);
-  for (const expected of ['2026年下半年', '2026年7月1日—2026年12月31日', '期间收支概览', '期间总支出', '每月支出对比', '最高：8月', '月均', '主要变化', '8月较7月', '餐饮', '增加', '仅比较最近两个完整月份', '截至目前', '未到', '房租', '35.5%']) assert.ok(value.includes(expected), expected);
+  for (const expected of ['2026年下半年', '2026年7月1日—2026年12月31日', '期间收支概览', '期间总支出', '每月支出对比', '最高：8月', '月均', '最近两月分类变化', '8月较7月', '餐饮', '增加', '只比较最近两个完整月份', '截至目前', '未到', '房租', '35.5%']) assert.ok(value.includes(expected), expected);
   assert.equal((html.match(/bill-report-bar-track/g) || []).length, 6);
 });
 

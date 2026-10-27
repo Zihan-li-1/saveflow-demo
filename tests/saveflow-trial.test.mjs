@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { createFinancialContext } from '../src/banking-core/repository.mjs';
 import { createBankingCore } from '../src/banking-core/core.mjs';
+import { lowBalanceSource } from './fixtures/low-balance-core.mjs';
 import { handleBankingAgent } from '../server/banking-agent.mjs';
 import { buildParsedIntent } from '../src/agent/clarification/merge-intent.mjs';
 import seed from '../src/data/saveflow_mock_data.json' with { type: 'json' };
@@ -32,7 +33,7 @@ const callTool = async (client, name, args = {}) => {
 };
 const env = { SAVEFLOW_BANKING_RUNTIME: 'legacy-qwen', SAVEFLOW_ACCESS_CODE: 'trial-test-access-1234', CONTINUATION_TOKEN_SECRET: 'trial-test-continuation-secret' };
 
-async function withCoreClient(verify, { source = seed, now = () => 1000 } = {}) {
+async function withCoreClient(verify, { source = lowBalanceSource(), now = () => 1000 } = {}) {
   const core = createBankingCore({ source, now });
   const calls = { prepare: 0, decide: 0, execute: 0 };
   const wrapped = {
@@ -242,21 +243,26 @@ test('invalid transfer amounts never prepare; valid insufficient-balance request
   });
 });
 
-test('HTTP and MCP can resume the same shared clarification rules in both directions', async () => {
+test('HTTP and MCP reuse clarification rules but cannot exchange session-bound credentials', async () => {
   await withCoreClient(async (client, core) => {
     let requestNumber = 0;
-    const sendHttp = async body => {
+    const sendHttp = async (body, expectedStatus = 200) => {
       const response = await handleBankingAgent(new Request('http://localhost/api/banking-agent', {
         method: 'POST', headers: { 'content-type': 'application/json', 'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'x-forwarded-for': `mcp-parity-${++requestNumber}` },
         body: JSON.stringify(body),
       }), { env, core, now: () => 1000, parseIntent: async (message, options) => options.context ? continuationModel(message, options) : buildParsedIntent('transfer.create', { payee_ref: '张三', amount: { amount_minor: 50000, currency: 'CNY' } }) });
-      assert.equal(response.status, 200);
+      assert.equal(response.status, expectedStatus);
       return (await response.json()).data;
     };
     const httpDraft = await sendHttp({ message: '给张三转500元' });
-    const mcpPreview = await callTool(client, 'transfer_preview', { continuationToken: httpDraft.continuationToken, choice: { optionId: httpDraft.choices[0].optionId } });
-    assert.equal(mcpPreview.preview.exactEffects[0].amountFen, 50000);
-    const httpEdited = await sendHttp({ continuationToken: mcpPreview.continuationToken, message: '改成600元' });
+    const foreign = await callTool(client, 'transfer_preview', { continuationToken: httpDraft.continuationToken, choice: { optionId: httpDraft.choices[0].optionId } });
+    assert.equal(foreign.ok, false);
+    assert.equal(foreign.error.code, 'CONTINUATION_ACTION_MISMATCH');
+    const mcpDraft = await callTool(client, 'transfer_preview', { payee_ref: '张三', amount: { amount_minor: 50000, currency: 'CNY' } });
+    const refused = await sendHttp({ continuationToken: mcpDraft.continuationToken, message: '改成600元' }, 400);
+    assert.equal(refused.error.code, 'CONTINUATION_INVALID');
+    const httpPreview = await sendHttp({ continuationToken: httpDraft.continuationToken, choice: { optionId: httpDraft.choices[0].optionId } });
+    const httpEdited = await sendHttp({ continuationToken: httpPreview.continuationToken, message: '改成600元' });
     assert.equal(httpEdited.preview.exactEffects[0].amountFen, 60000);
   });
 });

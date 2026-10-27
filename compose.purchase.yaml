@@ -1,0 +1,47 @@
+# Optional synthetic shopping services; layer after compose.postgres.yaml.
+services:
+  web:
+    environment:
+      COMMERCE_MOCK_URL: http://commerce:4401
+      COMMERCE_MOCK_TOKEN: ${COMMERCE_MOCK_TOKEN:?Set a dedicated synthetic service token}
+      PURCHASE_WORKER_ENABLED: "true"
+      SAVEFLOW_PUBLIC_ORIGIN: ${SAVEFLOW_PUBLIC_ORIGIN:-http://127.0.0.1:4300}
+    depends_on:
+      commerce:
+        condition: service_started
+      purchase-worker:
+        condition: service_started
+  commerce:
+    image: saveflow-docker-test:local
+    command: [node, scripts/dev-commerce.mjs]
+    init: true
+    environment:
+      COMMERCE_MOCK_HOST: 0.0.0.0
+      COMMERCE_MOCK_TOKEN: ${COMMERCE_MOCK_TOKEN:?Set a dedicated synthetic service token}
+      COMMERCE_MOCK_STATE_FILE: /commerce-state/state.json
+    volumes:
+      - commerce-state:/commerce-state
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4401/search').then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))"]
+  purchase-worker:
+    image: saveflow-docker-test:local
+    command: [node, scripts/purchase-worker.mjs]
+    init: true
+    environment:
+      DATABASE_URL: postgresql://saveflow_web:local-synthetic-web-only@pilot-db:5432/saveflow_web
+      PURCHASE_WORKER_ENABLED: "true"
+    depends_on:
+      pilot-migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      disable: true
+volumes:
+  commerce-state:

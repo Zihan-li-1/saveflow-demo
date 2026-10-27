@@ -3,6 +3,11 @@ const amount = n => ({ amount_minor: n, currency: 'CNY' });
 const period = (start_date, end_date) => ({ start_date, end_date, timezone: 'Asia/Shanghai', label: '测试期间' });
 export const fixedNow = () => Date.parse('2026-10-22T04:00:00Z');
 export const languageCases = [
+  { message: '查看今年六到九月的账单', action: 'bill.summary', slots: { period: period('2026-06-01', '2026-09-30') } },
+  { message: '分析上个月的账单', action: 'bill.summary', slots: { month: '2026-09' } },
+  { message: '查看今年以来的消费', action: 'bill.summary', slots: { period: period('2026-01-01', '2026-10-22') } },
+  { message: '查询2026年6月到9月的账单', action: 'bill.summary', slots: { period: period('2026-06-01', '2026-09-30') } },
+  { message: '查看2026年8月账单', action: 'bill.summary', slots: { month: '2026-08' } },
   { message: '给张三转一千二百五十元', action: 'transfer.create', slots: { payee_ref: '张三', amount: amount(125000) } },
   { message: '给张三转1万', action: 'transfer.create', slots: { payee_ref: '张三', amount: amount(1000000) } },
   { message: '把月预算改成两千五', action: 'card.set_budget', slots: { amount: amount(250000) } },

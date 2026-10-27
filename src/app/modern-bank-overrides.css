@@ -26,3 +26,8 @@
 .transfer-preview-edit label { display: flex; align-items: center; gap: 8px; }
 .transfer-preview-edit input { width: 160px; padding: 8px; border: 1px solid #ccd5e0; border-radius: 8px; }
 .transfer-preview-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.transfer-preview-otp { margin-top: 14px; padding: 12px; border: 1px dashed #d19435; border-radius: 10px; background: #fff8ec; }
+.transfer-preview-otp > p { margin: 0 0 8px; color: #7a5a1a; font-size: 12px; }
+.transfer-preview-otp .transfer-preview-edit { margin-top: 0; }
+.transfer-preview-otp input { letter-spacing: 3px; font-variant-numeric: tabular-nums; }
+.otp-error { margin: 8px 0 0; color: #b42318; font-size: 12px; }

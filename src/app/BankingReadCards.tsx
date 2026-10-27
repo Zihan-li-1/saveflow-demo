@@ -12,8 +12,8 @@ const ProductTerms = () => <div className="financial-term-help">
   <details><summary>风险等级 <span>点此了解</span></summary><p>风险等级用来表示价格波动和发生亏损的可能性。这里的百分比只是帮助理解差异的演示尺度，不代表实际产品最多只会亏这么多；购买前仍需查看产品说明和正式风险测评。</p></details>
   <details><summary>流动性 <span>点此了解</span></summary><p>流动性就是需要用钱时，多久能把理财资金取出来。当天可取最灵活；下一个工作日可取需要等待；持有到计划结束通常不能提前使用这笔钱。</p></details>
 </div>;
-type SubscriptionView = { id: string; name: string; monthlyFeeFen: number; status: "active" | "cancelled"; lastUsedDate: string; isPotentiallyUnused: boolean; inactivityDays?: number; unusedReason?: string };
-export function BankingReadCard({ data }: { data?: BankingAgentData }) {
+type SubscriptionView = { id: string; name: string; monthlyFeeFen: number; status: "active" | "cancelled"; lastUsedDate: string; isPotentiallyUnused: boolean; inactivityDays?: number; unusedReason?: string; recognition?: { confidence: "high" | "medium" | "not_flagged"; signals: string[] } };
+export function BankingReadCard({ data, active = false, busy = false, onConfirm, onReject, onCheck }: { data?: BankingAgentData; active?: boolean; busy?: boolean; onConfirm?: (data: BankingAgentData) => void; onReject?: (data: BankingAgentData) => void; onCheck?: (data: BankingAgentData) => void }) {
   const subscriptions = data?.data?.subscriptions as SubscriptionView[] | undefined;
   const subscriptionSummary = data?.data?.summary as { activeCount?: number; activeMonthlyFeeFen?: number; potentiallyUnusedCount?: number; potentiallyUnusedMonthlyFeeFen?: number; potentialAnnualSavingsFen?: number } | undefined;
   const products = data?.data?.products as InvestmentProduct[] | undefined;
@@ -33,6 +33,7 @@ export function BankingReadCard({ data }: { data?: BankingAgentData }) {
         <p><span>状态</span><strong>{s.status === "active" ? "使用中" : "已取消"}</strong></p>
         <p><span>最近使用</span><strong>{s.lastUsedDate}</strong></p>
         <p><span>闲置提示</span><strong>{s.isPotentiallyUnused ? "可能闲置，待核实" : "暂无闲置标记"}</strong></p>
+        {s.recognition && <details><summary>为什么这样判断</summary><ul>{s.recognition.signals.map(signal => <li key={signal}>{signal}</li>)}</ul></details>}
       </div>
       {s.unusedReason && <p className="subscription-reason">{s.unusedReason}</p>}
     </article>)}
@@ -56,6 +57,12 @@ export function BankingReadCard({ data }: { data?: BankingAgentData }) {
     {data?.status === "risk_assessment_required" && <article><h3>需要用户本人完成正式问卷</h3><p>模型不能代答；完成适当性评估前不提供申购入口。</p></article>}
     {steps?.map((step, index) => <article key={`${step.action}-${index}`}><h3>{index + 1}. {actionName(step.action)}</h3><p>{step.reason}</p></article>)}
     {rule && <article><h3>{rule.id ? `规则 ${rule.id}` : "规则变更预览"}</h3><div className="financial-data-grid"><p><span>状态</span><strong>{rule.status || "待确认"}</strong></p><p><span>触发</span><strong>{rule.trigger?.value || "—"}</strong></p><p><span>建议步骤</span><strong>{rule.proposed_steps?.map(step => actionName(step.action)).join("、") || "—"}</strong></p></div></article>}
+    {data?.status === 'scenario_rule_preview' && onConfirm && onReject && onCheck && <div className="error-actions">
+      {data.outcomePending && <p>结果待核实，请先查询原操作。</p>}
+      <button type="button" className="primary-button" disabled={!active || busy || data.outcomePending} onClick={() => onConfirm(data)}>确认并保存规则</button>
+      <button type="button" className="secondary-button" disabled={!active || busy || data.outcomePending} onClick={() => onReject(data)}>取消本次操作</button>
+      <button type="button" className="secondary-button" disabled={busy} onClick={() => onCheck(data)}>查询操作状态</button>
+    </div>}
     {(subscriptions?.length === 0 || products?.length === 0 || (isWealth && wealthProducts?.length === 0)) && <p>当前没有符合条件的项目。</p>}
     <footer>{isWealth ? "仅按用户声明条件筛选；未完成正式风险测评，不构成个性化投资建议。" : data?.status?.startsWith("scenario_") ? "规则只生成建议；资金或控制变更仍需重新预览并确认。" : products ? "合成产品数据，示例收益率不构成收益保证。" : subscriptions ? "节省金额按可能闲置订阅月费 × 12 估算；请核实后自行决定，本结果不会取消订阅。" : "本结果不会自动执行任何资金或控制变更。"}</footer>
   </section>;
