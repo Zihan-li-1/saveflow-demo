@@ -65,7 +65,7 @@ export type BillAnalysis = {
   unusual_transactions: UnusualTransaction[];
   methodology: {
     expense_types: ["expense"];
-    excluded_types: ["income", "transfer_out"];
+    excluded_types: ["income", "transfer_out", "internal_transfer_out", "internal_transfer_in"];
     unusual_transaction_rule: string;
   };
   evidence: BillEvidence[];
@@ -290,7 +290,7 @@ export async function analyzeBills(
     unusual_transactions: unusual,
     methodology: {
       expense_types: ["expense"],
-      excluded_types: ["income", "transfer_out"],
+      excluded_types: ["income", "transfer_out", "internal_transfer_out", "internal_transfer_in"],
       unusual_transaction_rule: "period largest expense plus up to two expenses at least twice the period average",
     },
     evidence: [{

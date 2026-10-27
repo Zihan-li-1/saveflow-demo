@@ -4,7 +4,7 @@ export type Currency = "CNY";
 export type RiskLevel = "L0" | "L1" | "L2" | "L3";
 export type Account = { id: string; name: string; type: "checking" | "saving"; currency: Currency; balanceFen: number; availableBalanceFen: number; version: number; status: "active" | "frozen" };
 export type Payee = { id: string; name: string; phone?: string; aliases: string[]; accountNoMasked: string; currency: Currency; status: "active" | "disabled" };
-export type Transaction = { id: string; accountId: string; payeeId?: string; operationId?: string; occurredAt: string; type: "income" | "expense" | "transfer_out"; category: string; merchant: string; amountFen: number; currency: Currency; status: "posted"; source: "synthetic_seed" | "mock_execution" };
+export type Transaction = { id: string; accountId: string; payeeId?: string; counterpartyAccountId?: string; operationId?: string; occurredAt: string; type: "income" | "expense" | "transfer_out" | "internal_transfer_out" | "internal_transfer_in"; category: string; merchant: string; amountFen: number; currency: Currency; status: "posted"; source: "synthetic_seed" | "mock_execution" };
 export type Card = { id: string; name: string; accountId: string; status: "active" | "frozen"; monthlyBudgetFen: number; monthlySpentFen: number; onlinePaymentsEnabled: boolean; blockedCategories: string[]; alertThresholdFen: number | null; balanceReminderAmountFen: number | null; balanceReminderPercent: number | null; version: number; previewGeneration: number };
 export type Subscription = { id: string; name: string; monthlyFeeFen: number; status: "active" | "cancelled"; lastUsedDate: string; isPotentiallyUnused: boolean; mandateId: string | null };
 /** expectedYield is an illustrative annual rate in BPS, never a guaranteed yield. */
@@ -42,7 +42,7 @@ export interface BankingOperationStore {
    *  mutation. A throw from `apply` aborts the transaction without persisting. Used so concurrent
    *  wrong-code attempts cannot lose counts. */
   mutateVerification?(owner: string, operationId: string, apply: (record: OperationRecord) => { error?: Pick<ActionError, "code" | "message"> }): MaybePromise<{ error?: Pick<ActionError, "code" | "message"> }>;
-  commitTransfer?(owner: string, record: OperationRecord, effect: TransferEffect, at: string, makeReceipt: (transaction: Transaction) => ActionReceipt): MaybePromise<ActionReceipt>;
+  commitTransfer?(owner: string, record: OperationRecord, effect: TransferEffect | InternalTransferEffect, at: string, makeReceipt: (transaction: Transaction | Transaction[]) => ActionReceipt): MaybePromise<ActionReceipt>;
   reserveCardPreview?(owner: string, cardId: string): MaybePromise<number>;
   commitCard?(owner: string, record: OperationRecord, effect: CardEffect, makeReceipt: () => ActionReceipt): MaybePromise<ActionReceipt>;
   commitWealth?(owner: string, record: OperationRecord, effect: WealthEffect, makeReceipt: () => ActionReceipt): MaybePromise<ActionReceipt>;
@@ -50,7 +50,7 @@ export interface BankingOperationStore {
   reserveScenarioPreview?(owner: string, ruleId: string): MaybePromise<number>;
   commitScenario?(owner: string, record: OperationRecord, effect: ScenarioEffect, makeReceipt: () => ActionReceipt): MaybePromise<ActionReceipt>;
 }
-export type TransferInput = { fromAccountId: string; payeeId: string; amountFen: number; currency: Currency; memo?: string };
+export type TransferInput = { fromAccountId: string; payeeId: string; toAccountId?: never; amountFen: number; currency: Currency; memo?: string } | { fromAccountId: string; toAccountId: string; payeeId?: never; amountFen: number; currency: Currency; memo?: string };
 export type CardAction = "card.set_budget" | "card.set_controls" | "card.freeze" | "card.unfreeze";
 export type CardInput = { cardId: string; monthlyBudgetFen?: number; onlinePaymentsEnabled?: boolean; blockedCategories?: string[]; alertThresholdFen?: number | null; balanceReminderAmountFen?: number | null; balanceReminderPercent?: number | null };
 export type WealthAction = "wealth.subscribe" | "wealth.redeem";
@@ -73,14 +73,15 @@ export type VerificationState = { challengeId: string; codeHash: string; issuedA
 export type VerificationStartResult = { challengeId: string; expiresAt: string; remainingAttempts: number; deliveryHint: string };
 export type VerificationVerifyInput = { challengeId: string; code: string };
 export type TransferEffect = { kind: "transfer_out"; fromAccountId: string; accountName: string; payeeId: string; payeeName: string; accountNoMasked: string; amountFen: number; feeFen: number; currency: Currency; balanceBeforeFen: number; balanceAfterFen: number; availableBalanceAfterFen: number; accountVersion: number; memo: string; arrival: "mock_immediate" };
+export type InternalTransferEffect = { kind: "transfer_internal"; fromAccountId: string; accountName: string; toAccountId: string; targetAccountName: string; amountFen: number; currency: Currency; sourceBalanceBeforeFen: number; sourceBalanceAfterFen: number; sourceAvailableBalanceAfterFen: number; sourceAccountVersion: number; targetBalanceBeforeFen: number; targetBalanceAfterFen: number; targetAvailableBalanceAfterFen: number; targetAccountVersion: number; memo: string };
 export type CardEffect = { kind: "card_change"; action: CardAction; cardId: string; cardName: string; cardVersion: number; previewGeneration: number; before: { status: Card["status"]; monthlyBudgetFen: number; onlinePaymentsEnabled: boolean; blockedCategories: string[]; alertThresholdFen: number | null; balanceReminderAmountFen: number | null; balanceReminderPercent: number | null }; after: { status: Card["status"]; monthlyBudgetFen: number; onlinePaymentsEnabled: boolean; blockedCategories: string[]; alertThresholdFen: number | null; balanceReminderAmountFen: number | null; balanceReminderPercent: number | null }; monthlySpentFen: number };
 export type WealthEffect = { kind: "wealth_change"; action: WealthAction; productId: string; productName: string; holdingId: string; holdingVersion: number | null; fundingAccountId?: string; accountVersion?: number; amountFen: number; unitsMilli: number; disclosureVersion?: string; assessmentId?: string; settlement?: string };
 export type ScenarioEffect = { kind: "scenario_rule_change"; action: ScenarioAction; ruleId: string; ruleVersion: number | null; previewGeneration: number; before: ScenarioRule | null; after: ScenarioRule };
-export type ActionPreview = { planId: string; stepIds: string[]; summary: string; exactEffects: (TransferEffect | CardEffect | ScenarioEffect | WealthEffect)[]; riskLevel: RiskLevel; warnings: string[]; expiresAt: string; previewHash: string; contextSnapshotId: string };
+export type ActionPreview = { planId: string; stepIds: string[]; summary: string; exactEffects: (TransferEffect | InternalTransferEffect | CardEffect | ScenarioEffect | WealthEffect)[]; riskLevel: RiskLevel; warnings: string[]; expiresAt: string; previewHash: string; contextSnapshotId: string };
 export type UserDecision = { planId: string; previewHash: string; decision: "confirm" | "reject"; confirmedStepIds: string[]; confirmationMethod: "mock_explicit"; idempotencyKey: string; decidedAt: string };
 /** Only the UI confirmation adapter supplies this, never an LLM tool call. */
 export type DecisionInput = Pick<UserDecision, "previewHash" | "decision" | "confirmedStepIds">;
-export type ActionReceipt = { receiptId: string; operationId: string; action: "transfer_money" | CardAction | ScenarioAction | WealthAction | "legacy.create-plan"; planId: string; stepId: string; status: "succeeded" | "failed" | "cancelled"; message: string; executedAt: string; dataSource: "synthetic_demo_only"; transactionIds: string[]; effects: (TransferEffect | CardEffect | ScenarioEffect | WealthEffect)[]; error?: ActionError };
+export type ActionReceipt = { receiptId: string; operationId: string; action: "transfer_money" | CardAction | ScenarioAction | WealthAction | "legacy.create-plan"; planId: string; stepId: string; status: "succeeded" | "failed" | "cancelled"; message: string; executedAt: string; dataSource: "synthetic_demo_only"; transactionIds: string[]; effects: (TransferEffect | InternalTransferEffect | CardEffect | ScenarioEffect | WealthEffect)[]; error?: ActionError };
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: ActionError; operationId?: string };
 export type PreparedAction = { operationId: string; state: "awaiting_confirmation"; preview: ActionPreview; risk: RiskResult };
 export type OperationStatus = { operationId: string; state: ActionState; status: "pending" | "succeeded" | "failed" | "cancelled"; receipt?: ActionReceipt; preview?: ActionPreview; error?: ActionError };

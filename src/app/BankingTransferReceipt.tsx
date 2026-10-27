@@ -11,6 +11,7 @@ export function BankingTransferReceipt({ receipt, verification }: { receipt?: Ac
   if (!receipt) return null;
   const effect = receipt.effects[0];
   const transfer = effect?.kind === "transfer_out" ? effect : undefined;
+  const internal = effect?.kind === "transfer_internal" ? effect : undefined;
   const succeeded = receipt.status === "succeeded";
   return <div className="banking-result-card">
     <b>{succeeded ? "转账回执 · 已完成" : `转账回执 · ${receipt.status === "cancelled" ? "已取消" : "未成功"}`}</b>
@@ -20,6 +21,13 @@ export function BankingTransferReceipt({ receipt, verification }: { receipt?: Ac
       <span>付款账户：{transfer.accountName}</span>
       <span>实际状态：{succeeded ? "已成功（succeeded）" : receipt.status}</span>
       <span>交易编号：{receipt.transactionIds.length ? receipt.transactionIds.join("、") : "无"}</span>
+    </>}
+    {internal && <>
+      <span>转账方向：{internal.accountName} → {internal.targetAccountName}</span>
+      <span>金额：{yuan(internal.amountFen)}</span>
+      <span>转出后余额：{yuan(internal.sourceBalanceAfterFen)} · 转入后余额：{yuan(internal.targetBalanceAfterFen)}</span>
+      <span>双方交易编号：{receipt.transactionIds.length ? receipt.transactionIds.join("、") : "无"}</span>
+      <span>实际状态：{succeeded ? "已成功（succeeded）" : receipt.status}</span>
     </>}
     <span>回执编号：{receipt.receiptId}</span>
     <span>执行时间：{receipt.executedAt}</span>

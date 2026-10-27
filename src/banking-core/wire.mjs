@@ -41,5 +41,7 @@ export function transferFromResolvedIntent(resolved) {
     assertId(matches[0].entity_id);
     return matches[0].entity_id;
   }
+  const target = resolved.references.filter(r => r.slot === 'target_account_ref');
+  if (target.length) return { action: 'transfer_money', input: { fromAccountId: entity('source_account_ref'), toAccountId: entity('target_account_ref'), amountFen: amount.amount_minor, currency: 'CNY' } };
   return { action: 'transfer_money', input: { fromAccountId: entity('source_account_ref'), payeeId: entity('payee_ref'), amountFen: amount.amount_minor, currency: 'CNY' } };
 }

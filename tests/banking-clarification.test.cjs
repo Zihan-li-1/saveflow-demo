@@ -18,8 +18,8 @@ const request = body => new Request('http://localhost/api/banking-agent', {
 
 const transfer = slots => ({
   schemaVersion: '1.0.0', action: 'transfer.create', slots,
-  missingSlots: ['payee_ref', 'amount', 'source_account_ref'].filter(slot => slots[slot] === undefined),
-  status: ['payee_ref', 'amount', 'source_account_ref'].every(slot => slots[slot] !== undefined) ? 'ready_for_resolution' : 'needs_clarification',
+  missingSlots: ['amount', 'source_account_ref', slots.target_account_ref || slots.transfer_type === 'internal' ? 'target_account_ref' : slots.payee_ref || slots.transfer_type === 'external' ? 'payee_ref' : 'transfer_type'].filter(slot => slots[slot] === undefined),
+  status: ['amount', 'source_account_ref', slots.target_account_ref || slots.transfer_type === 'internal' ? 'target_account_ref' : slots.payee_ref || slots.transfer_type === 'external' ? 'payee_ref' : 'transfer_type'].every(slot => slots[slot] !== undefined) ? 'ready_for_resolution' : 'needs_clarification',
 });
 const bill = slots => ({ schemaVersion: '1.0.0', action: 'bill.summary', slots, missingSlots: slots.month ? [] : ['month'], status: slots.month ? 'ready_for_resolution' : 'needs_clarification' });
 
@@ -27,6 +27,7 @@ function parseIntent(message, options) {
   if (options?.context && !/账单|转账/.test(message)) return require('./fixtures/continuation-model.mjs').continuationModel(message, options);
   if (/账单/.test(message)) return bill(/8月/.test(message) ? { month: '2026-08' } : {});
   if (/重名/.test(message)) return transfer({ payee_ref: '王先生', amount: { amount_minor: 50000, currency: 'CNY' }, source_account_ref: '活期账户' });
+  if (/模糊转账/.test(message)) return transfer({ amount: { amount_minor: 1000, currency: 'CNY' } });
   if (/缺金额/.test(message)) return transfer({ payee_ref: '张三', source_account_ref: '活期账户' });
   return transfer({ payee_ref: '张三', amount: { amount_minor: 50000, currency: 'CNY' } });
 }
@@ -150,6 +151,40 @@ test('重名收款人必须明确选择，候选标签包含脱敏账号', async
   const secondBody = await json(await handleBankingAgent(request({ continuationToken: firstBody.data.continuationToken, choice: { optionId: firstBody.data.choices[1].optionId } }), { env, core: wrapped, parseIntent, now: () => 4000 }));
   assert.equal(secondBody.data.preview.exactEffects[0].payeeId, 'payee_004');
   assert.equal(prepares, 1);
+});
+
+test('模糊转账先选择本人/他人；本人互转选账户后预览，改金额保留方向，聊天确认不执行', async () => {
+  const core = createBankingCore();
+  let prepares = 0;
+  const wrapped = { ...core, prepare: async input => { prepares++; return core.prepare(input); } };
+  const first = await json(await handleBankingAgent(request({ message: '模糊转账' }), { env, core: wrapped, parseIntent, now: () => 4100 }));
+  assert.equal(first.data.slot, 'transfer_type');
+  assert.deepEqual(first.data.choices.map(choice => choice.label), ['本人账户互转', '转给他人']);
+  const selectedType = await json(await handleBankingAgent(request({ continuationToken: first.data.continuationToken, choice: { optionId: first.data.choices[0].optionId } }), { env, core: wrapped, parseIntent, now: () => 4100 }));
+  assert.equal(selectedType.data.slot, 'source_account_ref');
+  const checking = selectedType.data.choices.find(choice => /活期/.test(choice.label));
+  const selectedSource = await json(await handleBankingAgent(request({ continuationToken: selectedType.data.continuationToken, choice: { optionId: checking.optionId } }), { env, core: wrapped, parseIntent, now: () => 4100 }));
+  assert.equal(selectedSource.data.slot, 'target_account_ref');
+  const savings = selectedSource.data.choices.find(choice => /储蓄/.test(choice.label));
+  const preview = await json(await handleBankingAgent(request({ continuationToken: selectedSource.data.continuationToken, choice: { optionId: savings.optionId } }), { env, core: wrapped, parseIntent, now: () => 4100 }));
+  assert.equal(preview.data.status, 'awaiting_confirmation', JSON.stringify(preview));
+  assert.equal(preview.data.preview.exactEffects[0].kind, 'transfer_internal');
+  assert.equal(preview.data.preview.exactEffects[0].fromAccountId, 'ACC-CHECKING');
+  assert.equal(preview.data.preview.exactEffects[0].toAccountId, 'ACC-SAVINGS');
+  const edited = await json(await handleBankingAgent(request({ continuationToken: preview.data.continuationToken, message: '金额改成20元' }), { env, core: wrapped, parseIntent, now: () => 4100 }));
+  assert.equal(edited.data.preview.exactEffects[0].kind, 'transfer_internal');
+  assert.equal(edited.data.preview.exactEffects[0].fromAccountId, 'ACC-CHECKING');
+  assert.equal(edited.data.preview.exactEffects[0].toAccountId, 'ACC-SAVINGS');
+  assert.equal(edited.data.preview.exactEffects[0].amountFen, 2000);
+  assert.notEqual(edited.data.operationId, preview.data.operationId);
+  const beforeSource = core.repository.getAccount('ACC-CHECKING').availableBalanceFen;
+  const beforeTarget = core.repository.getAccount('ACC-SAVINGS').availableBalanceFen;
+  const chatConfirm = await handleBankingAgent(request({ continuationToken: edited.data.continuationToken, message: '确认' }), { env, core: wrapped, parseIntent, now: () => 4100 });
+  assert.equal(chatConfirm.status, 403);
+  assert.equal((await json(chatConfirm)).code, 'CONFIRMATION_REQUIRED');
+  assert.equal(core.repository.getAccount('ACC-CHECKING').availableBalanceFen, beforeSource);
+  assert.equal(core.repository.getAccount('ACC-SAVINGS').availableBalanceFen, beforeTarget);
+  assert.equal(prepares, 2);
 });
 
 test('账户余额不足时保留 Core 错误，不伪装成预览', async () => {

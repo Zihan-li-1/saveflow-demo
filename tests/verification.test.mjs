@@ -7,6 +7,7 @@ import { generateCode, hashCode, createChallenge, verifyChallenge, VERIFICATION_
 const unwrap = result => { assert.equal(result.ok, true, JSON.stringify(result)); return result.data; };
 const balance = core => core.repository.getAccount('ACC-CHECKING').availableBalanceFen;
 const input = amountFen => ({ action: 'transfer_money', input: { fromAccountId: 'ACC-CHECKING', payeeId: 'payee_001', amountFen, currency: 'CNY' } });
+const internalInput = amountFen => ({ action: 'transfer_money', input: { fromAccountId: 'ACC-CHECKING', toAccountId: 'ACC-SAVINGS', amountFen, currency: 'CNY' } });
 async function prepare(core, amountFen) { return unwrap(await core.prepare(input(amountFen))); }
 async function confirm(core, p) { return unwrap(await core.decide(p.operationId, { previewHash: p.preview.previewHash, decision: 'confirm', confirmedStepIds: p.preview.stepIds })); }
 
@@ -41,6 +42,20 @@ test('高风险转账未验证时，执行被拒绝且不扣款', async () => {
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'VERIFICATION_REQUIRED');
   assert.equal(balance(core), 3000000); // 未扣款
+});
+
+test('本人互转超过阈值同样要求 OTP，验证前不会改动任一账户', async () => {
+  const { core } = coreWithCapturedCodes();
+  const sourceBefore = core.repository.getAccount('ACC-CHECKING').availableBalanceFen;
+  const targetBefore = core.repository.getAccount('ACC-SAVINGS').availableBalanceFen;
+  const p = unwrap(await core.prepare(internalInput(200000)));
+  assert.equal(p.risk.requiredVerification, 'otp');
+  await confirm(core, p);
+  const result = await core.execute(p.operationId, p.preview.previewHash);
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'VERIFICATION_REQUIRED');
+  assert.equal(core.repository.getAccount('ACC-CHECKING').availableBalanceFen, sourceBefore);
+  assert.equal(core.repository.getAccount('ACC-SAVINGS').availableBalanceFen, targetBefore);
 });
 
 test('高风险转账验证成功后执行：得到回执并扣款一次', async () => {

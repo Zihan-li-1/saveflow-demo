@@ -53,7 +53,7 @@ export async function buildFinancialAnalysisContext(repository, options = {}) {
   // Repository is the only fact source. Fail closed on data outside its money contract.
   const records = transactions.map(transaction => {
     if (transaction.status !== 'posted' || transaction.currency !== 'CNY' ||
-        !['income', 'expense', 'transfer_out'].includes(transaction.type) ||
+        !['income', 'expense', 'transfer_out', 'internal_transfer_out', 'internal_transfer_in'].includes(transaction.type) ||
         !Number.isSafeInteger(transaction.amountFen) || transaction.amountFen < 0 ||
         typeof transaction.category !== 'string' || !transaction.category.trim() || !Number.isFinite(Date.parse(transaction.occurredAt))) {
       throw new TypeError('Invalid repository transaction');
@@ -94,7 +94,7 @@ export async function buildFinancialAnalysisContext(repository, options = {}) {
       completeness: 'unverified', warning: '仅统计实际可用的已入账记录；完整自然月不等于流水已完整核验。缺月和无记录不代表零支出。' },
     source: { repository: 'financial_context.transactions', datasetId: context.datasetId, snapshotId: context.snapshotId,
       dataSource: context.dataSource, asOf: context.asOf, transactionSources: [...new Set(selected.map(row => row.transaction.source))].sort() },
-    methodology: { incomeTypes: ['income'], expenseTypes: ['expense'], excludedTypes: ['transfer_out'],
+    methodology: { incomeTypes: ['income'], expenseTypes: ['expense'], excludedTypes: ['transfer_out', 'internal_transfer_out', 'internal_transfer_in'],
       netCashFlow: 'totalIncomeFen - totalExpenseFen; excludes transfers', amountUnit: 'integer_fen' },
   };
 }

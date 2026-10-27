@@ -73,6 +73,15 @@ test('keeps missing source account as clarification and never inserts a default 
   assert.equal('source_account_ref' in value.slots, false);
 });
 
+test('requires a transfer type when the user has not specified an own account or another recipient', async () => {
+  const value = intent('transfer.create', { amount: { amount_minor: 10000, currency: 'CNY' } }, ['transfer_type', 'source_account_ref'], 'needs_clarification');
+  assert.deepEqual(await parse(value, '转账100元'), value);
+  const internal = intent('transfer.create', {
+    transfer_type: 'internal', source_account_ref: '储蓄', target_account_ref: '活期', amount: { amount_minor: 10000, currency: 'CNY' },
+  }, [], 'ready_for_resolution');
+  assert.deepEqual(await parse(internal, '把100元从储蓄挪到活期'), internal);
+});
+
 test('parses bill summary with only the month slot', async () => {
   const value = await parse(intent('bill.summary', { month: '2026-08' }, [], 'ready_for_resolution'), '分析一下2026年8月的账单');
   assert.deepEqual(value, intent('bill.summary', { month: '2026-08' }, [], 'ready_for_resolution'));

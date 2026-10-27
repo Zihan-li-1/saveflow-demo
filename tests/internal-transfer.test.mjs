@@ -7,13 +7,12 @@ import { validateParsedIntent, ParsedIntentValidationError } from '../src/agent/
 import { buildParsedIntent } from '../src/agent/clarification/merge-intent.mjs';
 import { validRecoverySlot } from '../src/lib/agent-error-policy.mjs';
 
-// 本人账户之间互转（internal transfer）：只做意图识别、账户方向解析、必要澄清与只读方向预览。
-// 本轮停在 Banking Core 契约边界：不调用 core.prepare/decide/execute，不生成可执行预览、不伪造资金效果。
+// 本人账户互转意图解析、澄清与正式转账预览入口。
 
 const resolve = async (core, slots, selections) => handleTransfer({ action: 'transfer.create', slots }, transferRepository(core.repository, selections));
 const clarification = result => { assert.equal(result.ok, false, JSON.stringify(result)); assert.equal(result.kind, 'needs_clarification'); return result; };
 
-test('内部互转识别：从活期转 100 元到储蓄 → 只读方向预览，两端余额变化正确且总额守恒', async () => {
+test('内部互转识别：从活期转 100 元到储蓄 → 解析为本人账户双边方向', async () => {
   const core = createBankingCore();
   const result = await resolve(core, {
     source_account_ref: '活期账户',
@@ -21,8 +20,8 @@ test('内部互转识别：从活期转 100 元到储蓄 → 只读方向预览�
     amount: { amount_minor: 10000, currency: 'CNY' },
   });
   assert.equal(result.ok, true, JSON.stringify(result));
-  assert.equal(result.kind, 'internal_transfer_recognized');
-  assert.equal(result.data.state, 'internal_transfer_recognized');
+  assert.equal(result.kind, 'transfer_resolution');
+  assert.equal(result.data.state, 'ready_for_planning');
 
   const p = result.data.preview;
   assert.equal(p.kind, 'internal_transfer');
@@ -51,7 +50,7 @@ test('外部转账不被误判：payee_ref 仍走对外转账路径', async () =
     amount: { amount_minor: 50000, currency: 'CNY' },
   });
   assert.equal(result.ok, true, JSON.stringify(result));
-  assert.equal(result.kind, 'transfer_resolution'); // 仍是原对外预览，不是 internal_transfer_recognized
+  assert.equal(result.kind, 'transfer_resolution');
 });
 
 test('缺转出账户：只说了转入账户，需澄清来源', async () => {
@@ -112,6 +111,17 @@ test('别名/类型冲突：多个本人账户匹配时询问，不擅自取第�
   assert.equal(result.slot, 'source_account_ref');
 });
 
+test('储蓄转活期方向不颠倒，显式本人互转类型允许随后补账户', async () => {
+  const core = createBankingCore();
+  const result = await resolve(core, {
+    transfer_type: 'internal', source_account_ref: '储蓄', target_account_ref: '活期',
+    amount: { amount_minor: 10000, currency: 'CNY' },
+  });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.data.references.find(ref => ref.slot === 'source_account_ref').entity_id, 'ACC-SAVINGS');
+  assert.equal(result.data.references.find(ref => ref.slot === 'target_account_ref').entity_id, 'ACC-CHECKING');
+});
+
 // —— ParsedIntent 契约层：方向槽位与互斥 ——
 
 test('契约：payee_ref 与 target_account_ref 互斥，不得同时出现', () => {
@@ -167,7 +177,15 @@ test('续接：对外转账仍要求 payee_ref，未被内部互转规则误伤'
     amount: { amount_minor: 10000, currency: 'CNY' },
   });
   assert.equal(intent.status, 'needs_clarification');
-  assert.deepEqual(intent.missingSlots, ['payee_ref']);
+  assert.deepEqual(intent.missingSlots, ['transfer_type']);
+  const selected = buildParsedIntent('transfer.create', { transfer_type: 'external', source_account_ref: '活期账户', amount: { amount_minor: 10000, currency: 'CNY' } });
+  assert.deepEqual(selected.missingSlots, ['payee_ref']);
+});
+
+test('方向不明确时 transfer_type 是必需澄清槽位', () => {
+  const intent = buildParsedIntent('transfer.create', { amount: { amount_minor: 10000, currency: 'CNY' } });
+  assert.deepEqual(intent.missingSlots, ['transfer_type', 'source_account_ref']);
+  assert.equal(intent.status, 'needs_clarification');
 });
 
 test('可恢复槽位：target_account_ref 是 transfer.create 的合法恢复槽位，且不削弱既有槽位', () => {
@@ -175,5 +193,6 @@ test('可恢复槽位：target_account_ref 是 transfer.create 的合法恢复�
   assert.equal(validRecoverySlot('transfer.create', 'source_account_ref'), true);
   assert.equal(validRecoverySlot('transfer.create', 'payee_ref'), true);
   assert.equal(validRecoverySlot('transfer.create', 'amount'), true);
+  assert.equal(validRecoverySlot('transfer.create', 'transfer_type'), true);
   assert.equal(validRecoverySlot('transfer.create', 'card_ref'), false);
 });

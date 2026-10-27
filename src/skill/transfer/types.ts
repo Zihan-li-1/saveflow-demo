@@ -39,6 +39,7 @@ export interface Payee {
 export interface Account {
   /** 账户唯一 ID */
   id: string;
+  name?: string;
   /** 账户币种 */
   currency: Currency;
   /** 可用余额（分，整数） */
@@ -53,16 +54,18 @@ export interface FinancialContextRepository {
   queryAccount(accountId: string): Promise<Account | null> | Account | null;
   /** 按收款人姓名（含别名）查询收款人列表（可能 0 / 1 / 多个） */
   queryPayeesByName(name: string): Promise<Payee[]> | Payee[];
+  /** Return every active account matching a user facing alias, for safe ambiguity handling. */
+  queryOwnAccounts?(reference: string, selectionKey?: "source_account_ref" | "target_account_ref"): Promise<Account[]> | Account[];
 }
 
 /** 澄清续接时用户已选定的实体（key 为槽位名；entityId 即服务端 entity_id） */
 export type SlotSelections = Partial<
-  Record<"source_account_ref" | "payee_ref", { entityId?: string; optionId?: string }>
+  Record<"source_account_ref" | "target_account_ref" | "payee_ref", { entityId?: string; optionId?: string }>
 >;
 
 /** 解析后的实体引用（对齐 wire.mjs 的 references 结构） */
 export interface EntityReference {
-  slot: "source_account_ref" | "payee_ref";
+  slot: "source_account_ref" | "target_account_ref" | "payee_ref";
   /** 服务端实体 ID */
   entity_id: string;
   /** 实体来源：financial_context（底座唯一匹配）/ user_selection（用户显式选择） */
@@ -73,10 +76,12 @@ export interface EntityReference {
 export interface TransferIntentSlots {
   /** 收款人原始称呼（口语）；缺失时为 null / undefined */
   payee_ref?: string | null;
+  transfer_type?: "internal" | "external";
   /** 金额结构；缺失时为 null / undefined */
   amount?: Amount | null;
   /** 转出账户引用；缺失时为 null / undefined */
   source_account_ref?: string | null;
+  target_account_ref?: string | null;
 }
 
 /** clarification 追问信息（交由上层 Orchestrator 向用户澄清） */
@@ -86,11 +91,16 @@ export interface Clarification {
     | "invalid_amount"
     | "payee_not_found"
     | "ambiguous_payee"
-    | "source_account_not_found";
+    | "source_account_not_found"
+    | "target_account_not_found"
+    | "ambiguous_account"
+    | "same_account"
+    | "insufficient_balance"
+    | "missing_transfer_type";
   /** 追问文案 */
   question: string;
   /** 需要澄清的槽位 */
-  slot?: "payee_ref" | "amount" | "source_account_ref";
+  slot?: "payee_ref" | "amount" | "source_account_ref" | "target_account_ref" | "transfer_type";
   /** 重名歧义时的候选列表 */
   candidates?: Payee[];
 }
@@ -105,6 +115,20 @@ export interface TransferPreview {
   available_balance_minor: number;
   /** 预估转账后余额（分） */
   estimated_balance_after_minor: number;
+}
+
+export interface InternalTransferPreview {
+  kind: "internal_transfer";
+  source_account_id: string;
+  source_account_name: string;
+  target_account_id: string;
+  target_account_name: string;
+  amount_minor: number;
+  currency: Currency;
+  source_available_balance_minor: number;
+  source_estimated_balance_after_minor: number;
+  target_available_balance_minor: number;
+  target_estimated_balance_after_minor: number;
 }
 
 /** 收款人解析结果（resolve_payee 输出） */
@@ -135,7 +159,7 @@ export type ResolvedTransferIntent =
       state: "ready_for_planning";
       resolved_slots: { amount: Amount };
       references: EntityReference[];
-      preview: TransferPreview;
+      preview: TransferPreview | InternalTransferPreview;
     }
   | {
       action: "transfer.create";

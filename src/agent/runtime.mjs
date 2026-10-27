@@ -192,8 +192,8 @@ async function resolveTransferIntent(repository, slots) {
   };
 }
 
-// 本人账户之间的资金互转：只做只读方向解析与确定性校验，停在 Banking Core 契约边界。
-// 不调用 core.prepare/decide/execute，不生成可执行预览，也不伪造任何资金效果。
+  // 本人账户互转与对外转账共用正式 Core 流程；此处只解析本人账户并校验方向与余额，
+  // 随后由统一 transfer.create 路径生成预览并按同一确认、执行边界处理。
 async function resolveInternalTransfer(repository, amount, slots, targetRef) {
   const source = typeof slots.source_account_ref === 'string' ? slots.source_account_ref.trim() : '';
   if (!source) return { state: 'needs_clarification', clarification: { reason: 'missing_slot', slot: 'source_account_ref', question: '请确认从哪个账户转出。' } };
@@ -213,7 +213,7 @@ async function resolveInternalTransfer(repository, amount, slots, targetRef) {
 
   return {
     action: 'transfer.create',
-    state: 'internal_transfer_recognized',
+    state: 'ready_for_planning',
     resolved_slots: { amount: { amount_minor: amount.amount_minor, currency: amount.currency } },
     references: [
       { slot: 'source_account_ref', entity_id: sourceAccount.id, source: 'financial_context' },
@@ -238,7 +238,6 @@ async function resolveInternalTransfer(repository, amount, slots, targetRef) {
 export async function handleTransfer(intent, repository) {
   const resolved = await resolveTransferIntent(repository, intent.slots);
   if (resolved.state === 'needs_clarification') return { ok: false, kind: 'needs_clarification', action: 'transfer.create', source: 'resolver', question: resolved.clarification.question, slot: resolved.clarification.slot, reason: resolved.clarification.reason, ...(resolved.clarification.candidates ? { candidates: resolved.clarification.candidates } : {}) };
-  if (resolved.state === 'internal_transfer_recognized') return { ok: true, kind: 'internal_transfer_recognized', action: 'transfer.create', data: resolved };
   return { ok: true, kind: 'transfer_resolution', action: 'transfer.create', data: resolved };
 }
 

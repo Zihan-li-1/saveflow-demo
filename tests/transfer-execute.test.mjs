@@ -44,6 +44,35 @@ test('transfer confirm-execute 后端闭环：预览不扣款，确认后执行�
   assert.equal(core.repository.getAccount('ACC-CHECKING').availableBalanceFen, 450000); // 执行后扣款
 });
 
+test('本人互转经 transfer_money 正式预览、确认和 Core 执行后原子更新双方余额并生成双边流水', async () => {
+  const core = createBankingCore();
+  const sourceBefore = core.repository.getAccount('ACC-CHECKING');
+  const targetBefore = core.repository.getAccount('ACC-SAVINGS');
+  const data = await previewTransfer(core, {
+    source_account_ref: '活期账户', target_account_ref: '储蓄账户', amount: { amount_minor: 10000, currency: 'CNY' },
+  });
+  const effect = data.preview.exactEffects[0];
+  assert.equal(effect.kind, 'transfer_internal');
+  assert.equal(effect.fromAccountId, 'ACC-CHECKING');
+  assert.equal(effect.toAccountId, 'ACC-SAVINGS');
+  assert.equal(core.repository.getAccount('ACC-CHECKING').availableBalanceFen, sourceBefore.availableBalanceFen);
+  assert.equal(core.repository.getAccount('ACC-SAVINGS').availableBalanceFen, targetBefore.availableBalanceFen);
+  unwrap(await core.decide(data.operationId, { previewHash: data.preview.previewHash, decision: 'confirm', confirmedStepIds: data.preview.stepIds }));
+  const receipt = unwrap(await core.execute(data.operationId, data.preview.previewHash));
+  assert.equal(receipt.status, 'succeeded');
+  assert.equal(receipt.transactionIds.length, 2);
+  assert.equal(core.repository.getAccount('ACC-CHECKING').availableBalanceFen, sourceBefore.availableBalanceFen - 10000);
+  assert.equal(core.repository.getAccount('ACC-SAVINGS').availableBalanceFen, targetBefore.availableBalanceFen + 10000);
+  assert.equal(core.repository.getAccount('ACC-CHECKING').availableBalanceFen + core.repository.getAccount('ACC-SAVINGS').availableBalanceFen, sourceBefore.availableBalanceFen + targetBefore.availableBalanceFen);
+  const debit = core.repository.getTransactions({ accountId: 'ACC-CHECKING' }).find(row => receipt.transactionIds.includes(row.id));
+  const credit = core.repository.getTransactions({ accountId: 'ACC-SAVINGS' }).find(row => receipt.transactionIds.includes(row.id));
+  assert.equal(debit.type, 'internal_transfer_out');
+  assert.equal(credit.type, 'internal_transfer_in');
+  const repeated = await Promise.all(Array.from({ length: 8 }, () => core.execute(data.operationId, data.preview.previewHash)));
+  for (const retry of repeated) assert.deepEqual(unwrap(retry), receipt);
+  assert.equal(core.repository.getTransactions({ accountId: 'ACC-CHECKING' }).filter(row => receipt.transactionIds.includes(row.id)).length, 1);
+});
+
 test('权限分级：≤1000元 只需确认；>1000元 需一次性验证码（OTP）', async () => {
   const core = createBankingCore();
   const small = unwrap(await core.prepare({ action: 'transfer_money', input: { fromAccountId: 'ACC-CHECKING', payeeId: 'payee_001', amountFen: 50000, currency: 'CNY' } }));
@@ -52,6 +81,18 @@ test('权限分级：≤1000元 只需确认；>1000元 需一次性验证码（
   const large = unwrap(await core.prepare({ action: 'transfer_money', input: { fromAccountId: 'ACC-CHECKING', payeeId: 'payee_001', amountFen: 200000, currency: 'CNY' } }));
   assert.equal(large.risk.requiredVerification, 'otp');
   assert.equal(large.risk.verificationCode, undefined); // 验证码不再写进风险结果
+});
+
+test('Banking Core 直接拒绝零金额的本人互转和对外转账', async () => {
+  const core = createBankingCore();
+  for (const input of [
+    { fromAccountId: 'ACC-CHECKING', toAccountId: 'ACC-SAVINGS', amountFen: 0, currency: 'CNY' },
+    { fromAccountId: 'ACC-CHECKING', payeeId: 'payee_001', amountFen: 0, currency: 'CNY' },
+  ]) {
+    const result = await core.prepare({ action: 'transfer_money', input });
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, 'VALIDATION_ERROR');
+  }
 });
 
 test('改金额 = 新预览（新 operationId + 新 hash），旧 hash 无法确认新操作', async () => {
