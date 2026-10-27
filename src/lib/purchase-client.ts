@@ -16,6 +16,8 @@ export type PurchaseCandidate = { candidate_ref: string; sku_ref: string; produc
   price_minor: number; delivery_fee_minor: number; packaging_fee_minor: number; allergens_known: boolean; ingredients: string[]; canonical_url: string };
 export type FinancialBasis = { source: string; as_of: string; available_minor: number; obligations_minor: number; repository_as_of?: string };
 export type PlanPreview = { plan_preview_ref: string; plan_confirmation_token: string; preview?: { slots: PurchaseSlots; context: FinancialBasis; reminder_due_at: string }; notice: string };
+export type PurchaseBudgetCheck = { coverage_status: 'enough' | 'shortfall'; required_minor: number; available_for_plan_minor: number;
+  shortfall_minor: number; source: 'user_provided'; financial_as_of: string; reservation_unchanged: true; bank_balance_changed: false };
 
 export async function purchaseRequest<T>(action: string, input: unknown, accessCode: string, consent: boolean): Promise<T> {
   if (!consent) throw new Error('请先勾选本次演示和模型使用同意项。');

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { purchaseRequest, orderStatusText, yuan, inputMinor, type PurchaseSlots, type PurchaseWorkflow, type PlanPreview } from '../lib/purchase-client';
+import { purchaseRequest, orderStatusText, yuan, inputMinor, type PurchaseSlots, type PurchaseWorkflow, type PlanPreview, type PurchaseBudgetCheck } from '../lib/purchase-client';
 import { shoppingSearchLinks } from '../lib/purchase-links.mjs';
 import { nextPurchaseQuestion, purchaseValueLabel } from '../lib/purchase-guidance.mjs';
 import styles from './PurchaseFlow.module.css';
@@ -21,6 +21,7 @@ export function PurchaseFlow({ accessCode = '', consent = false, initialSlots = 
   const [message, setMessage] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [balance, setBalance] = useState(''), [obligations, setObligations] = useState('');
   const [plan, setPlan] = useState<PlanPreview>();
+  const [coverage, setCoverage] = useState<PurchaseBudgetCheck>();
 
   useEffect(() => {
     if (wf?.status === 'active') {
@@ -116,14 +117,23 @@ export function PurchaseFlow({ accessCode = '', consent = false, initialSlots = 
         <button disabled={busy || !recoverySaved || !recovery} onClick={() => run(async () => {
           setWf(await call<PurchaseWorkflow>('scenario.purchase.save', { draft_ref: wf.workflow_ref, expected_version: wf.version,
             plan_preview_ref: plan.plan_preview_ref, plan_confirmation_token: plan.plan_confirmation_token }));
-          setPlan(undefined); setEditing(false);
+          setPlan(undefined); setCoverage(undefined); setBalance(''); setObligations(''); setEditing(false);
         })}>确认预留金额并保存提醒</button></div>}
     </> : <>
       {wf.reservation && <div className={styles.totals}><span>本月预留 {yuan(wf.reservation.total_minor)}</span><span>仍可用于本计划 {yuan(wf.reservation.unallocated_minor)}</span></div>}
       <p>这笔钱仍在原账户中。查看或购买其他商品前，请记得扣除这笔预留和必要开支。余额变化和平台支付不会自动同步；下单前请重新核对实际可用金额。</p>
       {wf.financial_basis && <p>规划数据：{wf.financial_basis.source === 'user_provided' ? '用户填报，未与银行核对' : '合成演示数据'} · 截至 {wf.financial_basis.as_of}</p>}
-      <button disabled={busy} onClick={() => run(async () => setWf(await call<PurchaseWorkflow>('purchase.read', { workflow_ref: wf.workflow_ref })))}>刷新预算与提醒</button>
+      <button disabled={busy} onClick={() => run(async () => setWf(await call<PurchaseWorkflow>('purchase.read', { workflow_ref: wf.workflow_ref })))}>刷新已保存预算与提醒</button>
       {active && <>
+        <div className={styles.grid}><label>现在的可用余额（元，自行核对后填写）<input inputMode="decimal" value={balance} onChange={event => { setBalance(event.target.value); setCoverage(undefined); }} /></label>
+          <label>现在的近期待付义务（元，没有填0）<input inputMode="decimal" value={obligations} onChange={event => { setObligations(event.target.value); setCoverage(undefined); }} /></label></div>
+        <p>这次复核仅依据你填报的数据，未经银行验证。</p>
+        <button disabled={busy || !balance || !obligations} onClick={() => run(async () => setCoverage(await call<PurchaseBudgetCheck>('purchase.balance_check', {
+          workflow_ref: wf.workflow_ref, manual_finance: { available_minor: inputMinor(balance), obligations_minor: inputMinor(obligations) },
+        })))}>按最新自填余额复核预留</button>
+        {coverage && <p role="status">{coverage.coverage_status === 'shortfall'
+          ? `按你刚填写的数据，预留金额仍差 ${yuan(coverage.shortfall_minor)}。请减少预留或补足可用资金；银行账户未被扣款。`
+          : '按你刚填写的数据，当前预留金额仍可覆盖；下单前请再核对实际余额。'}这只是规划核对，未经银行验证，也不会修改已保存预算。</p>}
         <button disabled={busy} onClick={() => { syncDraft(wf); setPlan(undefined); setEditing(true); }}>修改金额或日期（需重新确认）</button>
         <div className={styles.actions}><button aria-pressed={wf.slots.selection_mode === 'guided'} disabled={busy} onClick={() => run(() => changeMode('guided'))}>问答搭配</button>
           <button aria-pressed={wf.slots.selection_mode === 'browse'} disabled={busy} onClick={() => run(() => changeMode('browse'))}>商品自选</button></div>

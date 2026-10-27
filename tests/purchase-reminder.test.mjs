@@ -47,3 +47,29 @@ test('insufficient planning balance fails before a confirmation preview exists',
   assert.equal(Object.keys(state.reservations).length, 0);
   assert.equal(Object.keys(state.jobs).length, 0);
 });
+
+test('a saved budget can be manually rechecked after the user spends elsewhere', async () => {
+  const clock = Date.parse('2026-10-26T00:00:00Z');
+  const store = createPurchaseTestStore();
+  const skill = createPurchaseSkill({ store, now: () => clock, schedulerEnabled: true });
+  const draft = await skill.perform('owner', 'scenario.plan_purchase', {
+    budget: { amount_minor: 100000, currency: 'CNY' }, budget_month: '2026-10', funding_account_ref: '我的活期',
+    date_expression: '2026-11-01 09:00-12:00', date_meaning: 'order_on',
+    items: [{ category: 'flowers', quantity: 1 }], selection_mode: 'browse',
+  });
+  const preview = await skill.previewPlan('owner', draft.workflow_ref, draft.version, { available_minor: 200000, obligations_minor: 0 });
+  await skill.perform('owner', 'scenario.purchase.save', { draft_ref: draft.workflow_ref, expected_version: draft.version,
+    plan_preview_ref: preview.plan_preview_ref, plan_confirmation_token: preview.plan_confirmation_token });
+  const low = await skill.checkBudget('owner', draft.workflow_ref, { available_minor: 80000, obligations_minor: 0 });
+  await assert.rejects(skill.checkBudget('other', draft.workflow_ref, { available_minor: 80000, obligations_minor: 0 }), { code: 'WORKFLOW_NOT_FOUND' });
+  assert.equal(low.coverage_status, 'shortfall');
+  assert.equal(low.required_minor, 100000);
+  assert.equal(low.available_for_plan_minor, 80000);
+  assert.equal(low.shortfall_minor, 20000);
+  assert.equal(low.source, 'user_provided');
+  const enough = await skill.checkBudget('owner', draft.workflow_ref, { available_minor: 150000, obligations_minor: 0 });
+  assert.equal(enough.coverage_status, 'enough');
+  const state = await store.transaction('owner', value => value);
+  assert.equal(state.reservations[draft.workflow_ref].total_minor, 100000);
+  assert.equal(Object.keys(state.jobs).length, 1);
+});

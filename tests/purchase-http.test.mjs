@@ -54,6 +54,35 @@ test('insufficient balance returns an actionable error before confirmation', asy
   assert.equal(Object.keys(state.reservations).length, 0);
   assert.equal(Object.keys(state.jobs).length, 0);
 });
+test('authenticated manual balance recheck reports shortfall without changing reservation', async () => {
+  const now = () => Date.parse('2026-10-26T00:00:00Z');
+  const skill = createPurchaseSkill({ store: createPurchaseTestStore(), now, schedulerEnabled: true });
+  const options = { env, now, getSkill: async () => skill };
+  const draftResponse = await handlePurchaseRequest(request({ action: 'scenario.plan_purchase', input: {
+    budget: { amount_minor: 100000, currency: 'CNY' }, budget_month: '2026-10', funding_account_ref: '我的活期',
+    date_expression: '2026-11-01 09:00-12:00', date_meaning: 'order_on',
+    items: [{ category: 'flowers', quantity: 1 }], selection_mode: 'browse',
+  } }), options);
+  const cookie = draftResponse.headers.get('set-cookie').split(';')[0];
+  const draft = (await draftResponse.json()).data;
+  const previewResponse = await handlePurchaseRequest(request({ action: 'purchase.plan_preview', input: {
+    workflow_ref: draft.workflow_ref, expected_version: draft.version,
+    manual_finance: { available_minor: 200000, obligations_minor: 0 },
+  } }, cookie), options);
+  const preview = (await previewResponse.json()).data;
+  const saved = await handlePurchaseRequest(request({ action: 'scenario.purchase.save', input: {
+    draft_ref: draft.workflow_ref, expected_version: draft.version,
+    plan_preview_ref: preview.plan_preview_ref, plan_confirmation_token: preview.plan_confirmation_token,
+  } }, cookie), options);
+  assert.equal(saved.status, 200);
+  const checked = await handlePurchaseRequest(request({ action: 'purchase.balance_check', input: {
+    workflow_ref: draft.workflow_ref, manual_finance: { available_minor: 80000, obligations_minor: 0 },
+  } }, cookie), options);
+  assert.equal(checked.status, 200);
+  assert.equal((await checked.json()).data.shortfall_minor, 20000);
+  const read = await handlePurchaseRequest(request({ action: 'purchase.read', input: { workflow_ref: draft.workflow_ref } }, cookie), options);
+  assert.equal((await read.json()).data.reservation.total_minor, 100000);
+});
 test('server-signed persistent demo session isolates workflows and private address never reaches parser', async () => {
   const store = createPurchaseTestStore(), skill = createPurchaseSkill({ store });
   let seen;

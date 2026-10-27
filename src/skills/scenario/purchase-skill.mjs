@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { validatePurchaseAction } from './purchase-contract.mjs';
-import { reserveBudget, amendBudget, allocateOrder, recordOrderOutcome, cancelBudget } from './purchase-budget.mjs';
+import { reserveBudget, amendBudget, allocateOrder, recordOrderOutcome, cancelBudget, planningAvailable } from './purchase-budget.mjs';
 import { validCalendarDate } from '../../lib/calendar.mjs';
 import { matchesGiftPreferences } from '../commerce/gift-filters.mjs';
 
@@ -83,6 +83,24 @@ export function createPurchaseSkill({ store, commerce, financialContext, now = D
       current.plan_preview = { preview_ref, token_hash: hash(token), preview_hash: hash(preview), preview, expires: now() + 300000 };
       return stamped({ plan_preview_ref: preview_ref, plan_confirmation_token: token, preview,
         bank_balance_changed: false, notice: '仅预留应用内购物预算，银行余额不变。请注意其他花费；到期只提醒你自行下单。' });
+    });
+  }
+  async function checkBudget(owner, id, manual) {
+    const current = await store.transaction(owner, state => workflow(state, id));
+    if (current.status !== 'active') fail('INVALID_TRANSITION');
+    const context = await finance(owner, current, manual);
+    return store.transaction(owner, state => {
+      const wf = workflow(state, id), reservation = state.reservations[id];
+      if (wf.status !== 'active' || !reservation) fail('INVALID_TRANSITION');
+      if (context.account_ref !== reservation.account_ref) fail('FUNDING_ACCOUNT_CHANGE_REQUIRES_NEW_PLAN');
+      const probe = structuredClone(state);
+      delete probe.reservations[id];
+      const available_for_plan_minor = planningAvailable(probe, context);
+      const required_minor = reservation.unallocated_minor + reservation.occupied_minor;
+      const shortfall_minor = Math.max(0, required_minor - available_for_plan_minor);
+      return stamped({ workflow_ref: id, coverage_status: shortfall_minor ? 'shortfall' : 'enough',
+        required_minor, available_for_plan_minor, shortfall_minor, source: context.source,
+        financial_as_of: context.as_of, reservation_unchanged: true, bank_balance_changed: false });
     });
   }
   async function saveAddress(owner, id, version, input) {
@@ -257,7 +275,7 @@ export function createPurchaseSkill({ store, commerce, financialContext, now = D
   }
   const list = owner => store.transaction(owner, state => stamped({ workflows: Object.values(state.workflows)
     .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? '')).slice(0, 100).map(wf => safeWorkflow(state, wf)) }));
-  return { perform, read, list, previewPlan, saveAddress, reviseDraft, previewCancel };
+  return { perform, read, list, previewPlan, checkBudget, saveAddress, reviseDraft, previewCancel };
 }
 
 /** No external calls: the atomic due event is a request for fresh user review. */

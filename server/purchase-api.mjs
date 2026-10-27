@@ -20,6 +20,7 @@ const helperSchemas = {
   'purchase.understand': z.strictObject({ message: z.string().trim().min(1).max(1000), workflow_ref: ref.optional(), expected_version: version.optional() }),
   'purchase.draft.update': z.strictObject({ workflow_ref: ref, expected_version: version, slots: z.record(z.string(), z.unknown()) }),
   'purchase.plan_preview': z.strictObject({ workflow_ref: ref, expected_version: version, manual_finance: z.strictObject({ available_minor: z.number().int().min(0).max(1e9), obligations_minor: z.number().int().min(0).max(1e9) }).optional() }),
+  'purchase.balance_check': z.strictObject({ workflow_ref: ref, manual_finance: z.strictObject({ available_minor: z.number().int().min(0).max(1e9), obligations_minor: z.number().int().min(0).max(1e9) }) }),
   'purchase.cancel_preview': z.strictObject({ workflow_ref: ref, expected_version: version }),
 };
 const messages = { PERSISTENCE_UNAVAILABLE: '购物流程数据库未配置，尚未保存预约。', SCHEDULER_UNAVAILABLE: '后台预约服务未运行，尚未安排任务。',
@@ -102,6 +103,7 @@ export async function handlePurchaseRequest(request, options = {}) {
       if (body.action === 'purchase.read') data = await skill.read(current.owner, input.workflow_ref);
       if (body.action === 'purchase.list') data = await skill.list(current.owner);
       if (body.action === 'purchase.plan_preview') data = await skill.previewPlan(current.owner, input.workflow_ref, input.expected_version, input.manual_finance);
+      if (body.action === 'purchase.balance_check') data = await skill.checkBudget(current.owner, input.workflow_ref, input.manual_finance);
       if (body.action === 'purchase.cancel_preview') data = await skill.previewCancel(current.owner, input.workflow_ref, input.expected_version);
       if (body.action === 'purchase.draft.update') data = await skill.reviseDraft(current.owner, input.workflow_ref, input.expected_version, input.slots);
       if (body.action === 'purchase.understand') {
