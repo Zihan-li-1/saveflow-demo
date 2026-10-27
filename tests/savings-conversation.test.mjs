@@ -94,6 +94,9 @@ test('verified savings plan carries its deadline into a separate read-only Wealt
   assert.equal(plan.data.status, 'goal_plan');
   assert.equal(typeof plan.data.wealthHandoffToken, 'string');
   const wealthInputs = { max_risk_level: 'R2', investable_amount_minor: 100000, liquidity_requirement: 'T+1' };
+  const bypass = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, message: '直接推荐理财产品' }), { ...options, core,
+    parseIntent: async () => ({ schemaVersion: '1.0.0', action: 'wealth.recommend', slots: { goal: { kind: 'steady_growth', target_date: '2026-12-31' } }, missingSlots: [], status: 'ready_for_resolution' }) })).json();
+  assert.equal(bypass.code, 'WEALTH_INPUT_REQUIRED');
   const invented = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, wealthInputs: { ...wealthInputs, target_date: '2027-12-31' } }), { ...options, core })).json();
   assert.equal(invented.code, 'WEALTH_INPUT_INVALID');
   const mixed = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, wealthInputs, message: '立即申购' }), { ...options, core })).json();

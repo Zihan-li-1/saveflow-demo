@@ -195,7 +195,7 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
         const bound = issueContinuationToken({ ...payload, conversation: { token, taskId: state.currentTask.taskId } }, env.CONTINUATION_TOKEN_SECRET, now(), expiresAt - now());
         const issued = verifyContinuationToken(bound, env.CONTINUATION_TOKEN_SECRET, now());
         await commit({ type: 'set_continuation', taskId: state.currentTask.taskId, tokenId: issued.tokenId, expiresAt: issued.expiresAt,
-          ...(payload.pendingSlot ? { pendingSlot: payload.pendingSlot } : {}), awaitingInput: ['needs_clarification', 'needs_plan_inputs'].includes(target.status) });
+          ...(payload.pendingSlot ? { pendingSlot: payload.pendingSlot } : {}), awaitingInput: ['needs_clarification', 'needs_plan_inputs', 'needs_wealth_inputs'].includes(target.status) });
         target.continuationToken = bound;
         if (data.continuationToken) data.continuationToken = bound;
       } else if (data.status === 'cancelled' && active(state.currentTask)) {

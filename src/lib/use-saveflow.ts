@@ -16,7 +16,7 @@ import { transferFlow, bankingContinuationToken, updateBankingFlows, type Bankin
 import { agentErrorHint, agentErrorPolicy } from "./agent-error-policy.mjs";
 import type { BankingConversation } from './banking-conversation-contract';
 
-export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "banking_purchase" | "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_savings_inputs" | "banking_savings_plan" | "banking_internal_transfer"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
+export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "banking_purchase" | "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_wealth_inputs" | "banking_savings_inputs" | "banking_savings_plan" | "banking_internal_transfer"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
 const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。可以查询模拟账单，或生成转账正式预览，例如：给张三转 500 元。" }];
 const pendingKey = "saveflow.pending-operation.v1";
 
@@ -225,6 +225,9 @@ export function useSaveflow() {
         addMessage({ role: 'agent', text: '已核验当前会话。恢复业务后将重新查询参数、选项和正式预览。' });
       } else if (answer.status === "needs_plan_inputs") {
         addMessage({ role: "agent", kind: "banking_savings_inputs", text: replyText, banking: answer });
+        send("CLARIFY");
+      } else if (answer.status === "needs_wealth_inputs") {
+        addMessage({ role: "agent", kind: "banking_wealth_inputs", text: replyText, banking: answer });
         send("CLARIFY");
       } else if (answer.kind === "clarification" || answer.status === "needs_clarification") {
         addMessage({ role: "agent", kind: "banking_clarification", text: replyText, banking: answer });
@@ -622,8 +625,9 @@ export function useSaveflow() {
     return startBanking("", undefined, flow?.id, { token: data.continuationToken, inputs });
   };
   const submitWealthInputs = (data: BankingAgentData, inputs: WealthScreeningInputs) => {
-    if (modelMode !== "banking" || data.historySnapshot || data.status !== "goal_plan" || data.data?.verification_status !== "verified" || !data.wealthHandoffToken || !canTransition(stageRef.current, "START")) return;
-    return startBanking("", undefined, undefined, undefined, { token: data.wealthHandoffToken, inputs });
+    const token = data.status === "goal_plan" && data.data?.verification_status === "verified" ? data.wealthHandoffToken : data.status === "needs_wealth_inputs" ? data.continuationToken : undefined;
+    if (modelMode !== "banking" || data.historySnapshot || !token || !canTransition(stageRef.current, "START")) return;
+    return startBanking("", undefined, undefined, undefined, { token, inputs });
   };
   const editTransferPreview = (data: BankingAgentData, message: string) => {
     if (modelMode !== "banking" || !canTransition(stageRef.current, "START")) return;

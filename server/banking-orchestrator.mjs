@@ -248,6 +248,11 @@ export async function runBankingConversation(body, {
       if (!result.ok) return reply(statusFor(result.error?.code), result.error?.code || 'SKILL_ERROR', result.error?.message || '理财筛选失败', { status: 'wealth_error', action: 'wealth.recommend', error: result.error });
       return reply(200, 'OK', result.data.kind === 'questionnaire_required' ? '请先完成风险测评' : '按已核验目标完成只读理财筛选', { status: 'wealth_result', action: 'wealth.recommend', data: result.data.kind === 'recommendation' ? { ...result.data, screening_context: { target_date: goal.target_date, investable_amount_minor: inputs.investable_amount_minor, max_risk_level: inputs.max_risk_level, liquidity_requirement: inputs.liquidity_requirement, source: 'verified_savings_plan' } } : result.data, evidence: result.data.evidence });
     }
+    if (resumeOnly && continuation.pendingSlot === '__wealth_screening') {
+      if (continuation.action !== 'wealth.recommend' || continuation.slots.goal?.kind !== 'steady_growth' || typeof continuation.slots.goal.target_date !== 'string') throw inputError('CONTINUATION_INVALID', '理财筛选与已核验计划不匹配', 400);
+      return reply(200, 'OK', '请重新填写独立可投资金额、风险上限和取用要求，再进行只读筛选。', { status: 'needs_wealth_inputs', action: 'wealth.recommend', continuationToken: body.continuationToken, data: { target_date: continuation.slots.goal.target_date, execution_allowed: false } });
+    }
+    if (continuation.pendingSlot === '__wealth_screening') throw inputError('WEALTH_INPUT_REQUIRED', '请在理财筛选表单中填写独立可投资金额、风险上限和取用要求。', 400);
     if (continuation.pendingSlot === '__scenario_confirmation') {
       if (!continuation.operation) throw inputError('CONTINUATION_INVALID', '规则操作续接信息无效', 400);
       const answer = String(body.message || '').trim();
