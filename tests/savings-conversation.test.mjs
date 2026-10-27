@@ -87,3 +87,52 @@ test('a changed repository snapshot invalidates the signed plan form before anal
   assert.notEqual(changed.data?.status, 'goal_plan');
 });
 
+test('verified savings plan carries its deadline into a separate read-only Wealth screening', async () => {
+  const core = createBankingCore({ now });
+  const initial = await (await handleBankingAgent(request({ message: '我要年底存够一万' }), { ...options, core })).json();
+  const plan = await (await handleBankingAgent(request({ continuationToken: initial.data.continuationToken, planInputs }), { ...options, core })).json();
+  assert.equal(plan.data.status, 'goal_plan');
+  assert.equal(typeof plan.data.wealthHandoffToken, 'string');
+  const wealthInputs = { max_risk_level: 'R2', investable_amount_minor: 100000, liquidity_requirement: 'T+1' };
+  const bypass = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, message: '直接推荐理财产品' }), { ...options, core,
+    parseIntent: async () => ({ schemaVersion: '1.0.0', action: 'wealth.recommend', slots: { goal: { kind: 'steady_growth', target_date: '2026-12-31' } }, missingSlots: [], status: 'ready_for_resolution' }) })).json();
+  assert.equal(bypass.code, 'WEALTH_INPUT_REQUIRED');
+  const invented = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, wealthInputs: { ...wealthInputs, target_date: '2027-12-31' } }), { ...options, core })).json();
+  assert.equal(invented.code, 'WEALTH_INPUT_INVALID');
+  const mixed = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, wealthInputs, message: '立即申购' }), { ...options, core })).json();
+  assert.equal(mixed.code, 'INVALID_REQUEST');
+  const screening = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, wealthInputs }), { ...options, core })).json();
+  assert.equal(screening.data.status, 'wealth_result');
+  assert.equal(screening.data.action, 'wealth.recommend');
+  assert.equal(screening.data.data.kind, 'recommendation');
+  assert.deepEqual(screening.data.data.screening_context, { target_date: '2026-12-31', investable_amount_minor: 100000, max_risk_level: 'R2', liquidity_requirement: 'T+1', source: 'verified_savings_plan' });
+  assert.equal(screening.data.operationId, undefined);
+  assert.equal((await core.repository.getAccounts())[0].availableBalanceFen, (await createBankingCore({ now }).repository.getAccounts())[0].availableBalanceFen);
+
+  const replay = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, wealthInputs }), { ...options, core })).json();
+  assert.equal(replay.code, 'CONTINUATION_STALE');
+  const unrelated = await (await handleBankingAgent(request({ continuationToken: initial.data.continuationToken, wealthInputs }), { ...options, core })).json();
+  assert.notEqual(unrelated.data.status, 'wealth_result');
+});
+
+test('a savings plan still works when the host has no Wealth port', async () => {
+  const repository = createBankingCore({ now }).repository;
+  const core = createBankingCore({ repository, now });
+  const initial = await (await handleBankingAgent(request({ message: '我要年底存够一万' }), { ...options, core })).json();
+  const plan = await (await handleBankingAgent(request({ continuationToken: initial.data.continuationToken, planInputs }), { ...options, core })).json();
+  assert.equal(plan.data.status, 'goal_plan');
+  assert.equal(plan.data.wealthHandoffToken, undefined);
+});
+
+test('missing trusted risk assessment returns the questionnaire without a product screening context', async () => {
+  const seeded = createBankingCore({ now });
+  const core = createBankingCore({ now, wealthPorts: { ...seeded.wealthPorts, getRiskAssessment: async () => null } });
+  const initial = await (await handleBankingAgent(request({ message: '我要年底存够一万' }), { ...options, core })).json();
+  const plan = await (await handleBankingAgent(request({ continuationToken: initial.data.continuationToken, planInputs }), { ...options, core })).json();
+  const screening = await (await handleBankingAgent(request({ continuationToken: plan.data.wealthHandoffToken, wealthInputs: { max_risk_level: 'R2', investable_amount_minor: 100000, liquidity_requirement: 'T+1' } }), { ...options, core })).json();
+  assert.equal(screening.data.status, 'wealth_result');
+  assert.equal(screening.data.data.kind, 'questionnaire_required');
+  assert.equal(screening.data.data.screening_context, undefined);
+  assert.equal(screening.data.data.questionnaire.source, 'trusted_ui');
+});
+

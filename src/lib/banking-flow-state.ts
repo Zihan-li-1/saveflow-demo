@@ -20,8 +20,10 @@ export function updateBankingFlows(flows: BankingFlows, id: string, answer: Bank
       if (!tasks.some(task => task.taskId === flow.taskId && task.action === flow.action)) delete next[key];
     }
     const task = session.currentTask;
-    if (task && tasks.includes(task) && task.action === answer.action && bankingContinuationToken(answer.continuationToken)) {
-      next[task.taskId] = { id: task.taskId, taskId: task.taskId, action: task.action, token: answer.continuationToken, expiresAt: task.expiresAt,
+    const handoff = task?.action === 'wealth.recommend' && answer.action === 'orchestrator.goal' && answer.status === 'goal_plan' && bankingContinuationToken(answer.wealthHandoffToken);
+    const token = handoff ? answer.wealthHandoffToken : answer.continuationToken;
+    if (task && tasks.includes(task) && (task.action === answer.action || handoff) && bankingContinuationToken(token)) {
+      next[task.taskId] = { id: task.taskId, taskId: task.taskId, action: task.action, token, expiresAt: task.expiresAt,
         previewOperationId: ['awaiting_confirmation', 'scenario_rule_preview'].includes(answer.status) ? answer.operationId : undefined, slot: answer.slot };
     }
     return Object.fromEntries(Object.entries(next).slice(-25));

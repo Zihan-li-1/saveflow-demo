@@ -5,7 +5,7 @@ import { saveflowMock } from "./saveflow-mock";
 import { request } from "./api/client";
 import { apiConfig } from "./api/config";
 import { askQwen, type AgentTurn } from "./agent-client";
-import { askBankingAgent, BankingAgentError, executeTrialTransfer, startTrialVerification, verifyTrialVerification, type BankingAgentData, type SavingsPlanInputs } from "./banking-agent-client";
+import { askBankingAgent, BankingAgentError, executeTrialTransfer, startTrialVerification, verifyTrialVerification, type BankingAgentData, type SavingsPlanInputs, type WealthScreeningInputs } from "./banking-agent-client";
 import { createBankingClient } from "./api/banking-client";
 import type { ActionReceipt } from "../banking-core/contracts";
 import { ApiError, validatePlan, type Analysis, type Receipt } from "./api/contracts";
@@ -16,7 +16,7 @@ import { transferFlow, bankingContinuationToken, updateBankingFlows, type Bankin
 import { agentErrorHint, agentErrorPolicy } from "./agent-error-policy.mjs";
 import type { BankingConversation } from './banking-conversation-contract';
 
-export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "banking_purchase" | "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_savings_inputs" | "banking_savings_plan" | "banking_internal_transfer"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
+export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "banking_purchase" | "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_wealth_inputs" | "banking_savings_inputs" | "banking_savings_plan" | "banking_internal_transfer"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
 const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。可以查询模拟账单，或生成转账正式预览，例如：给张三转 500 元。" }];
 const pendingKey = "saveflow.pending-operation.v1";
 
@@ -71,7 +71,7 @@ export function useSaveflow() {
   };
   const [otpChallenge, setOtpChallenge] = useState<{ operationId: string; challengeId: string; expiresAt: string } | null>(null);
   const [otpError, setOtpError] = useState<string | null>(null);
-  const lastBankingRequest = useRef<{ text: string; choice?: { optionId: string; label: string }; resumeFlowId?: string; savings?: { token: string; inputs: SavingsPlanInputs }; syncOnly?: boolean } | null>(null);
+  const lastBankingRequest = useRef<{ text: string; choice?: { optionId: string; label: string }; resumeFlowId?: string; savings?: { token: string; inputs: SavingsPlanInputs }; wealth?: { token: string; inputs: WealthScreeningInputs }; syncOnly?: boolean } | null>(null);
   const active = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const goal = useRef("");
@@ -154,23 +154,23 @@ export function useSaveflow() {
     const timer = setTimeout(() => installFlows(Object.fromEntries(Object.entries(bankingFlowsRef.current).filter(([, flow]) => flow.taskId || flow.expiresAt > Date.now()))), Math.max(0, Math.min(...expiries) - Date.now()));
     return () => clearTimeout(timer);
   }, [bankingFlows]);
-  const startBanking = async (text: string, choice?: { optionId: string; label: string }, resumeFlowId?: string, savings?: { token: string; inputs: SavingsPlanInputs }, syncOnly = false) => {
+  const startBanking = async (text: string, choice?: { optionId: string; label: string }, resumeFlowId?: string, savings?: { token: string; inputs: SavingsPlanInputs }, wealth?: { token: string; inputs: WealthScreeningInputs }, syncOnly = false) => {
     if (coreBlocked()) return;
     if (!consent || !accessCode.trim()) { setValidation("请勾选授权并输入演示访问码。"); return; }
     let flowId = resumeFlowId || (forceNewTask.current ? null : focusedFlowId) || crypto.randomUUID();
     let requestToken: string | undefined;
     if (!send("START")) return;
     setBankingFailure(null);
-    const explicitNew = forceNewTask.current && !resumeFlowId && !choice && !savings && !syncOnly;
-    if ((!bankingContinuation || explicitNew) && !choice && !savings && !syncOnly) flowStartMessage.current = text;
-    lastBankingRequest.current = { text, choice, resumeFlowId, savings, syncOnly };
+    const explicitNew = forceNewTask.current && !resumeFlowId && !choice && !savings && !wealth && !syncOnly;
+    if ((!bankingContinuation || explicitNew) && !choice && !savings && !wealth && !syncOnly) flowStartMessage.current = text;
+    lastBankingRequest.current = { text, choice, resumeFlowId, savings, wealth, syncOnly };
     setValidation("");
     if (!choice) setInput("");
     setMessages(current => current.map(message => message.kind === "banking_clarification" ? { ...message, banking: { ...message.banking!, choices: [] } } : message));
     activePreviews.current = { card: null, transfer: null };
     setActiveCardOperationId(null);
     setActiveTransferOperationId(null);
-    if (!syncOnly) addMessage({ role: "user", text: savings ? ('month' in savings.inputs ? `已填写 ${savings.inputs.month} 分类收支和本目标已存金额` : "已填写本目标已存金额") : choice?.label || text || '恢复原业务' });
+    if (!syncOnly) addMessage({ role: "user", text: wealth ? `按已核验目标，单独筛选 ¥${(wealth.inputs.investable_amount_minor / 100).toFixed(2)} 的模拟理财产品` : savings ? ('month' in savings.inputs ? `已填写 ${savings.inputs.month} 分类收支和本目标已存金额` : "已填写本目标已存金额") : choice?.label || text || '恢复原业务' });
     const version = ++generation.current;
     active.current?.abort(); active.current = new AbortController();
     try {
@@ -180,7 +180,7 @@ export function useSaveflow() {
         acceptSession(checked);
         if (syncOnly) { addMessage({ role: 'agent', text: '已恢复服务端会话关联。请使用下方业务入口继续；历史预览保持只读。' }); return; }
       }
-      const resumeDirective = !explicitNew && !resumeFlowId && !choice && !savings && !syncOnly &&
+      const resumeDirective = !explicitNew && !resumeFlowId && !choice && !savings && !wealth && !syncOnly &&
         /^(?:请)?(?:继续|恢复)(?:刚才|之前|上次)的?转账[。！!？?]?$/.test(text.replace(/\s+/g, ''));
       if (resumeDirective) {
         // This is the same explicit navigation as the task-panel button. Only a
@@ -199,9 +199,11 @@ export function useSaveflow() {
       if (resumeFlowId && (!resumed || (!resumed.taskId && resumed.expiresAt <= Date.now()))) throw new ApiError('CONTINUATION_INVALID', '该业务续接不可用，请重新开始当前业务。');
       const session = bankingConversation.current;
       if (resumed?.taskId && (!session || ![session.currentTask, ...session.suspendedTasks].some(task => task?.taskId === resumed.taskId))) throw new ApiError('CONTINUATION_INVALID', '该业务不属于当前已核验会话。');
-      requestToken = explicitNew ? undefined : savings?.token || resumed?.token || bankingContinuation || undefined;
-      const resumeMode = !!resumed?.taskId && (resumeDirective || session?.suspendedTasks.some(task => task.taskId === resumed.taskId) || (!text && !choice && !savings));
-      const body = savings
+      requestToken = explicitNew ? undefined : wealth?.token || savings?.token || resumed?.token || bankingContinuation || undefined;
+      const resumeMode = !!resumed?.taskId && (resumeDirective || session?.suspendedTasks.some(task => task.taskId === resumed.taskId) || (!text && !choice && !savings && !wealth));
+      const body = wealth
+        ? { continuationToken: requestToken, wealthInputs: wealth.inputs, replyStyle }
+        : savings
         ? { continuationToken: requestToken, planInputs: savings.inputs, replyStyle }
         : choice ? { continuationToken: requestToken, choice: { optionId: choice.optionId }, replyStyle }
           : resumeMode && (!text || resumeDirective) && !choice ? { continuationToken: requestToken, replyStyle } : { message: text, continuationToken: requestToken, replyStyle };
@@ -223,6 +225,9 @@ export function useSaveflow() {
         addMessage({ role: 'agent', text: '已核验当前会话。恢复业务后将重新查询参数、选项和正式预览。' });
       } else if (answer.status === "needs_plan_inputs") {
         addMessage({ role: "agent", kind: "banking_savings_inputs", text: replyText, banking: answer });
+        send("CLARIFY");
+      } else if (answer.status === "needs_wealth_inputs") {
+        addMessage({ role: "agent", kind: "banking_wealth_inputs", text: replyText, banking: answer });
         send("CLARIFY");
       } else if (answer.kind === "clarification" || answer.status === "needs_clarification") {
         addMessage({ role: "agent", kind: "banking_clarification", text: replyText, banking: answer });
@@ -629,6 +634,11 @@ export function useSaveflow() {
     const flow = Object.values(bankingFlowsRef.current).find(flow => flow.token === data.continuationToken);
     return startBanking("", undefined, flow?.id, { token: data.continuationToken, inputs });
   };
+  const submitWealthInputs = (data: BankingAgentData, inputs: WealthScreeningInputs) => {
+    const token = data.status === "goal_plan" && data.data?.verification_status === "verified" ? data.wealthHandoffToken : data.status === "needs_wealth_inputs" ? data.continuationToken : undefined;
+    if (modelMode !== "banking" || data.historySnapshot || !token || !canTransition(stageRef.current, "START")) return;
+    return startBanking("", undefined, undefined, undefined, { token, inputs });
+  };
   const editTransferPreview = (data: BankingAgentData, message: string) => {
     if (modelMode !== "banking" || !canTransition(stageRef.current, "START")) return;
     if (data.historySnapshot) { setValidation('历史预览只供查看，请恢复业务以获取新的正式预览。'); return; }
@@ -658,6 +668,6 @@ export function useSaveflow() {
     .filter(task => ['ready', 'awaiting_input', 'awaiting_confirmation', 'suspended'].includes(task.status))
     .map(task => ({ ...task, canResume: !!bankingFlows[task.taskId], blocked: sessionView.operationReferences.some(ref => ref.taskId === task.taskId && ['confirmed', 'executing', 'checking', 'unknown'].includes(ref.coreState)) ||
       (unresolvedWrite && ['transfer.create', 'card.freeze', 'card.unfreeze', 'card.set_budget', 'card.set_controls', 'wealth.subscribe', 'wealth.redeem', 'scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule'].includes(task.action)) })) : [];
-  return { sessionPhase, sessionTasks, resumeBankingTask, verifyBankingSession: () => startBanking('', undefined, undefined, undefined, true), bankingFailure, restartBankingFlow, stage, coreOperations, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, submitSavingsInputs, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => !flow.taskId && flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, otpChallenge, otpError, verifyTransferOperation, cancelTransferVerification, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" ? bankingFailure?.retryable && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId, lastBankingRequest.current.savings, lastBankingRequest.current.syncOnly) : undefined : startDemo(goal.current), canStart: !coreLocked && canTransition(stage, "START"), canReset: !coreLocked && canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
+  return { sessionPhase, sessionTasks, resumeBankingTask, verifyBankingSession: () => startBanking('', undefined, undefined, undefined, undefined, true), bankingFailure, restartBankingFlow, stage, coreOperations, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, submitSavingsInputs, submitWealthInputs, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => !flow.taskId && flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, otpChallenge, otpError, verifyTransferOperation, cancelTransferVerification, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" ? bankingFailure?.retryable && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId, lastBankingRequest.current.savings, lastBankingRequest.current.wealth, lastBankingRequest.current.syncOnly) : undefined : startDemo(goal.current), canStart: !coreLocked && canTransition(stage, "START"), canReset: !coreLocked && canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
 }
 

@@ -7,8 +7,10 @@ import { validBankingConversation, type BankingConversation } from './banking-co
 
 export type BankingReply = { text: string; style: 'concise' | 'friendly' | 'professional'; safetyNotices: string[] };
 export type BankingChoice = { optionId: string; label: string };
+export type WealthScreeningInputs = { investable_amount_minor: number; max_risk_level: 'R1' | 'R2' | 'R3'; liquidity_requirement: 'T+0' | 'T+1' | 'AT_MATURITY' };
 export type SavingsPlanInputs = { saved_amount_minor: number } | { month: string; saved_amount_minor: number; income_minor: number; category_expenses_minor: Record<string, number> };
 export type BankingAgentData = {
+  wealthHandoffToken?: string;
   conversation?: BankingConversation;
   reply?: BankingReply;
   kind?: 'clarification';
@@ -53,6 +55,7 @@ export class BankingAgentError extends ApiError {
 }
 
 export type BankingAgentRequest = {
+  wealthInputs?: WealthScreeningInputs;
   conversationToken?: string;
   conversationRevision?: number;
   taskId?: string;
@@ -112,7 +115,8 @@ export async function askBankingAgent(
   const session = payload.data?.conversation;
   if (session && ((body.conversationToken !== undefined && session.token !== body.conversationToken) ||
       (response.ok && body.conversationRevision !== undefined && session.revision < body.conversationRevision) ||
-      (response.ok && ['continue', 'resume'].includes(body.taskMode || '') && body.taskId !== undefined && session.currentTask?.taskId !== body.taskId))) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.conversation' }, 'envelope');
+      (response.ok && ['continue', 'resume'].includes(body.taskMode || '') && body.taskId !== undefined && session.currentTask?.taskId !== body.taskId &&
+        !(payload.data?.status === 'goal_plan' && payload.data?.data?.verification_status === 'verified' && typeof payload.data?.wealthHandoffToken === 'string' && session.currentTask?.action === 'wealth.recommend' && session.currentTask?.status === 'awaiting_input')))) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.conversation' }, 'envelope');
   if (!response.ok && payload.data?.recovery !== undefined) {
     const c = payload.data.recovery;
     if (!['invalid_input', 'invalid_choice', 'business_conflict', 'missing_information'].includes(agentErrorPolicy(payload.code).category) || payload.data.error?.uncertain === true ||
@@ -176,7 +180,9 @@ export async function askBankingAgent(
   const recent = data.data?.recent as { month?: string; income_minor?: number; category_expenses_minor?: Record<string, number> } | undefined;
   const calculation = data.data?.calculation as Record<string, unknown> | undefined;
   const advice = data.data?.advice as { proposed_expense_minor?: number; feasible?: boolean; remaining_gap_minor?: number; observations?: unknown[]; caveats?: unknown[]; category_budgets?: Array<{ category: string; suggested_minor: number }> } | undefined;
-  const verifiedSavings = data.data?.verification_status === 'verified' && !!recent && !!calculation && !!advice &&
+  const screening = data.data?.screening_context as Record<string, unknown> | undefined;
+  const validScreening = data.data?.screening_context === undefined || (!!screening && !Array.isArray(screening) && data.action === 'wealth.recommend' && data.data?.kind === 'recommendation' && Object.keys(screening).sort().join(',') === 'investable_amount_minor,liquidity_requirement,max_risk_level,source,target_date' && screening.source === 'verified_savings_plan' && typeof screening.target_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(screening.target_date) && Number.isSafeInteger(screening.investable_amount_minor) && Number(screening.investable_amount_minor) >= 1 && Number(screening.investable_amount_minor) <= 1_000_000_000 && ['R1', 'R2', 'R3'].includes(String(screening.max_risk_level)) && ['T+0', 'T+1', 'AT_MATURITY'].includes(String(screening.liquidity_requirement)));
+  const verifiedSavings = data.data?.verification_status === 'verified' && (data.wealthHandoffToken === undefined || typeof data.wealthHandoffToken === 'string' && /^[\w-]{16}\.[\w-]{22}\.[\w-]+$/.test(data.wealthHandoffToken)) && !!recent && !!calculation && !!advice &&
     /^\d{4}-(0[1-9]|1[0-2])$/.test(recent.month || '') && nonnegative(recent.income_minor) &&
     !!recent.category_expenses_minor && Object.values(recent.category_expenses_minor).every(nonnegative) &&
     nonnegative(calculation.target_amount_minor) && nonnegative(calculation.saved_amount_minor) && nonnegative(calculation.remaining_minor) &&
@@ -215,9 +221,10 @@ export async function askBankingAgent(
     (payload.code === 'OK' && data.status === 'purchase_request' && data.action === 'scenario.plan_purchase' && data.data?.slots !== null && typeof data.data?.slots === 'object' && data.data?.synthetic_demo_only === true) ||
     (payload.code === 'NEEDS_CLARIFICATION' && data.status === 'needs_clarification' && typeof data.question === 'string' && typeof data.continuationToken === 'string' && Array.isArray(data.choices) && data.choices.every(choice => typeof choice.optionId === 'string' && typeof choice.label === 'string')) ||
     (payload.code === 'NEEDS_PLAN_INPUTS' && data.status === 'needs_plan_inputs' && data.action === 'orchestrator.goal' && nonnegative(data.goal?.target_amount_minor) && typeof data.goal?.deadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.goal.deadline) && /^\d{4}-(0[1-9]|1[0-2])$/.test(data.requiredMonth || '') && typeof data.continuationToken === 'string' && Array.isArray(data.categories) && data.categories.length > 0 && data.categories.every(category => typeof category === 'string' && !!category.trim()) && new Set(data.categories).size === data.categories.length && (data.recentSource === 'user_provided' || (data.recentSource === 'repository' && data.recent?.month === data.requiredMonth && nonnegative(data.recent?.income_minor) && !!data.recent?.category_expenses_minor && data.categories.every(category => nonnegative(data.recent?.category_expenses_minor[category]))))) ||
+    (payload.code === 'OK' && data.status === 'needs_wealth_inputs' && data.action === 'wealth.recommend' && typeof data.continuationToken === 'string' && /^[\w-]{16}\.[\w-]{22}\.[\w-]+$/.test(data.continuationToken) && typeof data.data?.target_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.data.target_date) && data.data.execution_allowed === false) ||
     (payload.code === 'OK' && data.status === 'bill_result') ||
     (payload.code === 'OK' && data.status === 'card_result' && ['card.get', 'card.security_review'].includes(data.action || '') && typeof card?.id === 'string' && typeof card.name === 'string' && ['active', 'frozen'].includes(String(card.status)) && Number.isSafeInteger(card.monthlyBudgetFen) && Number(card.monthlyBudgetFen) >= 0 && Number.isSafeInteger(card.monthlySpentFen) && Number(card.monthlySpentFen) >= 0 && typeof card.onlinePaymentsEnabled === 'boolean' && Array.isArray(card.blockedCategories) && (card.alertThresholdFen === null || nonnegative(card.alertThresholdFen)) && (card.balanceReminderAmountFen === null || nonnegative(card.balanceReminderAmountFen)) && (card.balanceReminderPercent === null || Number.isSafeInteger(card.balanceReminderPercent) && Number(card.balanceReminderPercent) >= 1 && Number(card.balanceReminderPercent) <= 100) && !(card.balanceReminderAmountFen !== null && card.balanceReminderPercent !== null) && Number.isSafeInteger(card.version) && cardEvidenceValid && (data.action !== 'card.security_review' || (data.data?.execution_allowed === false && data.data?.requires_explicit_user_request_to_freeze === true && Array.isArray(data.data?.guidance)))) ||
-    (payload.code === 'OK' && data.status === 'wealth_result' && data.action?.startsWith('wealth.') && typeof data.data?.kind === 'string' && data.data?.synthetic_demo_only === true && typeof data.data?.as_of === 'string' && typeof data.data?.context_snapshot_id === 'string' && Array.isArray(data.data?.evidence)) ||
+    (payload.code === 'OK' && data.status === 'wealth_result' && data.action?.startsWith('wealth.') && typeof data.data?.kind === 'string' && data.data?.synthetic_demo_only === true && typeof data.data?.as_of === 'string' && typeof data.data?.context_snapshot_id === 'string' && Array.isArray(data.data?.evidence) && validScreening) ||
     (payload.code === 'OK' && data.status === 'awaiting_confirmation' && ['wealth.subscribe', 'wealth.redeem'].includes(data.action || '') && typeof data.operationId === 'string' && typeof cardPreview?.previewHash === 'string' && /^[a-f0-9]{64}$/.test(cardPreview.previewHash) && Array.isArray(cardPreview.stepIds) && cardPreview.stepIds.length === 1 && cardEffect?.kind === 'wealth_change' && cardEffect.action === data.action && Number.isSafeInteger(cardEffect.amountFen) && data.risk?.allowed === true && data.risk?.riskLevel === 'L3' && Array.isArray(data.evidence)) ||
     (payload.code === 'OK' && data.status === 'subscription_result' && data.action === 'subscription.list' && listEvidence && enhancedSubscriptionValid && Array.isArray(subscriptions) && subscriptions.every(s => s && typeof s.id === 'string' && typeof s.name === 'string' && nonnegative(s.monthlyFeeFen) && ['active', 'cancelled'].includes(s.status) && typeof s.lastUsedDate === 'string' && typeof s.isPotentiallyUnused === 'boolean' && (s.unusedReason === undefined || typeof s.unusedReason === 'string') && (s.inactivityDays === undefined || nonnegative(s.inactivityDays)) && s.recognition && ['high', 'medium', 'not_flagged'].includes(s.recognition.confidence) && Array.isArray(s.recognition.signals) && s.recognition.signals.length === 3 && s.recognition.signals.every((signal: unknown) => typeof signal === 'string'))) ||
     (payload.code === 'OK' && data.status === 'product_result' && data.action === 'product.list' && listEvidence && Array.isArray(products) && products.every(p => p && typeof p.id === 'string' && typeof p.name === 'string' && ['R1', 'R2', 'R3'].includes(p.riskLevel) && nonnegative(p.expectedYield) && nonnegative(p.minimumAmountFen) && nonnegative(p.durationDays) && ['T+0', 'T+1', 'AT_MATURITY'].includes(p.liquidity) && p.currency === 'CNY' && p.isSynthetic === true)) ||

@@ -30,7 +30,7 @@ function hostStore(core, env, now) {
 export function openBankingConversation(body, { core, env, now, parseIntent, conversationHost }) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw error('INVALID_REQUEST', '请求体必须为对象。', { status: 400 });
   const invalidFields = Object.keys(body).some(key =>
-    !['message', 'history', 'consent', 'continuationToken', 'choice', 'replyStyle', 'planInputs', 'conversationToken', 'conversationRevision', 'taskId', 'taskMode'].includes(key));
+    !['message', 'history', 'consent', 'continuationToken', 'choice', 'replyStyle', 'planInputs', 'wealthInputs', 'conversationToken', 'conversationRevision', 'taskId', 'taskMode'].includes(key));
   const mode = body.taskMode ?? 'auto';
   const invalidAssociation = !['auto', 'new', 'continue', 'resume', 'sync'].includes(mode) ||
       (body.taskId !== undefined && (typeof body.taskId !== 'string' || !/^task_[a-f0-9-]{36}$/.test(body.taskId))) ||
@@ -65,13 +65,16 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
   const fingerprint = body.conversationRevision !== undefined || continuation
     ? createHash('sha256').update(canonical(body)).digest('hex') : undefined;
   const workflowBody = Object.fromEntries(Object.entries(body).filter(([key]) =>
-    ['message', 'history', 'consent', 'continuationToken', 'choice', 'replyStyle', 'planInputs'].includes(key)));
+    ['message', 'history', 'consent', 'continuationToken', 'choice', 'replyStyle', 'planInputs', 'wealthInputs'].includes(key)));
   if (mode === 'new') { delete workflowBody.continuationToken; continuation = undefined; }
   // Old chat history can explain language, but cannot donate another task's slots.
   if (!continuation) workflowBody.history = [];
   const commit = async command => { state = await store.transition(token, state.revision, command); return state; };
   const taskById = id => state.currentTask?.taskId === id ? state.currentTask : state.suspendedTasks.find(task => task.taskId === id);
   const intentWithoutChoice = intent => { const draft = { ...intent }; delete draft.choice; return draft; };
+  const continuationIntent = payload => payload.action === 'wealth.recommend' && payload.pendingSlot === '__wealth_screening'
+    ? validateParsedIntent({ schemaVersion: '1.0.0', action: payload.action, slots: payload.slots, missingSlots: [], status: 'ready_for_resolution' })
+    : buildParsedIntent(payload.action, payload.slots);
   const refresh = async references => {
     for (const ref of references) await commit({ type: 'observe_operation', operationId: ref.operationId });
   };
@@ -93,7 +96,7 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
   return {
     body: workflowBody,
     syncOnly: mode === 'sync',
-    resumeOnly: mode === 'resume' && body.message === undefined && body.choice === undefined && body.planInputs === undefined,
+    resumeOnly: mode === 'resume' && body.message === undefined && body.choice === undefined && body.planInputs === undefined && body.wealthInputs === undefined,
     async begin() {
       if (host.busy.has(token)) throw error('CONVERSATION_BUSY', '同一会话正在处理请求，请等待当前请求完成。');
       host.busy.add(token); ownsLock = true;
@@ -117,7 +120,7 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
       }
       if (body.conversationRevision !== undefined && body.conversationRevision !== originalRevision) throw error('CONVERSATION_REVISION_CONFLICT', '会话已更新，请使用最新任务和续接凭据。');
       if (mode === 'sync') {
-        if (body.message !== undefined || body.choice !== undefined || body.planInputs !== undefined || body.continuationToken !== undefined || body.taskId !== undefined) throw error('INVALID_REQUEST', '会话核验不能提交业务参数。', { status: 400 });
+        if (body.message !== undefined || body.choice !== undefined || body.planInputs !== undefined || body.wealthInputs !== undefined || body.continuationToken !== undefined || body.taskId !== undefined) throw error('INVALID_REQUEST', '会话核验不能提交业务参数。', { status: 400 });
         await refresh(state.operationReferences.filter(ref => !['succeeded', 'failed', 'cancelled'].includes(ref.coreState)));
         return;
       }
@@ -134,7 +137,7 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
           if (state.currentTask?.taskId !== task.taskId || !active(task)) throw error('CONVERSATION_TASK_MISMATCH', '该任务已挂起，请明确选择恢复原任务。');
           await guardTask(task.taskId);
         }
-      } else if (mode === 'continue' || mode === 'resume' || body.choice || body.planInputs || body.taskId) {
+      } else if (mode === 'continue' || mode === 'resume' || body.choice || body.planInputs || body.wealthInputs || body.taskId) {
         throw error('CONTINUATION_INVALID', '补充、选择或恢复任务需要有效的原任务续接凭据。', { status: 400 });
       }
     },
@@ -172,10 +175,13 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
       if (!data) return result;
       const target = data.recovery ?? data;
       const raw = target.continuationToken ?? data.continuationToken;
+      const wealthHandoff = data.status === 'goal_plan' && data.wealthHandoffToken && result.code === 'OK'
+        ? verifyContinuationToken(data.wealthHandoffToken, env.CONTINUATION_TOKEN_SECRET, now()) : undefined;
+      if (wealthHandoff && (wealthHandoff.action !== 'wealth.recommend' || wealthHandoff.pendingSlot !== '__wealth_screening')) throw error('CONTINUATION_INVALID');
       let payload;
       if (raw) payload = verifyContinuationToken(raw, env.CONTINUATION_TOKEN_SECRET, now());
       if (payload) {
-        const draft = buildParsedIntent(payload.action, payload.slots);
+        const draft = continuationIntent(payload);
         if (!accepted || JSON.stringify(state.currentTask?.verifiedSlots) !== JSON.stringify(payload.slots)) {
           if (active(state.currentTask) && state.currentTask.action === payload.action) await commit({ type: 'update_task', taskId: state.currentTask.taskId, intent: draft });
           else await commit({ type: 'start_task', intent: draft, suspendCurrent: true });
@@ -189,7 +195,7 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
         const bound = issueContinuationToken({ ...payload, conversation: { token, taskId: state.currentTask.taskId } }, env.CONTINUATION_TOKEN_SECRET, now(), expiresAt - now());
         const issued = verifyContinuationToken(bound, env.CONTINUATION_TOKEN_SECRET, now());
         await commit({ type: 'set_continuation', taskId: state.currentTask.taskId, tokenId: issued.tokenId, expiresAt: issued.expiresAt,
-          ...(payload.pendingSlot ? { pendingSlot: payload.pendingSlot } : {}), awaitingInput: ['needs_clarification', 'needs_plan_inputs'].includes(target.status) });
+          ...(payload.pendingSlot ? { pendingSlot: payload.pendingSlot } : {}), awaitingInput: ['needs_clarification', 'needs_plan_inputs', 'needs_wealth_inputs'].includes(target.status) });
         target.continuationToken = bound;
         if (data.continuationToken) data.continuationToken = bound;
       } else if (data.status === 'cancelled' && active(state.currentTask)) {
@@ -197,8 +203,16 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
       } else if (result.code === 'OK' && !['awaiting_confirmation', 'scenario_rule_preview'].includes(data.status) && active(state.currentTask)) {
         // Plan input submission bypasses language understanding, but still ends the
         // matching authenticated goal rather than leaving __plan_inputs pending.
-        if (continuation && !accepted) await commit({ type: 'update_task', taskId: state.currentTask.taskId, intent: buildParsedIntent(continuation.action, continuation.slots) });
+        if (continuation && !accepted) await commit({ type: 'update_task', taskId: state.currentTask.taskId, intent: continuationIntent(continuation) });
         await commit({ type: 'end_task', taskId: state.currentTask.taskId, outcome: 'completed' });
+      }
+      if (wealthHandoff) {
+        await commit({ type: 'start_task', intent: continuationIntent(wealthHandoff), suspendCurrent: false });
+        const expiresAt = Math.min(wealthHandoff.expiresAt, state.expiresAt);
+        const bound = issueContinuationToken({ ...wealthHandoff, conversation: { token, taskId: state.currentTask.taskId } }, env.CONTINUATION_TOKEN_SECRET, now(), expiresAt - now());
+        const issued = verifyContinuationToken(bound, env.CONTINUATION_TOKEN_SECRET, now());
+        await commit({ type: 'set_continuation', taskId: state.currentTask.taskId, tokenId: issued.tokenId, expiresAt: issued.expiresAt, pendingSlot: '__wealth_screening', awaitingInput: true });
+        data.wealthHandoffToken = bound;
       }
       return result;
     },

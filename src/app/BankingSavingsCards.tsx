@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import type { BankingAgentData, SavingsPlanInputs } from "@/lib/banking-agent-client";
+import type { BankingAgentData, SavingsPlanInputs, WealthScreeningInputs } from "@/lib/banking-agent-client";
 import "./banking-trial-cards.css";
 
 const amount = (minor: number) => `¥${(minor / 100).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -51,7 +51,28 @@ export function BankingSavingsInputsCard({ data, active = true, onSubmit }: { da
   </form>;
 }
 
-export function BankingSavingsPlanCard({ data, onWealth }: { data?: BankingAgentData; onWealth?: () => void }) {
+function WealthScreeningForm({ data, deadline, onWealth }: { data: BankingAgentData; deadline: string; onWealth: (data: BankingAgentData, inputs: WealthScreeningInputs) => void }) {
+  const [investable, setInvestable] = useState("");
+  const [risk, setRisk] = useState("");
+  const [liquidity, setLiquidity] = useState("");
+  const [wealthError, setWealthError] = useState("");
+  const submitWealth = (event: FormEvent) => {
+    event.preventDefault();
+    const amountMinor = toMinor(investable);
+    if (amountMinor === null || amountMinor < 1 || amountMinor > 1_000_000_000) { setWealthError("请填写独立可投资金额，最多 1,000 万元。"); return; }
+    if (!["R1", "R2", "R3"].includes(risk) || !["T+0", "T+1", "AT_MATURITY"].includes(liquidity)) { setWealthError("请选择风险上限和资金取用要求。"); return; }
+    setWealthError("");
+    onWealth(data, { investable_amount_minor: amountMinor, max_risk_level: risk as WealthScreeningInputs["max_risk_level"], liquidity_requirement: liquidity as WealthScreeningInputs["liquidity_requirement"] });
+  };
+  return <form onSubmit={submitWealth} aria-label="储蓄目标理财筛选条件"><p>目标日 {deadline} 已从这份计划带入。请填写与目标储蓄、应急资金分开的可投资金额；不会自动申购。</p><div className="savings-input-grid"><label>独立可投资金额（元）<input required name="investable_amount" inputMode="decimal" value={investable} onChange={event => setInvestable(event.target.value)} placeholder="不要填必须存下的钱" /></label><label>风险上限<select required value={risk} onChange={event => setRisk(event.target.value)}><option value="">请选择</option><option value="R1">R1 · 较低风险</option><option value="R2">R2 · 中等风险</option><option value="R3">R3 · 较高风险</option></select></label><label>资金取用要求<select required value={liquidity} onChange={event => setLiquidity(event.target.value)}><option value="">请选择</option><option value="T+0">当天可取</option><option value="T+1">下一个工作日可取</option><option value="AT_MATURITY">可持有到目标日</option></select></label></div><small>最终风险上限还会受到可信风险测评结果约束；展示收益不保证。</small>{wealthError && <p role="alert">{wealthError}</p>}<button type="submit" className="secondary-button">只读筛选产品</button></form>;
+}
+
+export function BankingWealthInputsCard({ data, onWealth }: { data?: BankingAgentData; onWealth?: (data: BankingAgentData, inputs: WealthScreeningInputs) => void }) {
+  if (data?.status !== 'needs_wealth_inputs' || typeof data.data?.target_date !== 'string' || !onWealth) return null;
+  return <section className="financial-read-card savings-input-card"><header><b>继续理财条件筛选</b><span>只读 · 不申购</span></header><WealthScreeningForm data={data} deadline={data.data.target_date} onWealth={onWealth} /></section>;
+}
+
+export function BankingSavingsPlanCard({ data, onWealth }: { data?: BankingAgentData; onWealth?: (data: BankingAgentData, inputs: WealthScreeningInputs) => void }) {
   if (data?.status !== "goal_plan" || data.data?.verification_status !== "verified") return null;
   const details = data.data;
   const calc = details.calculation as { target_amount_minor: number; saved_amount_minor: number; remaining_minor: number; deadline: string; opportunity_dates: string[]; required_monthly_minor: number; observed_income_minor: number; observed_expense_minor: number; observed_surplus_minor: number; monthly_gap_minor: number };
@@ -66,7 +87,7 @@ export function BankingSavingsPlanCard({ data, onWealth }: { data?: BankingAgent
     {advice.observations.length > 0 && <article><h3>消费习惯观察</h3><div className="savings-category-list">{advice.observations.map(item => <div key={item.category}><b>{item.category}：{item.trend === "up" ? "高于历史" : item.trend === "down" ? "低于历史" : "与历史接近"}</b><span>{item.reason}</span><small>依据：{item.evidence_refs.map(ref => evidenceLabel(ref, recent.month, String(details.recent_source))).join("、")}；样本有限</small></div>)}</div></article>}
     <article><h3>分类消费建议</h3><div className="savings-category-list">{advice.category_budgets.map(item => <div key={item.category}><b>{item.category}</b><span>最近月 {amount(recent.category_expenses_minor[item.category] ?? 0)} → 建议上限 {amount(item.suggested_minor)}</span><small>{item.reason}</small><small>类别依据：{item.evidence_refs.map(ref => evidenceLabel(ref, recent.month, String(details.recent_source))).join("、")}；建议能否执行需你确认。</small></div>)}</div></article>
     <article><h3>{advice.feasible ? "按建议金额可覆盖目标" : "建议后仍有资金缺口"}</h3><div className="savings-metrics"><p><span>分类建议支出合计</span><strong>{amount(advice.proposed_expense_minor)}</strong></p><p><span>最近月收入</span><strong>{amount(calc.observed_income_minor)}</strong></p><p><span>每月目标储蓄</span><strong>{amount(calc.required_monthly_minor)}</strong></p><p><span>建议后月缺口</span><strong>{amount(advice.remaining_gap_minor)}</strong></p></div><p>{advice.feasible ? "分类建议与最近月收入在算术上匹配；未来收入和支出仍可能变化。" : `按分类建议，仍差 ${amount(advice.remaining_gap_minor)}/月。可延长期限、增加收入或调整可变消费；不要假设已自动取消订阅。`}</p>{advice.caveats.map((item, index) => <small key={index}>{item}</small>)}</article>
-    <footer>仅作模拟规划，未创建储蓄任务、转账或理财申购。{onWealth && <button type="button" className="secondary-button" onClick={onWealth}>单独查看只读理财筛选</button>}</footer>
+    <footer>仅作模拟规划，未创建储蓄任务、转账或理财申购。{onWealth && data.wealthHandoffToken && <details><summary>单独查看只读理财筛选</summary><WealthScreeningForm data={data} deadline={calc.deadline} onWealth={onWealth} /></details>}</footer>
   </section>;
 }
 
