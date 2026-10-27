@@ -11,6 +11,25 @@ test('purchase HTTP requires access, consent, same origin and ignores no body ow
     const response = await handlePurchaseRequest(request(body, '', headers), { env }); assert.equal(response.status, status);
   }
 });
+test('public shopping API never invokes commerce ordering or stores delivery addresses', async () => {
+  let called = false;
+  for (const action of ['commerce.search', 'commerce.quote', 'commerce.order.prepare', 'commerce.order.execute', 'commerce.order.status', 'purchase.address']) {
+    const response = await handlePurchaseRequest(request({ action, input: {} }), { env, getSkill: async () => { called = true; throw new Error('unexpected skill call'); } });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).code, 'CAPABILITY_UNAVAILABLE');
+  }
+  assert.equal(called, false);
+});
+test('public shopping API rejects legacy candidate and address selection fields', async () => {
+  let called = false;
+  for (const changes of [{ selected_candidate_refs: ['candidate_1'] }, { address_ref: 'address_1' }]) {
+    const response = await handlePurchaseRequest(request({ action: 'scenario.purchase.update', input: {
+      workflow_ref: 'flow_1', expected_version: 1, changes,
+    } }), { env, getSkill: async () => { called = true; throw new Error('unexpected skill call'); } });
+    assert.equal((await response.json()).code, 'VALIDATION_ERROR');
+  }
+  assert.equal(called, false);
+});
 test('server-signed persistent demo session isolates workflows and private address never reaches parser', async () => {
   const store = createPurchaseTestStore(), skill = createPurchaseSkill({ store });
   let seen;
