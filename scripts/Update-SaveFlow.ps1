@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
   [string]$EnvFile,
+  [string]$ProxyUrl,
   [switch]$NoBrowser
 )
 
@@ -20,6 +21,16 @@ function Run([string]$File, [string[]]$CommandArgs) {
 function Compose([string[]]$ComposeArgs) { Run 'docker' (@('compose', '--project-name', $project) + $composeFiles + $ComposeArgs) }
 
 Set-Location $deployRoot
+if ([string]::IsNullOrWhiteSpace($ProxyUrl)) {
+  $proxySocket = Get-NetTCPConnection -State Listen -LocalPort 7890 -ErrorAction SilentlyContinue
+  if ($proxySocket) { $ProxyUrl = 'http://127.0.0.1:7890' }
+}
+if (-not [string]::IsNullOrWhiteSpace($ProxyUrl)) {
+  $env:HTTP_PROXY = $ProxyUrl
+  $env:HTTPS_PROXY = $ProxyUrl
+  $env:ALL_PROXY = $ProxyUrl
+  Write-Output "Git proxy: $ProxyUrl"
+}
 if ([string]::IsNullOrWhiteSpace($EnvFile)) { $EnvFile = Join-Path $deployRoot '.env.local' }
 if (-not (Test-Path $EnvFile)) {
   $fallback = Join-Path $deployRoot '..\saveflow-demo\.env.local'
@@ -36,7 +47,13 @@ if ($dirty.Count -gt 0) {
   Fail 'commit or stash local changes, then rerun this command'
 }
 
-Run 'git' @('fetch', '--prune', 'origin', 'main')
+$fetched = $false
+for ($attempt = 1; $attempt -le 3; $attempt += 1) {
+  & git fetch --prune origin main
+  if ($LASTEXITCODE -eq 0) { $fetched = $true; break }
+  if ($attempt -lt 3) { Start-Sleep -Seconds 3 }
+}
+if (-not $fetched) { Fail 'git fetch origin main failed after 3 attempts; check proxy/VPN/firewall connectivity' }
 $githubSha = (git rev-parse 'origin/main').Trim()
 if ($githubSha -notmatch '^[0-9a-f]{40}$') { Fail "invalid origin/main SHA: $githubSha" }
 $localBefore = (git rev-parse HEAD).Trim()
@@ -46,6 +63,11 @@ $deploymentSha = (git rev-parse HEAD).Trim()
 $portOwners = @(docker ps --format '{{.Names}} {{.Ports}}' | Where-Object { $_ -match '0\.0\.0\.0:4300|127\.0\.0\.1:4300' })
 if ($portOwners.Count -gt 0 -and ($portOwners -notmatch 'saveflow-local-check-web-1')) { Fail "port 4300 is occupied by: $($portOwners -join '; ')" }
 $env:SAVEFLOW_GIT_SHA = $githubSha
+if (-not [string]::IsNullOrWhiteSpace($ProxyUrl)) {
+  $env:HTTP_PROXY = $ProxyUrl.Replace('127.0.0.1', 'host.docker.internal')
+  $env:HTTPS_PROXY = $env:HTTP_PROXY
+  $env:ALL_PROXY = $env:HTTP_PROXY
+}
 Compose @('--env-file', $EnvFile, 'build', '--build-arg', "SAVEFLOW_GIT_SHA=$githubSha", '--build-arg', 'SAVEFLOW_GIT_DIRTY=false', 'web')
 Compose @('--env-file', $EnvFile, 'up', '-d', 'pilot-db')
 Compose @('--env-file', $EnvFile, 'run', '--rm', 'pilot-migrate')
