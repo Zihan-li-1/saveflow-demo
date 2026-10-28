@@ -33,7 +33,6 @@ export function BankingReadCard({ data, active = false, busy = false, onConfirm,
         <p><span>状态</span><strong>{s.status === "active" ? "使用中" : "已取消"}</strong></p>
         <p><span>最近使用</span><strong>{s.lastUsedDate}</strong></p>
         <p><span>闲置提示</span><strong>{s.isPotentiallyUnused ? "可能闲置，待核实" : "暂无闲置标记"}</strong></p>
-        {s.recognition && <details><summary>为什么这样判断</summary><ul>{s.recognition.signals.map(signal => <li key={signal}>{signal}</li>)}</ul></details>}
       </div>
       {s.unusedReason && <p className="subscription-reason">{s.unusedReason}</p>}
     </article>)}
