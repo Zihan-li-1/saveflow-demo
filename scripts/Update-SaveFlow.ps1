@@ -51,8 +51,19 @@ Compose @('--env-file', $EnvFile, 'up', '-d', 'pilot-db')
 Compose @('--env-file', $EnvFile, 'run', '--rm', 'pilot-migrate')
 Compose @('--env-file', $EnvFile, 'up', '-d', 'web', 'mcp', 'bridge')
 
-$ps = docker compose --project-name $project @composeFiles --env-file $EnvFile ps --format json | ConvertFrom-Json
-foreach ($name in @('saveflow-local-check-pilot-db-1', 'saveflow-local-check-web-1', 'saveflow-local-check-mcp-1', 'saveflow-local-check-bridge-1')) {
+$required = @('saveflow-local-check-pilot-db-1', 'saveflow-local-check-web-1', 'saveflow-local-check-mcp-1', 'saveflow-local-check-bridge-1')
+$ps = @()
+for ($attempt = 0; $attempt -lt 30; $attempt += 1) {
+  $ps = @(docker compose --project-name $project @composeFiles --env-file $EnvFile ps --format json | ConvertFrom-Json)
+  $ready = $true
+  foreach ($name in $required) {
+    $item = @($ps | Where-Object { $_.Name -eq $name })
+    if ($item.Count -ne 1 -or $item[0].State -ne 'running' -or $item[0].Health -notin @('healthy', '')) { $ready = $false }
+  }
+  if ($ready) { break }
+  Start-Sleep -Seconds 2
+}
+foreach ($name in $required) {
   $item = @($ps | Where-Object { $_.Name -eq $name })
   if ($item.Count -ne 1 -or $item[0].State -ne 'running' -or $item[0].Health -notin @('healthy', '')) { Fail "container is not healthy: $name" }
 }
