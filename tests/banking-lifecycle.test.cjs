@@ -87,12 +87,11 @@ test('savings form resumes the goal and displays only a verified card', async ()
   assert.equal(flow.messages.some(message => message.banking?.status === 'goal_plan'), false);
   const form = root.root.findAll(node => node.type === 'form' && node.props['aria-label'] === '补充储蓄计划数据')[0];
   assert.ok(form);
-  const expenses = { 房租: 300000, 餐饮: 145000, 交通: 40000, 通信: 10000, 日用品: 50000, 娱乐: 112000, 购物: 128000, 订阅: 9000, 其他: 52000 };
   const inputs = form.findAllByType('input');
+  assert.equal(pending.recentSource, 'repository');
+  assert.equal(inputs.length, 1);
   await act(async () => {
     inputs[0].props.onChange({ target: { value: '0' } });
-    inputs[1].props.onChange({ target: { value: '12000' } });
-    pending.categories.forEach((category, index) => inputs[index + 2].props.onChange({ target: { value: String(expenses[category] / 100) } }));
   });
   const filled = root.root.findAll(node => node.type === 'form' && node.props['aria-label'] === '补充储蓄计划数据')[0];
   await act(async () => { filled.props.onSubmit({ preventDefault() {} }); await new Promise(resolve => setTimeout(resolve, 10)); });
@@ -124,12 +123,10 @@ test('refresh resumes the separate Wealth screening without skipping its require
   intent = { schemaVersion: '1.0.0', action: 'orchestrator.goal', slots: { goal_text: '年底存一万', amount: { amount_minor: 1000000, currency: 'CNY' }, deadline: '2026-12-31' }, missingSlots: [], status: 'ready_for_resolution' };
   await act(async () => { await flow.startDemo('年底存一万'); });
   const savings = root.root.findAll(node => node.type === 'form' && node.props['aria-label'] === '补充储蓄计划数据')[0];
-  const expenses = { 房租: 300000, 餐饮: 145000, 交通: 40000, 通信: 10000, 日用品: 50000, 娱乐: 112000, 购物: 128000, 订阅: 9000, 其他: 52000 };
   const inputs = savings.findAllByType('input');
+  assert.equal(inputs.length, 1);
   await act(async () => {
     inputs[0].props.onChange({ target: { value: '0' } });
-    inputs[1].props.onChange({ target: { value: '12000' } });
-    Object.keys(expenses).forEach((category, index) => inputs[index + 2].props.onChange({ target: { value: String(expenses[category] / 100) } }));
   });
   const filled = root.root.findAll(node => node.type === 'form' && node.props['aria-label'] === '补充储蓄计划数据')[0];
   await act(async () => { filled.props.onSubmit({ preventDefault() {} }); });

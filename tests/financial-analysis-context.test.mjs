@@ -25,12 +25,12 @@ function fixture(rows, { availableMonths = [...new Set(rows.map(row => row.occur
 test('real demo repository: latest three available calendar months, exact integer facts and observed coverage', async () => {
   const { repository } = createFinancialContext();
   const result = await buildFinancialAnalysisContext(repository, { now });
-  assert.deepEqual(result.range.months, ['2026-06', '2026-07', '2026-08']);
+  assert.deepEqual(result.range.months, ['2026-07', '2026-08', '2026-09']);
   assert.equal(result.status, 'available');
-  assert.deepEqual([result.summary.totalIncomeFen, result.summary.totalExpenseFen, result.summary.netCashFlowFen, result.summary.transactionCount], [3600000, 2232000, 1368000, 36]);
-  assert.equal(Object.values(result.summary.categoryTotals).reduce((a, b) => a + b, 0), 2232000);
-  assert.equal(result.coverage.observedStartDate, '2026-06-05');
-  assert.equal(result.coverage.observedEndDate, '2026-08-26');
+  assert.deepEqual([result.summary.totalIncomeFen, result.summary.totalExpenseFen, result.summary.netCashFlowFen, result.summary.transactionCount], [3600000, 2304000, 1296000, 34]);
+  assert.equal(Object.values(result.summary.categoryTotals).reduce((a, b) => a + b, 0), 2304000);
+  assert.equal(result.coverage.observedStartDate, '2026-07-05');
+  assert.equal(result.coverage.observedEndDate, '2026-09-26');
   assert.equal(result.coverage.completeness, 'unverified');
   assert.equal(result.source.snapshotId, repository.getContextInfo().snapshotId);
 });

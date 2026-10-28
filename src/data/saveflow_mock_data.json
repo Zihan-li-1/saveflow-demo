@@ -1,13 +1,20 @@
 {
   "schemaVersion": "1.0.0",
-  "datasetId": "saveflow-phase1-fixed-v1",
+  "datasetId": "saveflow-phase1-fixed-v2",
   "dataType": "synthetic_demo_only",
   "currency": "CNY",
-  "snapshotDate": "2026-09-01",
+  "snapshotDate": "2026-10-01",
   "historicalMonths": [
     "2026-06",
     "2026-07",
-    "2026-08"
+    "2026-08",
+    "2026-09"
+  ],
+  "completeMonths": [
+    "2026-06",
+    "2026-07",
+    "2026-08",
+    "2026-09"
   ],
   "resetPolicy": "reload_original_json_before_each_demo; do_not_mutate_seed_file",
   "user": {
@@ -466,6 +473,126 @@
       "currency": "CNY",
       "status": "posted",
       "isSynthetic": true
+    },
+    {
+      "id": "TXN-202609-SAL",
+      "date": "2026-09-05",
+      "accountId": "ACC-CHECKING",
+      "type": "income",
+      "category": "工资",
+      "merchant": "模拟雇主",
+      "amount": 12000,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202609-01-1",
+      "date": "2026-09-10",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "房租",
+      "merchant": "模拟房东",
+      "amount": 3000,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202609-02-1",
+      "date": "2026-09-12",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "餐饮",
+      "merchant": "模拟餐厅",
+      "amount": 1400,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202609-03-1",
+      "date": "2026-09-14",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "交通",
+      "merchant": "模拟出行",
+      "amount": 420,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202609-04-1",
+      "date": "2026-09-16",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "通信",
+      "merchant": "模拟运营商",
+      "amount": 100,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202609-05-1",
+      "date": "2026-09-18",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "日用品",
+      "merchant": "模拟超市",
+      "amount": 500,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202609-06-1",
+      "date": "2026-09-20",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "娱乐",
+      "merchant": "模拟影院/活动",
+      "amount": 600,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202609-07-1",
+      "date": "2026-09-22",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "购物",
+      "merchant": "模拟商城",
+      "amount": 800,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202609-08-1",
+      "date": "2026-09-24",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "订阅",
+      "merchant": "模拟订阅合计",
+      "amount": 90,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
+    },
+    {
+      "id": "TXN-202609-09-1",
+      "date": "2026-09-26",
+      "accountId": "ACC-CHECKING",
+      "type": "expense",
+      "category": "其他",
+      "merchant": "模拟其他商户",
+      "amount": 490,
+      "currency": "CNY",
+      "status": "posted",
+      "isSynthetic": true
     }
   ],
   "monthlySummaries": [
@@ -518,6 +645,23 @@
         "购物": 1280,
         "订阅": 90,
         "其他": 520
+      }
+    },
+    {
+      "month": "2026-09",
+      "income": 12000,
+      "expense": 7400,
+      "netCashFlow": 4600,
+      "byCategory": {
+        "房租": 3000,
+        "餐饮": 1400,
+        "交通": 420,
+        "通信": 100,
+        "日用品": 500,
+        "娱乐": 600,
+        "购物": 800,
+        "订阅": 90,
+        "其他": 490
       }
     }
   ],
@@ -589,21 +733,21 @@
     }
   ],
   "analysisFixtures": {
-    "currentMonth": "2026-08",
-    "previousMonth": "2026-07",
-    "currentExpense": 8460,
-    "previousExpense": 7180,
-    "expenseIncrease": 1280,
-    "entertainmentIncrease": 620,
-    "shoppingIncrease": 430,
-      "notes": [
-      "2026-08订阅支出比2026-07增加30元；当前仅列出两项有效订阅，历史订阅合计另见交易。",
-      "目标从2026-09-01开始、在2026-12-31前完成，按4个月计算，建议月供为5000元；演示默认不计入目标已有余额。"
+    "currentMonth": "2026-09",
+    "previousMonth": "2026-08",
+    "currentExpense": 7400,
+    "previousExpense": 8460,
+    "expenseIncrease": -1060,
+    "entertainmentIncrease": -520,
+    "shoppingIncrease": -480,
+    "notes": [
+      "2026-09订阅支出为90元；当前仅列出两项有效订阅，历史订阅合计另见交易。",
+      "储蓄计划以最近完整月的模拟账单流水为消费依据；目标已有金额需要用户确认。"
     ]
   },
   "implementationNotes": [
     "金额字段单位均为元，演示金额均为整数；真实系统建议使用分为单位的整数。",
-    "transactions为2026-06至2026-08已入账历史记录；2026-09的卡片monthlySpent为独立演示初始状态，不要与8月账单相加。",
+    "transactions为2026-06至2026-09已入账历史记录；卡片monthlySpent为独立演示初始状态，不要与9月账单相加。",
     "历史订阅支出按月合计模拟；subscriptions仅代表当前两项订阅，不可据此推断历史订阅数量。",
     "执行模拟操作时复制数据到运行时状态，按用户确认结果更新演示目标；不要直接改写种子文件。",
     "卡片、订阅和理财字段作为 Financial Context v1 只读素材，任何写操作都必须经过独立的风险与确认流程。"

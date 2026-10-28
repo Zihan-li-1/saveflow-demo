@@ -65,7 +65,7 @@ test('HTTP MCP handshake exposes the trial tools and returns seed statistics and
     assert.equal(result.structuredContent.data.categoryTotals['餐饮'], 145000);
     assert.equal(result.structuredContent.amountUnit, 'fen');
     assert.equal(result.structuredContent.evidence[0].source, 'synthetic_demo_only');
-    assert.equal(result.structuredContent.evidence[0].asOf, '2026-09-01T00:00:00+08:00');
+    assert.equal(result.structuredContent.evidence[0].asOf, '2026-10-01T00:00:00+08:00');
     assert.equal(result.structuredContent.evidence[0].entityIds.length, 12);
   });
 });
@@ -344,7 +344,7 @@ test('subscription and product tools return repository data and evidence with no
       assert.deepEqual(result.data, expected);
       assert.deepEqual(result.evidence[0].entityIds, expected.map(item => item.id));
       assert.equal(result.evidence[0].source, 'synthetic_demo_only');
-      assert.equal(result.context.asOf, '2026-09-01T00:00:00+08:00');
+      assert.equal(result.context.asOf, '2026-10-01T00:00:00+08:00');
       assert.equal((await callTool(client, name, { userId: 'OTHER' })).ok, false);
     }
     assert.equal(calls.prepare, 0);
