@@ -15,7 +15,7 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
   slots?: PurchaseSlots;
 }) {
   const items = slots.items ?? [];
-  const links = shoppingSearchLinks(slots);
+  const links = shoppingSearchLinks(slots) as Array<{ category: 'flowers' | 'cake'; label: string; query: string; url: string; check_before_order: string[] }>;
   const preferences = slots.preferences ?? {};
   const needsReservation = purchaseNeedsReservation(slots);
   const missing = needsReservation ? purchaseMissingQuestions(slots) : [];
