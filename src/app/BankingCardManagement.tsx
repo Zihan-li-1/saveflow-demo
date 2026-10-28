@@ -32,7 +32,6 @@ export function BankingCardManagement({ messages, operationStates = {} }: { mess
             <div><dt>单笔提醒</dt><dd>{card.alertThresholdFen == null ? "未设置" : `${yuan(card.alertThresholdFen)} 及以上`}</dd></div>
             <div><dt>余额提醒</dt><dd>{card.balanceReminderAmountFen != null ? `剩余 ${yuan(card.balanceReminderAmountFen)} 时` : card.balanceReminderPercent != null ? `剩余预算的 ${card.balanceReminderPercent}% 时` : "未设置"}</dd></div>
           </dl>
-          <small className="managed-card-version">卡片版本 {card.version} · 合成演示数据</small>
         </article>;
       })}
     </div>

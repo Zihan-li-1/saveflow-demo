@@ -27,8 +27,6 @@ export function BankingExpenseVoucher({ receipt }: { receipt: ActionReceipt }) {
       <div className="expense-voucher-row"><span>金额</span><b>{yuan((transfer || internal)!.amountFen)}</b></div>
       {transfer && <div className="expense-voucher-row"><span>手续费</span><b>{yuan(transfer.feeFen)}</b></div>}
       {transfer ? <div className="expense-voucher-row"><span>付款账户</span><b>{transfer.accountName}</b></div> : <div className="expense-voucher-row"><span>本人互转</span><b>{internal?.accountName} → {internal?.targetAccountName}</b></div>}
-      <div className="expense-voucher-row"><span>交易编号</span><b>{receipt.transactionIds.length ? receipt.transactionIds.join("、") : "无"}</b></div>
-      <div className="expense-voucher-row"><span>付款时间</span><b>{receipt.executedAt}</b></div>
       <div className="expense-voucher-row"><span>状态</span><b>{succeeded ? "已成功" : receipt.status}</b></div>
     </div>
     <small>数据来源：合成数据，不接真实银行</small>

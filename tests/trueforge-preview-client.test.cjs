@@ -13,6 +13,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { BankingCardPreview } = require('../src/app/BankingCardCards.tsx');
 const { askBankingAgent, BankingAgentError, hasBankingChoices } = require('../src/lib/banking-agent-client.ts');
 const { BankingTransferPreview } = require('../src/app/BankingTransferPreview.tsx');
+const { BankingConversationTasks } = require('../src/app/BankingConversationTasks.tsx');
 const { BankingTransferReceipt } = require('../src/app/BankingTransferReceipt.tsx');
 const { saveBankingChat, restoreBankingChat } = require('../src/lib/banking-chat-storage.ts');
 const { updateBankingFlows, transferFlow } = require('../src/lib/banking-flow-state.ts');
@@ -82,6 +83,19 @@ test('transfer controls: trial preview offers confirm via bridge; non-trial keep
   for (const text of ['确认转账', '取消本次转账', '查询转账状态', '修改金额', '修改收款人']) assert.ok(direct.includes(text), direct);
   assert.ok(!direct.includes('确认转账（未开放）'), direct);
   assert.equal((direct.match(/disabled=""/g) || []).length, 0);
+});
+test('uncertain transfer preview uses a query-only customer message', () => {
+  const data = { status: 'awaiting_confirmation', action: 'transfer.create', operationId: 'op_confirmed_pending', coreStage: 'unknown', outcomePending: true,
+    preview: { exactEffects: [{ amountFen: 40000, accountName: '模拟活期账户', payeeName: '房东王先生' }] } };
+  const html = renderToStaticMarkup(React.createElement(BankingTransferPreview, { data, active: false, busy: false, onEdit: () => {}, onConfirm: () => {}, onReject: () => {}, onCheck: () => {} }));
+  assert.ok(html.includes('正在核实转账结果')); assert.ok(html.includes('查询转账结果'));
+  assert.ok(!html.includes('确认转账')); assert.ok(!html.includes('取消本次转账')); assert.ok(!html.includes('状态：confirmed'));
+  assert.ok(!html.includes('交易详情')); assert.ok(!html.includes('op_confirmed_pending'));
+});
+test('conversation task panel is absent when a session has no resumable work', () => {
+  const html = renderToStaticMarkup(React.createElement(BankingConversationTasks, { phase: 'ready', tasks: [], hasWork: false, disabled: false,
+    onVerify: () => {}, onResume: () => {}, onCancel: () => {}, onCheck: () => {}, onNew: () => {} }));
+  assert.equal(html, '');
 });
 test('refresh restores bounded synthetic history and unexpired opaque continuation, never original Core authority', () => {
   const token = `tfm1.${'a'.repeat(43)}.${'b'.repeat(43)}`;
@@ -193,5 +207,6 @@ test('executed transfer preview is read-only (no confirm/cancel) and renders a r
     effects: [{ kind: 'transfer_out', fromAccountId: 'ACC-CHECKING', accountName: '模拟活期账户', payeeId: 'payee_001', payeeName: '房东王先生', accountNoMasked: '**** 1234', amountFen: 40000, feeFen: 0, currency: 'CNY', balanceBeforeFen: 540000, balanceAfterFen: 500000, availableBalanceAfterFen: 500000, accountVersion: 2, memo: '', arrival: 'mock_immediate' }] };
   const verification = { availableBalanceFen: 500000, transactionId: 'txn_op_done', occurredAt: '2026-10-21T00:00:00.000Z', amountFen: 40000, status: 'posted' };
   const card = renderToStaticMarkup(React.createElement(BankingTransferReceipt, { receipt, verification }));
-  for (const text of ['转账回执', '已完成', '收款人', '房东王先生', '¥400.00', '实际状态', '已成功（succeeded）', '交易编号', 'txn_op_done', 'rcpt_1', '2026-10-21T00:00:00.000Z', '后端交易记录', '已记账（posted）', '后端查询余额']) assert.ok(card.includes(text), card);
+  for (const text of ['转账回执', '已完成', '收款人', '房东王先生', '¥400.00', '转账后可用余额']) assert.ok(card.includes(text), card);
+  for (const text of ['实际状态', 'succeeded', '交易编号', 'txn_op_done', 'rcpt_1', '2026-10-21T00:00:00.000Z', '后端交易记录', '后端查询余额']) assert.ok(!card.includes(text), card);
 });

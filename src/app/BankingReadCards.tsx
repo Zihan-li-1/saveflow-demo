@@ -25,7 +25,6 @@ export function BankingReadCard({ data, active = false, busy = false, onConfirm,
   const title = data?.status === "goal_plan" ? "综合财务规划" : data?.status === "risk_assessment_required" ? "风险测评要求" : data?.status?.startsWith("scenario_") ? "跨场景规则" : subscriptions ? "订阅项目" : isWealth ? data?.status === "wealth_comparison" ? "理财产品对比" : "理财条件筛选" : "理财产品";
   return <section className="financial-read-card" aria-label={title}>
     <header><b>{title}</b><span>{data?.status === "scenario_rule" ? "模拟规则 · 已保存" : "模拟数据 · 只读或建议"}</span></header>
-    <p className="financial-source">来源 {String(evidence?.source || "synthetic_demo_only")} · 截至 {String(evidence?.asOf || evidence?.as_of || "未知")}</p>
     {subscriptions && subscriptionSummary && <div className="subscription-summary" aria-label="订阅费用汇总"><p><span>每月订阅总额</span><strong>{money(subscriptionSummary.activeMonthlyFeeFen ?? 0)}</strong></p><p><span>可能闲置月费</span><strong>{money(subscriptionSummary.potentiallyUnusedMonthlyFeeFen ?? 0)}</strong></p><p><span>预计每年可节省</span><strong>{money(subscriptionSummary.potentialAnnualSavingsFen ?? 0)}</strong></p></div>}
     {subscriptions?.map(s => <article key={s.id}>
       <h3>{s.name}</h3><div className="financial-data-grid">
