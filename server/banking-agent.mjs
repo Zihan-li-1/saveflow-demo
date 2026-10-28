@@ -37,7 +37,15 @@ function publicMessage(code, fallback) {
 
 async function readBody(request) {
   const reader = request.body?.getReader();
-  if (!reader) throw Object.assign(new Error('请求体不能为空'), { code: 'INVALID_REQUEST' });
+  // Netlify supplies a streamed body. Next.js App Router may expose the same
+  // Web Request with only the standard text/json reader, so keep one bounded
+  // compatibility path instead of duplicating the adapter.
+  if (!reader) {
+    let raw;
+    try { raw = await request.text(); } catch { throw Object.assign(new Error('请求体不能为空'), { code: 'INVALID_REQUEST' }); }
+    if (Buffer.byteLength(raw, 'utf8') > MAX_BODY_BYTES) throw Object.assign(new Error('请求体超过 16KB'), { code: 'REQUEST_TOO_LARGE' });
+    try { return JSON.parse(raw); } catch { throw Object.assign(new Error('请求体必须是有效 JSON'), { code: 'INVALID_REQUEST' }); }
+  }
   let bytes = 0;
   const chunks = [];
   try {

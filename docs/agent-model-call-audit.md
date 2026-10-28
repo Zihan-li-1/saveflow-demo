@@ -2,6 +2,8 @@
 
 审计对象是 `saveflow-demo` 当前分支 `codex/task-b-context-control` 的 `/api/banking-agent` 入口。本文只记录代码和定向测试证据；没有把 mock 传输层结果当成真实 TrueForge 服务可用性证明。
 
+本地模式现在由 `src/app/api/banking-agent/route.ts` 直接转发到 `server/banking-agent.mjs`。`next.config.ts` 仅在 `SAVEFLOW_STATIC_EXPORT=true` 时启用 `output: "export"`；普通 `npm.cmd run dev` 保留 Node API runtime。App Router body 会被重新包装成 Web Request，沿用原有 16KB、JSON、访问码和会话校验。
+
 ## 当前调用链
 
 ```text
@@ -72,9 +74,18 @@ TrueForge 的会话创建、模型 turn、终态检查和 JSON 解析发生在 `
 
 ## 真实 TrueForge 核验
 
-状态：`NOT_VERIFIED`。
+本次本机核验状态：`VERIFIED`。
 
-当前工作区 `.env.local` 只有本地 `TRUEFORGE_BASE_URL=http://localhost:8790` 和模型名，未提供可证明可用的 TrueForge token，且本次未启动或访问真实网关。没有虚构真实调用结果，也没有把 mock 通过当成真实验收通过。
+在 `npm.cmd run dev` 启动的 Next.js 服务上，使用 `.env.local` 中的访问码向本地 `/api/banking-agent` 发送了 `查询2026年8月账单`。真实请求返回 HTTP 200、`action=bill.summary`、`status=bill_result`，同一 requestId 的终端日志包含：
+
+- `agent_model_route.selected=trueforge`
+- `agent_model_request.provider=trueforge`、`model=test/deepseek-v4-1-flash`
+- `agent_intent_validation.schemaValid=true`、`action=bill.summary`
+- `agent_model_response.completed=true`、`success=true`、耗时约 1.1 秒
+- `agent_dispatch.status=bill_result`
+- `agent_response_sent.httpStatus=200`
+
+因此本次真实调用已验证通过。该结果证明当前本地 TrueForge 网关和模型配置可用；账单数据仍是项目的 synthetic demo repository。
 
 具备授权部署环境后，最小核验命令为：
 
