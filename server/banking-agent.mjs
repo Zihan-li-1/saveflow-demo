@@ -132,7 +132,9 @@ export async function handleBankingAgent(
     const implementation = env.SAVEFLOW_BANKING_RUNTIME || 'trueforge';
     if (!['trueforge', 'legacy-qwen'].includes(implementation)) throw Object.assign(new Error('Runtime configuration'), { code: 'BANKING_RUNTIME_CONFIG_ERROR', status: 503 });
     // Dependency injection is for tests/hosts, never supplied by the request.
-    diagnostics.emit('agent_model_route', { selected: implementation === 'legacy-qwen' ? 'qwen' : 'trueforge', modelCallPrepared: !body?.choice && !body?.continuationToken || !!body?.message });
+    const explicitCancel = typeof body?.message === 'string' && /^(?:取消|取消(?:本次)?(?:转账|操作)|不用了)[。！!]?$/.test(body.message.trim());
+    const skippedModelReason = body?.choice ? 'choice_option_id' : body?.taskMode === 'sync' ? 'session_sync' : body?.continuationToken && explicitCancel ? 'explicit_cancel' : undefined;
+    diagnostics.emit('agent_model_route', { selected: implementation === 'legacy-qwen' ? 'qwen' : 'trueforge', modelCallPrepared: !skippedModelReason, ...(skippedModelReason ? { skippedModelReason } : {}) });
     const parseIntent = options.parseIntent ?? (implementation === 'legacy-qwen' ? ((message, context) => defaultParseBankingIntent(message, { ...context, onDiagnostic: diagnostics.emit })) :
       (message, context) => parseTrueforgeBankingIntent(message, { ...context, signal: request.signal, client: options.trueforgeRuntimeClient, onDiagnostic: diagnostics.emit }));
     // Conversation binding rejects retired/unbound tokens before any understanding.
