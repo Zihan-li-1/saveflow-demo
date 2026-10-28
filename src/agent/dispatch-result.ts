@@ -21,6 +21,12 @@ export type DispatchResult =
     }
   | {
       ok: true;
+      kind: "subscription_action_request";
+      action: "subscription.cancel_renewal" | "subscription.renew";
+      data: unknown;
+    }
+  | {
+      ok: true;
       kind: "transfer_resolution";
       action: "transfer.create";
       data: unknown;

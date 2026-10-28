@@ -25,6 +25,7 @@ function validateTransfer(input) {
 
 const cardActions = new Set(['card.set_budget', 'card.set_controls', 'card.freeze', 'card.unfreeze']);
 const wealthActions = new Set(['wealth.subscribe', 'wealth.redeem']);
+const subscriptionActions = new Set(['subscription.cancel_renewal', 'subscription.renew']);
 const scenarioActions = new Set(['scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule']);
 const safeScenarioSteps = new Set(['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get']);
 /** @param {string} action @param {unknown} input @returns {import('./contracts').CardInput} */
@@ -92,6 +93,7 @@ export function createBankingCore(options = {}) {
   const commitTransfer = context.commitTransfer;
   const commitCard = context.commitCard;
   const commitWealth = context.commitWealth;
+  const commitSubscription = context.commitSubscription;
   const ownerId = options.ownerId ?? context.ownerId;
   /** @type {import('./contracts').BankingOperationStore} */
   const store = options.store ?? new OperationStore();
@@ -181,6 +183,22 @@ export function createBankingCore(options = {}) {
     const payee = await repository.getPayee(input.payeeId);
     if (!payee) throw new BankingError('PREVIEW_STALE', '收款人已失效');
     return { kind: 'transfer_out', fromAccountId: account.id, accountName: account.name, payeeId: payee.id, payeeName: payee.name, accountNoMasked: payee.accountNoMasked, amountFen: input.amountFen, feeFen: 0, currency: 'CNY', balanceBeforeFen: account.balanceFen, balanceAfterFen: account.balanceFen - input.amountFen, availableBalanceAfterFen: account.availableBalanceFen - input.amountFen, accountVersion: account.version, memo: input.memo ?? '', arrival: 'mock_immediate' };
+  }
+  /** @param {import('./contracts').SubscriptionAction} action @param {import('./contracts').SubscriptionInput} input */
+  async function subscriptionEffectFor(action, input) {
+    const subscription = await repository.getSubscription(input.subscriptionId);
+    if (!subscription) throw new BankingError('VALIDATION_ERROR', '找不到该订阅服务');
+    if (action === 'subscription.cancel_renewal') {
+      if (input.sourceAccountId !== undefined) throw new BankingError('VALIDATION_ERROR', '停止自动续费不会立即产生收支，无需选择账户');
+      if (subscription.status !== 'active') throw new BankingError('INVALID_STATE', '该订阅已经停止自动续费');
+      return { kind: 'subscription_change', action, subscriptionId: subscription.id, subscriptionName: subscription.name, monthlyFeeFen: subscription.monthlyFeeFen, beforeStatus: subscription.status, afterStatus: 'cancelled', category: '娱乐' };
+    }
+    if (!input.sourceAccountId) throw new BankingError('VALIDATION_ERROR', '续订前必须选择付款账户');
+    const account = await repository.getAccount(input.sourceAccountId);
+    if (!account || account.status !== 'active') throw new BankingError('ACCOUNT_NOT_FOUND', '付款账户不可用');
+    if (subscription.status !== 'cancelled') throw new BankingError('INVALID_STATE', '该订阅当前已在续费中');
+    if (account.availableBalanceFen < subscription.monthlyFeeFen) throw new BankingError('INSUFFICIENT_BALANCE', '付款账户余额不足');
+    return { kind: 'subscription_change', action, subscriptionId: subscription.id, subscriptionName: subscription.name, monthlyFeeFen: subscription.monthlyFeeFen, beforeStatus: subscription.status, afterStatus: 'active', sourceAccountId: account.id, sourceAccountName: account.name, accountVersion: account.version, balanceBeforeFen: account.balanceFen, balanceAfterFen: account.balanceFen - subscription.monthlyFeeFen, category: '娱乐' };
   }
   /** @param {import('./contracts').CardAction} action @param {import('./contracts').CardInput} input @returns {Promise<import('./contracts').CardEffect>} */
   async function cardEffectFor(action, input) {
@@ -298,6 +316,12 @@ export function createBankingCore(options = {}) {
       if (record.risk?.policyVersion !== policy.version || canonical(effect) !== canonical(expected)) throw new BankingError('PREVIEW_STALE', '场景规则已变化，请重新预览并确认');
       return;
     }
+    if (subscriptionActions.has(record.action)) {
+      const request = /** @type {{action:import('./contracts').SubscriptionAction,input:import('./contracts').SubscriptionInput}} */ (record.request);
+      const effect = /** @type {import('./contracts').SubscriptionEffect} */ (await subscriptionEffectFor(request.action, request.input));
+      if (record.risk?.policyVersion !== policy.version || canonical(effect) !== canonical(record.preview.exactEffects[0])) throw new BankingError('PREVIEW_STALE', '订阅或付款账户已变化，请重新预览并确认');
+      return;
+    }
     const transferRequest = /** @type {{action:'transfer_money',input:import('./contracts').TransferInput}} */ (record.request);
     const risk = await riskCheck(transferRequest.input);
     if (!risk.allowed && risk.error) throw new BankingError(risk.error.code, risk.error.message);
@@ -401,6 +425,36 @@ export function createBankingCore(options = {}) {
     }
   }
 
+  /** @param {{action:import('./contracts').SubscriptionAction,input:import('./contracts').SubscriptionInput}} request @param {string} operationId */
+  async function prepareSubscription(request, operationId) {
+    /** @type {import('./contracts').OperationRecord | undefined} */
+    let record;
+    try {
+      if (!subscriptionActions.has(request.action) || Object.keys(request).some(key => !['action', 'input'].includes(key)) || !request.input || typeof request.input !== 'object' || Array.isArray(request.input)) throw new BankingError('VALIDATION_ERROR', '订阅操作参数无效');
+      const allowed = request.action === 'subscription.renew' ? ['subscriptionId', 'sourceAccountId'] : ['subscriptionId'];
+      if (Object.keys(request.input).some(key => !allowed.includes(key))) throw new BankingError('VALIDATION_ERROR', '订阅操作包含未注册字段');
+      assertId(request.input.subscriptionId, '订阅');
+      if (request.action === 'subscription.renew') assertId(request.input.sourceAccountId, '付款账户');
+      const effect = /** @type {import('./contracts').SubscriptionEffect} */ (await subscriptionEffectFor(request.action, request.input));
+      record = { operationId, action: request.action, fingerprint: store.fingerprint(request.action, request.input), state: 'preparing', request: structuredClone(request) };
+      await save(record); await move(record, 'PREPARED');
+      const risk = /** @type {import('./contracts').RiskResult} */ ({ allowed: true, riskLevel: request.action === 'subscription.renew' ? 'L2' : 'L1', policyVersion: policy.version, requiredConfirmation: 'mock_explicit', warnings: request.action === 'subscription.renew' ? ['确认后将立即从所选账户扣除一期费用，并记入“娱乐”流水。'] : ['仅停止后续自动续费；本次不会退款，也不会产生账户流水。'] });
+      record.risk = risk;
+      const expiresAt = new Date(now() + policy.previewTtlMs).toISOString();
+      const contextSnapshotId = (await repository.getContextInfo()).snapshotId;
+      const planId = `plan_${crypto.randomUUID()}`, stepId = `step_${crypto.randomUUID()}`;
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical({ ownerId, operationId, planId, stepId, effect, expiresAt, contextSnapshotId, policy })));
+      const previewHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+      const summary = request.action === 'subscription.renew' ? `续订${effect.subscriptionName}：从${effect.sourceAccountName}支付 ¥${(effect.monthlyFeeFen / 100).toFixed(2)}，记入娱乐支出。` : `停止${effect.subscriptionName}自动续费；不产生退款或账户流水。`;
+      record.preview = { planId, stepIds: [stepId], summary, exactEffects: [effect], riskLevel: risk.riskLevel, warnings: risk.warnings, expiresAt, previewHash, contextSnapshotId };
+      await move(record, 'PREVIEWED');
+      return /** @type {import('./contracts').ActionResult<import('./contracts').PreparedAction>} */ ({ ok: true, data: { operationId, state: 'awaiting_confirmation', preview: structuredClone(record.preview), risk: structuredClone(risk) } });
+    } catch (error) {
+      const data = errorData(error); if (record) await fail(record, data);
+      return /** @type {import('./contracts').ActionResult<import('./contracts').PreparedAction>} */ ({ ok: false, operationId, error: data });
+    }
+  }
+
   const core = Object.freeze({
     repository,
     wealthPorts,
@@ -418,6 +472,7 @@ export function createBankingCore(options = {}) {
       if (request && cardActions.has(request.action)) return prepareCard(request, operationId);
       if (request && wealthActions.has(request.action)) return prepareWealth(/** @type {{action:import('./contracts').WealthAction,input:import('./contracts').WealthInput}} */ (request), operationId);
       if (request && scenarioActions.has(request.action)) return prepareScenario(request, operationId);
+      if (request && subscriptionActions.has(request.action)) return prepareSubscription(/** @type {any} */ (request), operationId);
       /** @type {import('./contracts').OperationRecord | undefined} */
       let record;
       try {
@@ -464,7 +519,7 @@ export function createBankingCore(options = {}) {
           try { await recheck(record); } catch (error) { await fail(record, errorData(error)); throw error; }
         }
         record.decision = { ...structuredClone(decision), planId: record.preview.planId, confirmationMethod: 'mock_explicit', idempotencyKey: operationId, decidedAt: new Date(now()).toISOString() };
-        if (decision.decision === 'reject') record.receipt = receiptFor(record, 'cancelled', wealthActions.has(record.action) ? '已取消模拟申赎，账户与持仓未变更' : scenarioActions.has(record.action) ? '已取消场景规则变更，规则未修改' : cardActions.has(record.action) ? '已取消卡片操作，卡片未变更' : '已取消模拟转账，未扣款');
+        if (decision.decision === 'reject') record.receipt = receiptFor(record, 'cancelled', wealthActions.has(record.action) ? '已取消模拟申赎，账户与持仓未变更' : subscriptionActions.has(record.action) ? '已取消订阅操作，订阅与账户均未变更' : scenarioActions.has(record.action) ? '已取消场景规则变更，规则未修改' : cardActions.has(record.action) ? '已取消卡片操作，卡片未变更' : '已取消模拟转账，未扣款');
         await move(record, decision.decision === 'confirm' ? 'CONFIRM' : 'CANCEL');
         return statusFor(record);
       }, operationId);
@@ -546,7 +601,7 @@ export function createBankingCore(options = {}) {
       const execution = guard(async () => {
         const record = await lookup(operationId);
         if (!trialAuthorized.has(operationId) && record.request && 'origin' in record.request && record.request.origin === 'agent_suggested') throw new BankingError('FORBIDDEN', '试点建议的操作仅供预览，请通过执行桥或正式请求重新发起后再执行。');
-        if (record.action !== 'transfer_money' && !cardActions.has(record.action) && !wealthActions.has(record.action) && !scenarioActions.has(record.action)) throw new BankingError('UNKNOWN_ACTION', '此执行入口不接受该动作');
+        if (record.action !== 'transfer_money' && !cardActions.has(record.action) && !wealthActions.has(record.action) && !scenarioActions.has(record.action) && !subscriptionActions.has(record.action)) throw new BankingError('UNKNOWN_ACTION', '此执行入口不接受该动作');
         verifyHash(record, previewHash);
         if (!record.preview) throw new BankingError('INVALID_STATE', '缺少预览');
         if (record.receipt) return record.receipt;
@@ -556,7 +611,12 @@ export function createBankingCore(options = {}) {
         try {
           await recheck(record); await move(record, 'EXECUTE');
           const at = new Date(now()).toISOString();
-          if (wealthActions.has(record.action)) {
+          if (subscriptionActions.has(record.action)) {
+            const effect = /** @type {import('./contracts').SubscriptionEffect} */ (record.preview.exactEffects[0]);
+            const transaction = commitSubscription(effect, operationId, at);
+            record.receipt = receiptFor(record, 'succeeded', record.action === 'subscription.renew' ? '续订成功，已计入娱乐支出' : '已停止自动续费，未产生退款或流水', transaction ? [transaction.id] : []);
+            await move(record, 'SUCCEEDED');
+          } else if (wealthActions.has(record.action)) {
             if (!wealthPorts) throw new BankingError('CAPABILITY_UNAVAILABLE', '当前环境不能安全提交 Wealth Mock');
             const effect = /** @type {import('./contracts').WealthEffect} */ (record.preview.exactEffects[0]);
             if (typeof store.commitWealth === 'function') {

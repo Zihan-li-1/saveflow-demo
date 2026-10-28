@@ -22,6 +22,7 @@ export function BankingReadCard({ data, active = false, busy = false, onConfirm,
   const rule = data?.data?.rule as { id?: string; status?: string; trigger?: { type?: string; value?: string }; proposed_steps?: Array<{ action: string }> } | undefined;
   const evidence = data?.evidence?.[0];
   const isWealth = ["wealth_recommendation", "wealth_comparison"].includes(data?.status || "");
+  const subscriptionEffect = (data?.preview?.exactEffects as Array<Record<string, unknown>> | undefined)?.find(effect => effect.kind === "subscription_change");
   const title = data?.status === "goal_plan" ? "综合财务规划" : data?.status === "risk_assessment_required" ? "风险测评要求" : data?.status?.startsWith("scenario_") ? "跨场景规则" : subscriptions ? "订阅项目" : isWealth ? data?.status === "wealth_comparison" ? "理财产品对比" : "理财条件筛选" : "理财产品";
   return <section className="financial-read-card" aria-label={title}>
     <header><b>{title}</b><span>{data?.status === "scenario_rule" ? "模拟规则 · 已保存" : "模拟数据 · 只读或建议"}</span></header>
@@ -36,6 +37,15 @@ export function BankingReadCard({ data, active = false, busy = false, onConfirm,
       </div>
       {s.unusedReason && <p className="subscription-reason">{s.unusedReason}</p>}
     </article>)}
+    {subscriptionEffect && <article className="subscription-action-preview" aria-label="订阅操作预览">
+      <h3>{data?.action === "subscription.renew" ? "续订预览" : "停止自动续费预览"}</h3>
+      <div className="financial-data-grid">
+        <p><span>订阅服务</span><strong>{String(subscriptionEffect.subscriptionName)}</strong></p>
+        <p><span>操作后状态</span><strong>{data?.action === "subscription.renew" ? "恢复续费" : "停止自动续费"}</strong></p>
+        {data?.action === "subscription.renew" && <><p><span>付款账户</span><strong>{String(subscriptionEffect.sourceAccountName)}</strong></p><p><span>本期支出</span><strong>{money(Number(subscriptionEffect.monthlyFeeFen))}</strong></p><p><span>流水分类</span><strong>娱乐</strong></p></>}
+      </div>
+      <p className="subscription-reason">{data?.action === "subscription.renew" ? "确认后立即扣除一期费用，并写入所选账户的娱乐支出流水。" : "只停止未来自动扣费；本次不会退款，也不会生成账户流水。"}</p>
+    </article>}
     {!isWealth && products?.map(p => <article key={p.id}>
       <h3>{p.name}</h3><div className="financial-data-grid">
         <p><span>可能的波动</span><strong>{riskText(p.riskLevel)}</strong></p>
@@ -56,9 +66,9 @@ export function BankingReadCard({ data, active = false, busy = false, onConfirm,
     {data?.status === "risk_assessment_required" && <article><h3>需要用户本人完成正式问卷</h3><p>模型不能代答；完成适当性评估前不提供申购入口。</p></article>}
     {steps?.map((step, index) => <article key={`${step.action}-${index}`}><h3>{index + 1}. {actionName(step.action)}</h3><p>{step.reason}</p></article>)}
     {rule && <article><h3>{rule.id ? `规则 ${rule.id}` : "规则变更预览"}</h3><div className="financial-data-grid"><p><span>状态</span><strong>{rule.status || "待确认"}</strong></p><p><span>触发</span><strong>{rule.trigger?.value || "—"}</strong></p><p><span>建议步骤</span><strong>{rule.proposed_steps?.map(step => actionName(step.action)).join("、") || "—"}</strong></p></div></article>}
-    {data?.status === 'scenario_rule_preview' && onConfirm && onReject && onCheck && <div className="error-actions">
+    {data && (data.status === 'scenario_rule_preview' || !!subscriptionEffect) && onConfirm && onReject && onCheck && <div className="error-actions">
       {data.outcomePending && <p>结果待核实，请先查询原操作。</p>}
-      <button type="button" className="primary-button" disabled={!active || busy || data.outcomePending} onClick={() => onConfirm(data)}>确认并保存规则</button>
+      <button type="button" className="primary-button" disabled={!active || busy || data.outcomePending} onClick={() => onConfirm(data)}>{subscriptionEffect ? "确认并执行" : "确认并保存规则"}</button>
       <button type="button" className="secondary-button" disabled={!active || busy || data.outcomePending} onClick={() => onReject(data)}>取消本次操作</button>
       <button type="button" className="secondary-button" disabled={busy} onClick={() => onCheck(data)}>查询操作状态</button>
     </div>}
