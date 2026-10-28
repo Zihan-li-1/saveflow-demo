@@ -19,9 +19,9 @@ export function purchaseMissingQuestions(slots = {}) {
     questions.push({ field: 'items', prompt: '买什么？', options: ['鲜花', '蛋糕'] });
   }
   const precise = typeof slots.date_expression === 'string' && DATE_WINDOW.test(slots.date_expression.trim());
-  if (!precise) questions.push({ field: 'date_expression', prompt: '哪天、哪个时间段？', hint: '例如 11月1日 09:00–12:00' });
+  if (!precise) questions.push({ field: 'date_expression', prompt: '哪天、哪个时间段？' });
   if (!slots.date_meaning) questions.push({ field: 'date_meaning', prompt: '届时怎么处理？', options: ['提醒我下单', '希望送达'] });
-  if (!slots.budget) questions.push({ field: 'budget', prompt: '预留多少预算？', hint: '例如 500 元' });
-  if (!slots.funding_account_ref) questions.push({ field: 'funding_account_ref', prompt: '从哪个账户预留？', hint: '例如 我的活期账户' });
+  if (!slots.budget) questions.push({ field: 'budget', prompt: '预留多少预算？' });
+  if (!slots.funding_account_ref) questions.push({ field: 'funding_account_ref', prompt: '用哪张卡预留？' });
   return questions;
 }
