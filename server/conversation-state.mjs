@@ -51,6 +51,51 @@ function project(state, at) {
     ? { operationId: ref.operationId, taskId: ref.taskId, previewHash: ref.previewHash,
       stepIds: [...ref.stepIds], expiresAt: ref.expiresAt, coreState: ref.coreState } : null;
 }
+const summaryKeyLimit = 32;
+const summaryValueLimit = 512;
+const internalReferenceKey = /(?:^|_)(?:id|taskid|operationid|entityid|optionid|token|secret)$/i;
+/** @param {unknown} value @param {number} [depth] @returns {unknown} */
+function summaryValue(value, depth = 0) {
+  if (depth > 4) return '[已省略]';
+  if (value === null || typeof value === 'boolean' || typeof value === 'number') return value;
+  if (typeof value === 'string') return value.length > summaryValueLimit ? `${value.slice(0, summaryValueLimit)}…` : value;
+  if (!value || typeof value !== 'object' || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return '[已省略]';
+  if (Array.isArray(value)) return value.slice(0, summaryKeyLimit).map(item => summaryValue(item, depth + 1));
+  /** @type {Record<string, unknown>} */
+  const result = {};
+  for (const [key, child] of Object.entries(value).slice(0, summaryKeyLimit)) {
+    if (internalReferenceKey.test(key) || key.endsWith('_ref')) result[key] = '[已核验引用]';
+    else result[key] = summaryValue(child, depth + 1);
+  }
+  return result;
+}
+/** @param {Task} task @param {State} state */
+function summaryTask(task, state) {
+  const refs = state.operationReferences.filter(ref => ref.taskId === task.taskId);
+  const latest = refs.at(-1);
+  return {
+    action: task.action,
+    status: task.status,
+    pendingSlots: task.pendingSlots.slice(0, summaryKeyLimit),
+    verifiedSlots: /** @type {Record<string, unknown>} */ (summaryValue(task.verifiedSlots) ?? {}),
+    operationState: latest?.coreState ?? null,
+    hasOperation: refs.length > 0,
+  };
+}
+/** @param {State} state */
+function summarize(state) {
+  const tasks = [...(state.suspendedTasks ?? [])];
+  const currentTask = state.currentTask ? summaryTask(state.currentTask, state) : null;
+  const previousTasks = tasks.slice(-5).reverse().map(task => summaryTask(task, state));
+  const recentOperations = state.operationReferences.slice(-10).reverse().map(ref => ({
+    action: ref.action,
+    state: ref.coreState,
+    outcome: /** @type {'pending' | 'succeeded' | 'failed' | 'cancelled'} */ (
+      ref.coreState === 'succeeded' || ref.coreState === 'failed' || ref.coreState === 'cancelled' ? ref.coreState : 'pending'),
+    hasReceipt: ['succeeded', 'failed', 'cancelled'].includes(ref.coreState),
+  }));
+  return { currentTask, previousTasks, recentOperations };
+}
 /** @param {State} state @param {number} at */
 function expireTasks(state, at) {
   let expired = 0;
@@ -199,6 +244,8 @@ export function createConversationStore(options = {}) {
     },
     /** @param {string} token */
     read(token) { return structuredClone(lookup(token).state); },
+    /** @param {string} token */
+    taskSummary(token) { return structuredClone(summarize(lookup(token).state)); },
     /** @param {string} token @param {number} expectedRevision @param {Command} command */
     async transition(token, expectedRevision, command) {
       if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) fail('CONVERSATION_INVALID_INPUT');
@@ -329,5 +376,8 @@ export function createConversationStore(options = {}) {
       return { conversationsRemoved, tasksExpired };
     },
   };
+  // Keep the read-only diagnostic entry point out of the legacy enumerable
+  // store surface used by adapters that feature-detect mutation methods.
+  Object.defineProperty(store, 'taskSummary', { value: store.taskSummary, enumerable: false });
   return Object.freeze(store);
 }
