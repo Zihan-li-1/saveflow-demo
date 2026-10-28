@@ -360,7 +360,7 @@ export async function runBankingConversation(body, {
     const purchaseMessage = !needsReservation
       ? '已生成平台搜索链接。按现在就买处理，不预留预算、不设置提醒。'
       : missing.length
-        ? '已生成平台搜索链接。你提到了未来时间，需要预留预算与提醒；还差几项信息，见下方卡片。'
+        ? '已生成平台搜索链接。预留预算还差几项信息，请在下方选择或补充。'
         : '已生成平台搜索链接。预算与提醒信息已齐，请在下方卡片核对并确认预留。';
     return reply(200, 'OK', purchaseMessage, {
       status: 'purchase_request', action: parsed.action, data: { slots: parsed.slots, synthetic_demo_only: true },

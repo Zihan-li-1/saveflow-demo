@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import { PurchaseFlow } from './PurchaseFlow';
 import { shoppingSearchLinks } from '../lib/purchase-links.mjs';
 import { yuan, type PurchaseSlots } from '../lib/purchase-client';
@@ -9,15 +10,27 @@ const meaningLabel = (meaning?: 'order_on' | 'deliver_on') =>
   meaning === 'order_on' ? '提醒我下单' : meaning === 'deliver_on' ? '希望送达' : '';
 const chip: React.CSSProperties = {
   display: 'inline-block', margin: '0 6px 4px 0', padding: '3px 10px', borderRadius: '999px',
-  background: '#f2f4f7', border: '1px solid #e2e5ea', color: '#333', fontSize: '13px',
+  background: '#f2f4f7', border: '1px solid #e2e5ea', color: '#333', fontSize: '13px', cursor: 'pointer',
 };
 const hintStyle: React.CSSProperties = { color: '#8a8f98', fontSize: '13px' };
 
-export function PurchaseRequestCard({ accessCode = '', consent = false, slots = {} }: {
+function requestSentence(slots: PurchaseSlots) {
+  const items = (slots.items ?? []).map(item => categoryLabel(item.category)).join('和');
+  const parts: string[] = [];
+  if (items) parts.push(`买${items}`);
+  if (slots.date_expression) parts.push(`${slots.date_expression}${slots.date_meaning === 'deliver_on' ? '希望送达' : slots.date_meaning === 'order_on' ? '提醒下单' : ''}`);
+  if (slots.budget) parts.push(`预留${slots.budget.amount_minor / 100}元`);
+  if (slots.funding_account_ref) parts.push(`用${slots.funding_account_ref}`);
+  return parts.join('，');
+}
+
+export function PurchaseRequestCard({ accessCode = '', consent = false, slots = {}, onAnswer }: {
   accessCode?: string;
   consent?: boolean;
   slots?: PurchaseSlots;
+  onAnswer?: (text: string) => void;
 }) {
+  const [extra, setExtra] = useState('');
   const items = slots.items ?? [];
   const links = shoppingSearchLinks(slots) as Array<{ category: 'flowers' | 'cake'; label: string; query: string; url: string; check_before_order: string[] }>;
   const needsReservation = purchaseNeedsReservation(slots);
@@ -29,6 +42,12 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
     slots.date_expression ? `${meaningLabel(slots.date_meaning) ? `${meaningLabel(slots.date_meaning)} ` : ''}${slots.date_expression}` : '',
     slots.funding_account_ref ? `账户「${slots.funding_account_ref}」` : '',
   ].filter(Boolean);
+  const choose = (field: string, option: string) => {
+    const next = { ...slots };
+    if (field === 'items') next.items = [{ category: option === '鲜花' ? 'flowers' as const : 'cake' as const, quantity: 1 }];
+    else if (field === 'date_meaning') next.date_meaning = option === '希望送达' ? 'deliver_on' as const : 'order_on' as const;
+    onAnswer?.(requestSentence(next));
+  };
 
   return <section aria-label="购物请求">
     {links.length > 0 && <div style={{ display: 'grid', gap: 6 }}>
@@ -46,9 +65,14 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
       {missing.length > 0 && <p style={{ margin: '10px 0 2px' }}>还差：</p>}
       {missing.map(item => <div key={item.field} style={{ margin: '6px 0' }}>
         <span>{item.prompt} </span>
-        {'options' in item && item.options?.map(option => <span key={option} style={chip}>{option}</span>)}
+        {'options' in item && item.options?.map(option =>
+          <button key={option} type="button" style={chip} onClick={() => choose(item.field, option)}>{option}</button>)}
         {'hint' in item && item.hint && <span style={hintStyle}>{item.hint}</span>}
       </div>)}
+      {missing.some(item => 'hint' in item) && <div style={{ margin: '8px 0 4px' }}>
+        <input value={extra} onChange={event => setExtra(event.target.value)} placeholder="直接输入，例如：预留500元，用我的活期账户" style={{ padding: '6px 8px', border: '1px solid #d0d4da', borderRadius: 6, minWidth: 240 }} />
+        <button type="button" disabled={!extra.trim() || !onAnswer} onClick={() => { onAnswer?.([requestSentence(slots), extra.trim()].filter(Boolean).join('，')); setExtra(''); }} style={{ marginLeft: 6, padding: '6px 12px', borderRadius: 6, border: '1px solid #d0d4da', background: '#fff', cursor: 'pointer' }}>补充</button>
+      </div>}
       <details style={{ marginTop: 8 }}>
         <summary>手动填写完整表单</summary>
         <PurchaseFlow accessCode={accessCode} consent={consent} initialSlots={flowSlots} />
