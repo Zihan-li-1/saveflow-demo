@@ -14,7 +14,8 @@ const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 const visits = [];
 const server = http.createServer(async (req, res) => {
   const pathname = req.url?.split('?')[0];
-  if (pathname === '/healthz') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true,"service":"saveflow"}'); return; }
+  if (pathname === '/healthz') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ ok: true, service: 'saveflow', gitSha: process.env.SAVEFLOW_GIT_SHA || 'unknown', gitDirty: process.env.SAVEFLOW_GIT_DIRTY || 'unknown' })); return; }
+  if (pathname === '/version') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ service: 'saveflow', gitSha: process.env.SAVEFLOW_GIT_SHA || 'unknown', gitDirty: process.env.SAVEFLOW_GIT_DIRTY || 'unknown', nodeEnv: process.env.NODE_ENV || 'unknown' })); return; }
   const banking = pathname === '/api/banking' || (pathname === '/api/saveflow' && req.method === 'POST');
   const agent = pathname === '/api/banking-agent';
   const executeTrial = pathname === '/api/execute-trial';

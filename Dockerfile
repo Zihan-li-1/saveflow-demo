@@ -24,7 +24,10 @@ CMD ["node", "scripts/migrate-banking.mjs"]
 
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000
+ARG SAVEFLOW_GIT_SHA=unknown
+ARG SAVEFLOW_GIT_DIRTY=unknown
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 SAVEFLOW_GIT_SHA=$SAVEFLOW_GIT_SHA SAVEFLOW_GIT_DIRTY=$SAVEFLOW_GIT_DIRTY
+LABEL org.opencontainers.image.revision=$SAVEFLOW_GIT_SHA org.openai.saveflow.git-sha=$SAVEFLOW_GIT_SHA org.openai.saveflow.git-dirty=$SAVEFLOW_GIT_DIRTY
 COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY package.json ./
 COPY --from=build /app/out ./out
