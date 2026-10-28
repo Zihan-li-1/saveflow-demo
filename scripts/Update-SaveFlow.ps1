@@ -13,11 +13,11 @@ $project = 'saveflow-local-check'
 $webUrl = 'http://localhost:4300'
 
 function Fail([string]$Message) { throw "SaveFlow deployment stopped: $Message" }
-function Run([string]$File, [string[]]$Args) {
-  & $File @Args
-  if ($LASTEXITCODE -ne 0) { Fail "$File $($Args -join ' ') failed with exit code $LASTEXITCODE" }
+function Run([string]$File, [string[]]$CommandArgs) {
+  & $File @CommandArgs
+  if ($LASTEXITCODE -ne 0) { Fail "$File $($CommandArgs -join ' ') failed with exit code $LASTEXITCODE" }
 }
-function Compose([string[]]$Args) { Run 'docker' (@('compose', '--project-name', $project) + $composeFiles + $Args) }
+function Compose([string[]]$ComposeArgs) { Run 'docker' (@('compose', '--project-name', $project) + $composeFiles + $ComposeArgs) }
 
 Set-Location $deployRoot
 if ([string]::IsNullOrWhiteSpace($EnvFile)) { $EnvFile = Join-Path $deployRoot '.env.local' }
@@ -39,9 +39,9 @@ if ($dirty.Count -gt 0) {
 Run 'git' @('fetch', '--prune', 'origin', 'main')
 $githubSha = (git rev-parse 'origin/main').Trim()
 if ($githubSha -notmatch '^[0-9a-f]{40}$') { Fail "invalid origin/main SHA: $githubSha" }
-Run 'git' @('checkout', '--detach', 'origin/main')
-$localSha = (git rev-parse HEAD).Trim()
-if ($localSha -ne $githubSha) { Fail "local checkout $localSha does not match origin/main $githubSha" }
+$localBefore = (git rev-parse HEAD).Trim()
+Run 'git' @('merge', '--no-edit', 'origin/main')
+$deploymentSha = (git rev-parse HEAD).Trim()
 
 $portOwners = @(docker ps --format '{{.Names}} {{.Ports}}' | Where-Object { $_ -match '0\.0\.0\.0:4300|127\.0\.0\.1:4300' })
 if ($portOwners.Count -gt 0 -and ($portOwners -notmatch 'saveflow-local-check-web-1')) { Fail "port 4300 is occupied by: $($portOwners -join '; ')" }
@@ -65,7 +65,7 @@ if ($health.ok -ne $true -or $version.gitSha -ne $githubSha -or $version.gitDirt
 Write-Output "Deployment succeeded"
 Write-Output "URL: $webUrl"
 Write-Output "GitHub main: $githubSha"
-Write-Output "Local deployment: $localSha"
+Write-Output "Deployment tree commit: $deploymentSha"
 Write-Output "Running Web image: $imageSha"
 Write-Output "Working tree dirty: $($version.gitDirty)"
 Write-Output 'Status: healthy; all three SHAs match'
