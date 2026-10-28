@@ -38,7 +38,7 @@ if (!process.env.TRUEFORGE_BASE_URL || !process.env.TRUEFORGE_MODEL || !process.
     assert.equal(response.status(), 200, result.code); await ready(); return result;
   };
   const send = text => request(async () => { await page.locator('.composer input').fill(text); await page.locator('.composer input').press('Enter'); });
-  const panel = () => page.getByRole('region', { name: '会话与待继续业务' });
+  const redundantPanel = () => page.getByRole('region', { name: '会话与待继续业务' });
   try {
     await page.goto(url); await authorize();
     const first = await send('给张三转500元');
@@ -69,11 +69,14 @@ if (!process.env.TRUEFORGE_BASE_URL || !process.env.TRUEFORGE_MODEL || !process.
     assert.equal(await page.getByLabel('演示访问码', { exact: true }).inputValue(), '');
     assert.equal(await page.locator('.consent-control input').isChecked(), false);
     await authorize();
-    const synced = await request(() => panel().getByRole('button', { name: '核验并恢复会话', exact: true }).click());
-    assert.equal(synced.data.status, 'conversation_state');
-    assert.equal(synced.data.conversation.token, first.data.conversation.token);
+    assert.equal(await redundantPanel().count(), 0);
     assert.equal(await page.locator('.banking-preview-card').last().getByRole('button', { name: '确认转账', exact: true }).isDisabled(), true);
-    const restored = await request(() => panel().getByRole('button', { name: '继续转账', exact: true }).click());
+    const responses = Promise.all([
+      page.waitForResponse(response => response.url().endsWith('/api/banking-agent') && response.request().method() === 'POST'),
+      page.waitForResponse(response => response.url().endsWith('/api/banking-agent') && response.request().method() === 'POST' && JSON.parse(response.request().postData() || '{}').taskMode === 'resume'),
+    ]);
+    await page.locator('.composer input').fill('继续刚才的转账'); await page.locator('.composer input').press('Enter');
+    const [, restoredResponse] = await responses; const restored = await restoredResponse.json(); await ready();
     assert.equal(restored.data.conversation.currentTask.taskId, originalTask);
     assert.equal(restored.data.preview.exactEffects[0].amountFen, 60000);
     assert.notEqual(restored.data.operationId, edited.data.operationId);

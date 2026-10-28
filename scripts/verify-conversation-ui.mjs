@@ -34,7 +34,7 @@ async function request(page, action, expected = 200) {
   assert.equal(response.status(), expected, data.code); await ready(page); return data;
 }
 const send = (page, text) => request(page, async () => { await page.locator('.composer input').fill(text); await page.locator('.composer input').press('Enter'); });
-const panel = page => page.getByRole('region', { name: '会话与待继续业务' });
+const redundantPanel = page => page.getByRole('region', { name: '会话与待继续业务' });
 const state = async () => (await fetch(`${url}/test-state`)).json();
 const control = body => fetch(`${url}/test-control`, { method: 'POST', body: JSON.stringify(body) });
 const remember = (name, verified) => { assert.ok(verified); report.cases.push({ name, passed: true }); };
@@ -110,9 +110,9 @@ try {
   const c = await fresh(); await send(c, '查看2026年8月账单');
   await c.evaluate(key => { const snapshot = JSON.parse(sessionStorage.getItem(key)); snapshot.conversationToken = `cs1.${'A'.repeat(43)}`; sessionStorage.setItem(key, JSON.stringify(snapshot)); }, key);
   await c.reload(); await authorize(c);
-  const rejected = await request(c, () => panel(c).getByRole('button', { name: '核验并恢复会话', exact: true }).click(), 409);
+  assert.equal(await redundantPanel(c).count(), 0);
+  const rejected = await request(c, async () => { await c.locator('.composer input').fill('查看2026年8月账单'); await c.locator('.composer input').press('Enter'); }, 409);
   assert.equal(rejected.code, 'CONVERSATION_NOT_FOUND');
-  await panel(c).getByRole('button', { name: '开始新业务', exact: true }).click();
   await send(c, '查看2026年8月账单');
   remember('forged cached session rejected; new request succeeds without clearing history', true);
 
@@ -140,9 +140,10 @@ try {
 
   await b.reload(); await authorize(b);
   await control({ command: 'advance', ms: 1800001 });
-  const expired = await request(b, () => panel(b).getByRole('button', { name: '核验并恢复会话', exact: true }).click(), 409);
+  assert.equal(await redundantPanel(b).count(), 0);
+  const expired = await request(b, async () => { await b.locator('.composer input').fill('查看2026年8月账单'); await b.locator('.composer input').press('Enter'); }, 409);
   assert.equal(expired.code, 'CONVERSATION_EXPIRED');
-  await panel(b).getByRole('button', { name: '开始新业务', exact: true }).click(); await send(b, '查看2026年8月账单');
+  await send(b, '查看2026年8月账单');
   remember('expired process-local session rejected; composer and new business remain usable', true);
   assert.equal(report.pageErrors, 0);
   report.passed = report.cases.length;
