@@ -5,6 +5,8 @@ export const PARSED_INTENT_ACTIONS = [
   "transfer.create",
   "bill.summary",
   "subscription.list",
+  "subscription.cancel_renewal",
+  "subscription.renew",
   "card.get",
   "card.set_budget",
   "card.set_controls",
@@ -124,6 +126,13 @@ type ParsedIntentBody =
       slots: Record<string, never>;
       missingSlots: [];
       status: "ready_for_resolution";
+    }
+  | {
+      schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
+      action: "subscription.cancel_renewal" | "subscription.renew";
+      slots: { subscription_ref?: string; source_account_ref?: string };
+      missingSlots: Array<"subscription_ref" | "source_account_ref">;
+      status: "ready_for_resolution" | "needs_clarification";
     }
   | {
       schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;

@@ -19,6 +19,8 @@ export function createFinancialContext(source = seed) {
   ];
   /** @type {import('./contracts').Transaction[]} */
   const transactions = raw.transactions.map(t => ({ id: t.id, accountId: t.accountId, occurredAt: `${t.date}T00:00:00+08:00`, type: t.type === 'income' ? 'income' : 'expense', category: t.category, merchant: t.merchant, amountFen: seedYuanToFen(t.amount), currency: 'CNY', status: 'posted', source: 'synthetic_seed' }));
+  /** @type {import('./contracts').Subscription[]} */
+  const subscriptions = raw.subscriptions.map(s => ({ id: s.id, name: s.name, monthlyFeeFen: seedYuanToFen(s.monthlyFee), status: s.status === 'active' ? 'active' : 'cancelled', lastUsedDate: s.lastUsedDate, isPotentiallyUnused: s.isPotentiallyUnused, mandateId: null }));
   /** @type {import('./contracts').Card[]} */
   const cards = raw.cards.map(c => ({ id: c.id, name: c.name, accountId: c.linkedAccountId, status: c.status === 'active' ? 'active' : 'frozen', monthlyBudgetFen: seedYuanToFen(c.monthlyBudget), monthlySpentFen: seedYuanToFen(c.monthlySpent), onlinePaymentsEnabled: true, blockedCategories: [], alertThresholdFen: seedYuanToFen(c.monthlyBudget), balanceReminderAmountFen: null, balanceReminderPercent: null, version: 0, previewGeneration: 0 }));
   /** @type {import('./contracts').InvestmentProduct[]} */
@@ -42,7 +44,8 @@ export function createFinancialContext(source = seed) {
     getTransactions: (filter = {}) => structuredClone(transactions.filter(t => (!filter.accountId || t.accountId === filter.accountId) && transactionMatchesPeriod(t.occurredAt, filter))),
     getCards: () => structuredClone(cards),
     getCard: id => structuredClone(cards.find(c => c.id === id)),
-    getSubscriptions: () => raw.subscriptions.map(s => ({ id: s.id, name: s.name, monthlyFeeFen: seedYuanToFen(s.monthlyFee), status: s.status === 'active' ? 'active' : 'cancelled', lastUsedDate: s.lastUsedDate, isPotentiallyUnused: s.isPotentiallyUnused, mandateId: null })),
+    getSubscriptions: () => structuredClone(subscriptions),
+    getSubscription: id => structuredClone(subscriptions.find(s => s.id === id)),
     getInvestmentProducts: () => structuredClone(products),
     getSavingGoal: () => ({ id: raw.savingGoals[0].id, targetAmountFen: seedYuanToFen(raw.savingGoals[0].targetAmount), currentAmountFen: seedYuanToFen(raw.savingGoals[0].currentAmount), targetDate: raw.savingGoals[0].targetDate, proposedMonthlySavingFen: seedYuanToFen(raw.savingGoals[0].proposedMonthlySaving) }),
     // Original goal requires 5000/month, above demo cap: expose it honestly; draft defaults to 2500.
@@ -92,6 +95,23 @@ export function createFinancialContext(source = seed) {
     revision++;
     return structuredClone(card);
   }
+  /** @param {import('./contracts').SubscriptionEffect} effect @param {string} operationId @param {string} at */
+  function commitSubscription(effect, operationId, at) {
+    if (transactions.some(t => t.operationId === operationId)) throw new BankingError('IDEMPOTENCY_CONFLICT', '账务已存在此操作，请查询回执', true);
+    const subscription = subscriptions.find(item => item.id === effect.subscriptionId);
+    if (!subscription || subscription.status !== effect.beforeStatus) throw new BankingError('PREVIEW_STALE', '订阅状态已变化，请重新预览并确认');
+    if (effect.action === 'subscription.cancel_renewal') {
+      subscription.status = 'cancelled'; revision++;
+      return undefined;
+    }
+    const account = accounts.find(item => item.id === effect.sourceAccountId);
+    if (!account || account.status !== 'active' || account.version !== effect.accountVersion || account.balanceFen !== effect.balanceBeforeFen) throw new BankingError('PREVIEW_STALE', '付款账户已变化，请重新预览并确认');
+    if (account.availableBalanceFen < effect.monthlyFeeFen) throw new BankingError('INSUFFICIENT_BALANCE', '付款账户余额不足');
+    const transaction = /** @type {import('./contracts').Transaction} */ ({ id: `txn_${operationId}`, operationId, accountId: account.id, occurredAt: at, type: 'expense', category: '娱乐', merchant: subscription.name, amountFen: effect.monthlyFeeFen, currency: 'CNY', status: 'posted', source: 'mock_execution' });
+    account.balanceFen -= effect.monthlyFeeFen; account.availableBalanceFen -= effect.monthlyFeeFen; account.version++;
+    subscription.status = 'active'; transactions.push(transaction); revision++;
+    return structuredClone(transaction);
+  }
   /** @param {string} cardId */
   function reserveCardPreview(cardId) {
     const card = cards.find(c => c.id === cardId);
@@ -115,5 +135,5 @@ export function createFinancialContext(source = seed) {
     }
     revision++;
   }
-  return { repository: Object.freeze(repository), getWealthHoldings: () => structuredClone(holdings), commitTransfer, commitCard, commitWealth, reserveCardPreview, ownerId: raw.user.id };
+  return { repository: Object.freeze(repository), getWealthHoldings: () => structuredClone(holdings), commitTransfer, commitCard, commitWealth, commitSubscription, reserveCardPreview, ownerId: raw.user.id };
 }

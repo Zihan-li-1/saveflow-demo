@@ -9,6 +9,7 @@ export type WealthIntent = Extract<ParsedIntent, { action: `wealth.${string}` }>
 export type ScenarioIntent = Extract<ParsedIntent, { action: `scenario.${string}` }>;
 export type GoalIntent = Extract<ParsedIntent, { action: "orchestrator.goal" }>;
 export type SubscriptionListIntent = Extract<ParsedIntent, { action: "subscription.list" }>;
+export type SubscriptionIntent = Extract<ParsedIntent, { action: `subscription.${string}` }>;
 
 export type DispatcherDependencies = {
   billHandler: (intent: BillSummaryIntent) => Promise<DispatchResult>;
@@ -17,7 +18,7 @@ export type DispatcherDependencies = {
   wealthHandler?: (intent: WealthIntent) => Promise<DispatchResult>;
   scenarioHandler?: (intent: ScenarioIntent) => Promise<DispatchResult>;
   goalHandler?: (intent: GoalIntent) => Promise<DispatchResult>;
-  subscriptionHandler?: (intent: SubscriptionListIntent) => Promise<DispatchResult>;
+  subscriptionHandler?: (intent: SubscriptionIntent) => Promise<DispatchResult>;
 };
 
 function clarificationResult(intent: ParsedIntent): DispatchResult {
@@ -56,6 +57,8 @@ export async function dispatchParsedIntent(
       case "bill.summary":
         return await dependencies.billHandler(intent);
       case "subscription.list":
+      case "subscription.cancel_renewal":
+      case "subscription.renew":
         return dependencies.subscriptionHandler ? await dependencies.subscriptionHandler(intent) : { ok: false, kind: "unsupported" };
       case "card.get":
       case "card.set_budget":

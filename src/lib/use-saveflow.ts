@@ -255,7 +255,13 @@ export function useSaveflow() {
         setBankingContinuation(null);
         addMessage({ role: "agent", text: answer.action?.startsWith("scenario.") ? "场景规则变更已取消，规则未修改。" : replyText });
       } else if (answer.status === "awaiting_confirmation") {
-        if (answer.action?.startsWith("card.") && isTrialPreview(answer)) {
+        if (answer.action?.startsWith("subscription.")) {
+          setBankingContinuation(null);
+          activePreviews.current.card = hasUnresolvedWrite() ? null : answer.operationId || null;
+          if (answer.operationId) setCoreOperation(answer.operationId, "plan");
+          setActiveCardOperationId(activePreviews.current.card);
+          addMessage({ role: "agent", kind: "banking_read", text: replyText, banking: answer });
+        } else if (answer.action?.startsWith("card.") && isTrialPreview(answer)) {
           setActiveCardOperationId(null);
           addMessage({ role: "agent", kind: "banking_card_preview", text: replyText, banking: { ...answer, previewCurrent: true } });
         } else if (answer.action?.startsWith("card.")) {
@@ -341,6 +347,24 @@ export function useSaveflow() {
       if (generation.current !== version) return;
       if (checked.status !== "succeeded" || checked.receipt?.receiptId !== receipt.receiptId) throw new ApiError("INVALID_RESPONSE", "理财回执无法核实，请查询原操作", true);
       addMessage({ role: "agent", text: `${receipt.message}；已核对操作回执。合成数据仅供演示。` });
+      return "success" as const;
+    }
+    if (data.action?.startsWith("subscription.")) {
+      const effect = receipt.effects[0]?.kind === "subscription_change" ? receipt.effects[0] : undefined;
+      if (!effect) throw new ApiError("INVALID_RESPONSE", "订阅回执缺少变更效果", true);
+      const current = await cardClient().request("subscription.list", {});
+      if (generation.current !== version) return;
+      const subscription = current.find(item => item.id === effect.subscriptionId);
+      if (!subscription || subscription.status !== effect.afterStatus) throw new ApiError("INVALID_RESPONSE", "回执与订阅当前状态不一致，请查询原操作", true);
+      if (data.action === "subscription.renew") {
+        if (!effect.sourceAccountId) throw new ApiError("INVALID_RESPONSE", "续订回执缺少付款账户", true);
+        const account = await cardClient().request("account.get", { id: effect.sourceAccountId });
+        const transactions = await cardClient().request("transaction.list", { accountId: effect.sourceAccountId });
+        const booked = transactions.find(transaction => receipt.transactionIds.includes(transaction.id));
+        if (!booked || booked.type !== "expense" || booked.category !== "娱乐" || booked.merchant !== effect.subscriptionName || booked.amountFen !== effect.monthlyFeeFen || account.balanceFen !== effect.balanceAfterFen) throw new ApiError("INVALID_RESPONSE", "续订扣款或娱乐流水核验失败，请查询原操作", true);
+      } else if (receipt.transactionIds.length) throw new ApiError("INVALID_RESPONSE", "停止续费不应产生账户流水", true);
+      addMessage({ role: "agent", text: `${receipt.message}；已重新核对订阅状态${data.action === "subscription.renew" ? "、付款账户和娱乐流水" : ""}。` });
+      addMessage({ role: "agent", kind: "banking_read", text: "订阅当前状态", banking: { status: "subscription_result", action: "subscription.list", data: { subscriptions: current }, evidence: data.evidence } });
       return "success" as const;
     }
     if (data.action?.startsWith('scenario.')) {

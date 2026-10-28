@@ -7,6 +7,8 @@ export const PARSED_INTENT_ACTIONS = Object.freeze([
   'transfer.create',
   'bill.summary',
   'subscription.list',
+  'subscription.cancel_renewal',
+  'subscription.renew',
   'card.get',
   'card.set_budget',
   'card.set_controls',
@@ -380,6 +382,17 @@ export function validateParsedIntent(value) {
       requireMissingSlots(input.missingSlots, []);
       requireStatus(input.status, 'ready_for_resolution');
       break;
+    case 'subscription.cancel_renewal':
+    case 'subscription.renew': {
+      rejectUnknownKeys(slots, ['subscription_ref', 'source_account_ref'], 'slots');
+      if (slots.subscription_ref !== undefined) requireNonEmptyString(slots.subscription_ref, 'slots.subscription_ref');
+      if (slots.source_account_ref !== undefined) requireNonEmptyString(slots.source_account_ref, 'slots.source_account_ref');
+      const required = input.action === 'subscription.renew' ? ['subscription_ref', 'source_account_ref'] : ['subscription_ref'];
+      const missing = required.filter(key => slots[key] === undefined);
+      requireMissingSlots(input.missingSlots, missing);
+      requireStatus(input.status, missing.length ? 'needs_clarification' : 'ready_for_resolution');
+      break;
+    }
     case 'unsupported':
       rejectUnknownKeys(slots, [], 'slots');
       requireMissingSlots(input.missingSlots, []);

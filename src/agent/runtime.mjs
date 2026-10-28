@@ -17,7 +17,7 @@ export async function dispatchParsedIntent(value, dependencies) {
   try {
     if (intent.action === 'transfer.create') return await dependencies.transferHandler(intent);
     if (intent.action === 'bill.summary') return await dependencies.billHandler(intent);
-    if (intent.action === 'subscription.list') return dependencies.subscriptionHandler ? await dependencies.subscriptionHandler(intent) : { ok: false, kind: 'unsupported' };
+    if (intent.action.startsWith('subscription.')) return dependencies.subscriptionHandler ? await dependencies.subscriptionHandler(intent) : { ok: false, kind: 'unsupported' };
     if (intent.action.startsWith('card.')) return dependencies.cardHandler ? await dependencies.cardHandler(intent) : { ok: false, kind: 'unsupported' };
     if (intent.action.startsWith('wealth.')) return dependencies.wealthHandler ? await dependencies.wealthHandler({ action: intent.action, ...intent.slots }) : { ok: false, kind: 'unsupported' };
     if (intent.action === 'scenario.plan_purchase') return { ok: true, kind: 'purchase_request', action: intent.action, data: { slots: intent.slots, synthetic_demo_only: true } };
@@ -59,6 +59,24 @@ export async function handleSubscriptionList(_intent, repository) {
     summary: { activeCount: active.length, activeMonthlyFeeFen, potentiallyUnusedCount: potentiallyUnused.length, potentiallyUnusedMonthlyFeeFen, potentialAnnualSavingsFen: potentiallyUnusedMonthlyFeeFen * 12 },
     methodology: { usesRepositoryFlag: true, usesLastUsedDate: true, highConfidenceInactivityDays: 90, historicalSubscriptionState: false, savingsEstimateMonths: 12, limitation: '闲置判断是规则提示，不等同于已核实的商户使用记录；取消前请由用户确认。' },
   }, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: subscriptions.map(item => item.id) }] };
+}
+
+/** Resolve raw subscription/account wording into trusted IDs; never execute here. */
+export async function handleSubscriptionAction(intent, repository, selections = {}) {
+  const subscriptions = await repository.getSubscriptions();
+  const accounts = (await repository.getAccounts()).filter(item => item.status === 'active');
+  const resolve = (slot, raw, items) => {
+    const selected = selections[slot]?.entityId;
+    const candidates = selected ? items.filter(item => item.id === selected) : items.filter(item => item.name === raw || item.name.includes(raw) || raw.includes(item.name));
+    if (candidates.length !== 1) return { ok: false, kind: 'needs_clarification', source: 'resolver', action: intent.action, slot, question: slot === 'subscription_ref' ? '请选择要操作的订阅服务。' : '请选择承担本次续订费用的账户。', candidates: items.map(item => ({ id: item.id, name: item.name })) };
+    return { ok: true, item: candidates[0] };
+  };
+  const subscription = resolve('subscription_ref', intent.slots.subscription_ref, subscriptions);
+  if (!subscription.ok) return subscription;
+  if (intent.action === 'subscription.cancel_renewal') return { ok: true, kind: 'subscription_action_request', action: intent.action, data: { request: { action: intent.action, input: { subscriptionId: subscription.item.id } } } };
+  const account = resolve('source_account_ref', intent.slots.source_account_ref, accounts);
+  if (!account.ok) return account;
+  return { ok: true, kind: 'subscription_action_request', action: intent.action, data: { request: { action: intent.action, input: { subscriptionId: subscription.item.id, sourceAccountId: account.item.id } } } };
 }
 
 export async function handleBillSummary(intent, repository) {

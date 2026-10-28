@@ -1,4 +1,4 @@
-import { dispatchParsedIntent, handleBillSummary, handleCard, handleGoal, handleSubscriptionList, handleTransfer, prepareTransferPreview, transferRepository } from '../src/agent/runtime.mjs';
+import { dispatchParsedIntent, handleBillSummary, handleCard, handleGoal, handleSubscriptionAction, handleSubscriptionList, handleTransfer, prepareTransferPreview, transferRepository } from '../src/agent/runtime.mjs';
 import { issueContinuationToken, verifyContinuationToken } from '../src/agent/clarification/continuation-token.mjs';
 import { resolveChoice } from '../src/agent/clarification/choice-resolver.mjs';
 import { buildParsedIntent, mergeSlots } from '../src/agent/clarification/merge-intent.mjs';
@@ -53,6 +53,7 @@ export function statusFor(code) {
 const clarificationQuestions = {
   amount: '要转多少钱？例如 500 元。',
   source_account_ref: '要从哪个账户转出？',
+  subscription_ref: '请选择要操作的订阅服务。',
   target_account_ref: '要转入哪个本人账户？',
   payee_ref: '要转给谁？',
   transfer_type: '这笔转账是转给本人其他账户，还是转给他人？请选择一种方式。',
@@ -136,7 +137,7 @@ function clarificationResponse(reply, { action, slot, question, choices = [], sl
 function nextMissingSlot(intent) {
   const order = intent.action === 'transfer.create'
     ? ['transfer_type', 'source_account_ref', 'target_account_ref', 'payee_ref', 'amount']
-    : intent.action.startsWith('card.') ? ['card_ref', 'amount'] : ['month'];
+    : intent.action.startsWith('card.') ? ['card_ref', 'amount'] : intent.action.startsWith('subscription.') ? ['subscription_ref', 'source_account_ref'] : ['month'];
   return order.find(slot => intent.missingSlots?.includes(slot)) || intent.missingSlots?.[0];
 }
 
@@ -395,7 +396,7 @@ export async function runBankingConversation(body, {
     wealthHandler,
     scenarioHandler: activeScenarioHandler,
     goalHandler: intent => handleGoal(intent, repository),
-    subscriptionHandler: intent => handleSubscriptionList(intent, repository),
+    subscriptionHandler: intent => intent.action === 'subscription.list' ? handleSubscriptionList(intent, repository) : handleSubscriptionAction(intent, repository, selections),
   };
   const dispatched = await dispatchParsedIntent(parsed, dependencies);
   const prepareTransfer = typeof core.prepare === 'function'
@@ -405,6 +406,12 @@ export async function runBankingConversation(body, {
 
   if (result.ok && result.kind === 'bill_result') return reply(200, 'OK', '账单统计已生成', { status: 'bill_result', action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && result.kind === 'subscription_result') return reply(200, 'OK', '订阅分析已生成', { status: 'subscription_result', action: result.action, data: result.data, evidence: result.evidence });
+  if (result.ok && result.kind === 'subscription_action_request') {
+    const prepared = await core.prepare(result.data.request);
+    if (!prepared.ok) return reply(statusFor(prepared.error.code), prepared.error.code, prepared.error.message, { status: 'core_error', action: result.action, ...(prepared.operationId ? { operationId: prepared.operationId } : {}), error: prepared.error });
+    const context = await repository.getContextInfo();
+    return reply(200, 'OK', '订阅操作预览已生成，请核对后确认', { status: 'awaiting_confirmation', action: result.action, operationId: prepared.data.operationId, preview: prepared.data.preview, risk: prepared.data.risk, evidence: [{ source: context.dataSource, asOf: context.asOf, entityIds: prepared.data.preview.exactEffects.map(effect => effect.subscriptionId).filter(Boolean) }] });
+  }
   if (result.ok && result.kind === 'card_result') return reply(200, 'OK', '卡片信息已查询', { status: 'card_result', action: result.action, data: result.data, evidence: result.evidence });
   if (result.ok && ['wealth_recommendation', 'wealth_comparison', 'risk_assessment_required'].includes(result.kind)) return reply(200, 'OK', result.kind === 'wealth_comparison' ? '理财产品对比已生成' : result.kind === 'wealth_recommendation' ? '理财条件筛选已生成' : '需要完成风险测评', { status: result.kind, action: result.action, data: result.kind === 'wealth_comparison' ? { ...result.data, kind: 'comparison' } : result.data, evidence: result.evidence });
   if (result.ok && result.kind === 'wealth_result') return reply(200, 'OK', '模拟理财结果已生成', { status: 'wealth_result', action: result.action, data: result.data, evidence: result.data.evidence });
@@ -451,7 +458,7 @@ export async function runBankingConversation(body, {
     const slot = result.slot || nextMissingSlot(parsed) || (result.candidates ? 'payee_ref' : undefined);
     // Re-read even resolver candidates: states/eligibility may have changed since resolution.
     const cards = slot === 'card_ref' ? eligibleCards(action, await repository.getCards()) : [];
-    const choices = slot === 'card_ref' ? cardChoices(cards.filter(card => !result.candidates?.length || result.candidates.some(candidate => candidate.id === card.id))) : result.candidates ? payeeChoices(result.candidates) : slot === 'source_account_ref' || slot === 'target_account_ref' ? await accountChoices(repository) : slot === 'payee_ref' && !slots.payee_ref ? payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active')) : slot === 'transfer_type' ? transferTypeChoices : [];
+    const choices = slot === 'card_ref' ? cardChoices(cards.filter(card => !result.candidates?.length || result.candidates.some(candidate => candidate.id === card.id))) : slot === 'subscription_ref' ? (await repository.getSubscriptions()).map(item => ({ optionId: `subscription-${item.id}`, label: item.name, rawValue: item.name, entityId: item.id })) : result.candidates ? (result.action?.startsWith('subscription.') ? result.candidates.map(candidate => ({ optionId: `${slot}-${candidate.id}`, label: candidate.name, rawValue: candidate.name, entityId: candidate.id })) : payeeChoices(result.candidates)) : slot === 'source_account_ref' || slot === 'target_account_ref' ? await accountChoices(repository) : slot === 'payee_ref' && !slots.payee_ref ? payeeChoices((await repository.getPayees()).filter(payee => payee.status === 'active')) : slot === 'transfer_type' ? transferTypeChoices : [];
     return clarificationResponse(reply, {
       action,
       slot,

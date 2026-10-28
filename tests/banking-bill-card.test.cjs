@@ -34,6 +34,27 @@ test('理财产品卡片用通俗语言解释风险、取用时间和月度期�
   assert.equal(value.includes('180 天'), false);
 });
 
+test('订阅卡片只保留橙色闲置提示，不重复展示判断信号', () => {
+  const html = renderToStaticMarkup(React.createElement(BankingReadCard, { data: {
+    status: 'subscription_result',
+    data: {
+      summary: { activeMonthlyFeeFen: 3000, potentiallyUnusedMonthlyFeeFen: 3000, potentialAnnualSavingsFen: 36000 },
+      subscriptions: [{
+        id: 'sub-1', name: '模拟视频会员', monthlyFeeFen: 3000, status: 'active',
+        lastUsedDate: '2026-06-10', isPotentiallyUnused: true,
+        unusedReason: '数据标记为可能闲置：已连续 83 天未使用，但仍每月扣费；取消前请核实实际使用情况。',
+        recognition: { confidence: 'high', signals: ['数据源标记为可能闲置', '距最近使用 83 天', '订阅仍在生效并按月计费'] },
+      }],
+    },
+    evidence: [{ source: 'financial_context.subscriptions', as_of: '2026-09-01T00:00:00+08:00' }],
+  } }));
+  const value = text(html);
+  assert.ok(value.includes('数据标记为可能闲置：已连续 83 天未使用，但仍每月扣费；取消前请核实实际使用情况。'));
+  assert.equal(value.includes('为什么这样判断'), false);
+  assert.equal(value.includes('距最近使用 83 天'), false);
+  assert.equal(value.includes('订阅仍在生效并按月计费'), false);
+});
+
 test('August card uses structured amounts, exact signed balance, all transaction count and Chinese provenance', () => {
   const value = text(render(fixture));
   for (const expected of ['2026 年 8 月', '月度收支概览', '本月总支出¥8,460.00', '本月收入¥12,000.00', '+¥3,540.00', '不是账户可用余额', '总交易笔数12 笔', '模拟演示数据', '2026年9月1日 00:00（北京时间）', '房租', '35.5%', '¥3,000.00']) assert.ok(value.includes(expected), expected);
