@@ -16,6 +16,7 @@
 .banking-choice-list button:hover { background: #edf4ff; }
 .banking-choice-card small, .banking-result-card small, .banking-preview-card small { display: block; color: #8e9aa6; font-size: 10px; margin-top: 9px; }
 .banking-result-card { display: grid; gap: 5px; color: #586675; font-size: 11px; }
+.banking-task-panel { display: none !important; }
 .banking-preview-card > div { display: flex; justify-content: space-between; gap: 12px; color: #83909d; font-size: 10px; }
 .banking-preview-card > div span { color: #d19435; }
 .banking-preview-card strong { display: block; color: #2e4050; font-size: 22px; margin-top: 12px; }
