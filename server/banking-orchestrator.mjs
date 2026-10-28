@@ -358,10 +358,10 @@ export async function runBankingConversation(body, {
     const needsReservation = purchaseNeedsReservation(purchaseSlots);
     const missing = needsReservation ? purchaseMissingQuestions(purchaseSlots) : [];
     const purchaseMessage = !needsReservation
-      ? '已解析你的购物需求并生成平台搜索链接。按现在就买处理，不预留预算、不设置提醒。'
+      ? '已生成平台搜索链接。按现在就买处理，不预留预算、不设置提醒。'
       : missing.length
-        ? `已解析你的购物需求并生成平台搜索链接。你提到了预留或时间，需要完整预算与提醒流程；还差：${missing.map(item => item.question).join('；')}`
-        : '已解析你的购物需求并生成平台搜索链接。已按你提到的信息进入预算与提醒流程，请核对并保存。';
+        ? '已生成平台搜索链接。你提到了未来时间，需要预留预算与提醒；还差几项信息，见下方卡片。'
+        : '已生成平台搜索链接。预算与提醒信息已齐，请在下方卡片核对并确认预留。';
     return reply(200, 'OK', purchaseMessage, {
       status: 'purchase_request', action: parsed.action, data: { slots: parsed.slots, synthetic_demo_only: true },
     });
