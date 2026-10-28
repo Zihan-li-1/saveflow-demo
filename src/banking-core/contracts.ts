@@ -9,7 +9,7 @@ export type Card = { id: string; name: string; accountId: string; status: "activ
 export type Subscription = { id: string; name: string; monthlyFeeFen: number; status: "active" | "cancelled"; lastUsedDate: string; isPotentiallyUnused: boolean; mandateId: string | null };
 /** expectedYield is an illustrative annual rate in BPS, never a guaranteed yield. */
 export type InvestmentProduct = { id: string; name: string; riskLevel: "R1" | "R2" | "R3"; expectedYield: number; liquidity: "T+0" | "T+1" | "AT_MATURITY"; minimumAmountFen: number; durationDays: number; currency: Currency; isSynthetic: true };
-export type ContextInfo = { availableMonths?: string[]; datasetId: string; asOf: string; currentMonth: string; previousMonth: string; snapshotId: string; dataSource: "synthetic_demo_only"; currency: Currency };
+export type ContextInfo = { availableMonths?: string[]; completeMonths?: string[]; datasetId: string; asOf: string; currentMonth: string; previousMonth: string; snapshotId: string; dataSource: "synthetic_demo_only"; currency: Currency };
 export type SavingGoal = { id: string; targetAmountFen: number; currentAmountFen: number; targetDate: string; proposedMonthlySavingFen: number };
 export type DemoSettings = { monthlyIncomeFen: number; defaultMonthlySavingFen: number; monthlySavingCapFen: number };
 export type MaybePromise<T> = T | Promise<T>;

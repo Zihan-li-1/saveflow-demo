@@ -34,7 +34,7 @@ export function createFinancialContext(source = seed) {
   let revision = 0;
   /** @type {import('./contracts').SyncFinancialContextRepository} */
   const repository = {
-    getContextInfo: () => ({ datasetId: raw.datasetId, asOf: `${raw.snapshotDate}T00:00:00+08:00`, currentMonth: raw.analysisFixtures.currentMonth, previousMonth: raw.analysisFixtures.previousMonth, snapshotId: `${raw.datasetId}:${revision}`, dataSource: 'synthetic_demo_only', currency: 'CNY', availableMonths: [...raw.historicalMonths] }),
+    getContextInfo: () => ({ datasetId: raw.datasetId, asOf: `${raw.snapshotDate}T00:00:00+08:00`, currentMonth: raw.analysisFixtures.currentMonth, previousMonth: raw.analysisFixtures.previousMonth, snapshotId: `${raw.datasetId}:${revision}`, dataSource: 'synthetic_demo_only', currency: 'CNY', availableMonths: [...raw.historicalMonths], completeMonths: [...raw.completeMonths] }),
     getAccounts: () => structuredClone(accounts),
     getAccount: id => structuredClone(accounts.find(a => a.id === id)),
     getPayees: () => structuredClone(payees),

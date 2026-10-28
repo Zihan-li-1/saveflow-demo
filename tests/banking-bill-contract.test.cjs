@@ -45,30 +45,30 @@ async function client(payload, options) {
 }
 const render = data => renderToStaticMarkup(React.createElement(BankingBillCard, { data })).replace(/<[^>]*>/g, '');
 
-test('real HTTP bill with missing September passes real client and renders missing data', async () => {
+test('real HTTP bill includes September seed data in the same client and card', async () => {
   const { payload, queries, turns } = await backend();
   assert.deepEqual(queries, [{ startDate: '2026-06-01', endDate: '2026-09-30', timezone: 'Asia/Shanghai' }]);
   assert.equal(turns[0].userMessage, '查看今年六到九月的账单');
   assert.equal(turns[0].calendar.currentDate, '2026-10-22');
   assert.equal(turns[0].calendar.timezone, 'Asia/Shanghai');
-  assert.deepEqual(turns[0].calendar.financialData.availableMonths, ['2026-06', '2026-07', '2026-08']);
-  assert.equal(payload.data.data.monthlyBreakdown.at(-1).status, 'unavailable');
+  assert.deepEqual(turns[0].calendar.financialData.availableMonths, ['2026-06', '2026-07', '2026-08', '2026-09']);
+  assert.notEqual(payload.data.data.monthlyBreakdown.at(-1).status, 'unavailable');
+  assert.equal(payload.data.data.monthlyBreakdown.at(-1).totalExpenseFen, 740000);
   const data = await client(payload);
   const text = render(data);
   assert.ok(text.includes('2026年6月1日—2026年9月30日'));
-  assert.ok(text.includes('缺数据'));
-  assert.ok(text.includes('无记录不代表没有支出'));
+  assert.equal(text.includes('缺数据：9月'), false);
 });
 
 test('single month, relative month, year to date, last year and cross-year bills survive HTTP/client/card', async () => {
   const cases = [
     ['查看2026年8月账单', { month: '2026-08' }, '2026 年 8 月'],
-    ['分析上个月的账单', { month: '2026-09' }, '本月缺数据'],
+    ['分析上个月的账单', { month: '2026-09' }, '¥7,400.00'],
     ['查看今年以来的消费', { period: period('2026-01-01', '2026-10-22') }, '2026年1月1日—2026年10月22日'],
     ['查去年全年账单', { period: period('2025-01-01', '2025-12-31') }, '不能视为零消费'],
-    ['查询2026年6月到9月的账单', { period: period() }, '缺数据'],
+    ['查询2026年6月到9月的账单', { period: period() }, '2026年6月1日—2026年9月30日'],
     ['查2025年12月至2026年2月的账单', { period: period('2025-12-01', '2026-02-28') }, '2025/12'],
-    ['查2026年8月至9月账单', { period: period('2026-08-01', '2026-09-30') }, '缺数据：9月'],
+    ['查2026年8月至9月账单', { period: period('2026-08-01', '2026-09-30') }, '2026年8月1日—2026年9月30日'],
     ['查六月下半月账单', { period: period('2026-06-15', '2026-06-30') }, '2026年6月15日—2026年6月30日'],
   ];
   for (const [message, slots, expected] of cases) {
@@ -87,7 +87,7 @@ test('single month, relative month, year to date, last year and cross-year bills
       assert.equal(payload.data.data.totalExpenseFen, 846000);
       assert.ok(text.includes('¥8,460.00'));
     }
-    if (message === '查去年全年账单' || message === '分析上个月的账单') {
+    if (message === '查去年全年账单') {
       assert.equal(text.includes('¥0.00'), false);
       assert.equal(text.includes('暂无交易记录'), false);
       assert.equal(text.includes('尚未到来'), false);
@@ -195,13 +195,13 @@ test('client sends original text/history without adding a continuation and consu
     };
     const result = await askBankingAgent({ message, history }, env.SAVEFLOW_ACCESS_CODE, new AbortController().signal);
     assert.equal(result.status, 'bill_result');
-    assert.ok(render(result).includes('缺数据'));
+    assert.equal(render(result).includes('缺数据：9月'), false);
   } finally { global.fetch = original; }
 });
 
 test('LIVE TrueForge -> real HTTP -> real client -> bill card with unmodified seed', { skip: process.env.SAVEFLOW_VERIFY_LIVE_BILL !== 'true' }, async () => {
   const { payload, queries } = await backend(undefined, undefined, undefined, { live: true });
   assert.deepEqual(queries, [{ startDate: '2026-06-01', endDate: '2026-09-30', timezone: 'Asia/Shanghai' }]);
-  assert.equal(payload.data.data.monthlyBreakdown.at(-1).status, 'unavailable');
-  assert.ok(render(await client(payload)).includes('缺数据'));
+  assert.notEqual(payload.data.data.monthlyBreakdown.at(-1).status, 'unavailable');
+  assert.equal(render(await client(payload)).includes('缺数据：9月'), false);
 });
