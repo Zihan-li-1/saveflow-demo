@@ -31,10 +31,6 @@ services:
     environment:
       DATABASE_URL: postgresql://saveflow_web:local-synthetic-web-only@pilot-db:5432/saveflow_web
       ALLOW_EPHEMERAL_BANKING: "false"
-      # 演示专用：固定 OTP 验证码 123456（合成演示，非真实短信/银行级 MFA；口头告知、界面不展示）。
-      # 仅在本地演示打开；部署到真实/类生产环境时必须移除或置 false。
-      SAVEFLOW_DEMO_OTP_ENABLED: "true"
-      SAVEFLOW_DEMO_OTP_CODE: "123456"
     depends_on:
       pilot-migrate:
         condition: service_completed_successfully

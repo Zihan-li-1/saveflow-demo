@@ -344,13 +344,13 @@ export async function createPostgresBankingCore({ connectionString, source = see
 }
 
 export async function getConfiguredBankingCore(env = process.env) {
-  // 演示固定验证码只能明确限制在合成演示环境：
-  //  - 本地临时演示（无 DATABASE_URL 且非 Netlify）默认允许固定码（DEMO_OTP_CODE，口头告知）；
-  //  - 任何持久化 / Netlify / 类生产配置，必须显式 SAVEFLOW_DEMO_OTP_ENABLED=true 才允许固定码；
+  // 演示固定验证码只在本项目「本地演示」环境启用：
+  //  - 本地（非 Netlify）默认允许固定码（DEMO_OTP_CODE，口头告知），无论是否连接 Core 库；
+  //  - Netlify（线上）必须显式 SAVEFLOW_DEMO_OTP_ENABLED=true 才允许固定码，
   //    否则不注入固定码 → OTP 使用随机码且无投递渠道 → 校验不可能成功 → 执行能力保持关闭（安全失败）。
   const explicitDemoOtp = env.SAVEFLOW_DEMO_OTP_ENABLED === 'true';
-  const localEphemeralDemo = !env.DATABASE_URL && !env.NETLIFY;
-  const demoOtpCode = (explicitDemoOtp || localEphemeralDemo) ? (env.SAVEFLOW_DEMO_OTP_CODE || DEMO_OTP_CODE) : undefined;
+  const localDemo = !env.NETLIFY;
+  const demoOtpCode = (explicitDemoOtp || localDemo) ? (env.SAVEFLOW_DEMO_OTP_CODE || DEMO_OTP_CODE) : undefined;
   if (!env.DATABASE_URL) {
     if (env.NETLIFY && env.ALLOW_EPHEMERAL_BANKING !== 'true') throw Object.assign(new Error('DATABASE_URL is required for Netlify banking persistence'), { code: 'DATABASE_NOT_CONFIGURED' });
     if (demoOtpCode) {
