@@ -69,8 +69,9 @@ foreach ($name in $required) {
 }
 $health = Invoke-RestMethod "$webUrl/healthz"
 $version = Invoke-RestMethod "$webUrl/version"
-$imageSha = (docker inspect --format '{{ index .Config.Labels "org.openai.saveflow.git-sha" }}' 'saveflow-local-check-web-1').Trim()
-$imageDirty = (docker inspect --format '{{ index .Config.Labels "org.openai.saveflow.git-dirty" }}' 'saveflow-local-check-web-1').Trim()
+$labels = docker inspect --format '{{json .Config.Labels}}' 'saveflow-local-check-web-1' | ConvertFrom-Json
+$imageSha = [string]$labels.'org.openai.saveflow.git-sha'
+$imageDirty = [string]$labels.'org.openai.saveflow.git-dirty'
 if ($health.ok -ne $true -or $version.gitSha -ne $githubSha -or $version.gitDirty -ne 'false' -or $imageSha -ne $githubSha -or $imageDirty -ne 'false') { Fail "version/health mismatch: GitHub=$githubSha web=$($version.gitSha) dirty=$($version.gitDirty) image=$imageSha imageDirty=$imageDirty" }
 
 Write-Output "Deployment succeeded"
