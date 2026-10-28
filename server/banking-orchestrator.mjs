@@ -143,9 +143,13 @@ function nextMissingSlot(intent) {
 export async function runBankingConversation(body, {
   core, repository = core.repository, env = process.env, now = Date.now, timezone = 'Asia/Shanghai',
   parseIntent, initialIntent, expectedAction, fetchImpl = fetch, requestId = crypto.randomUUID(), origin = 'user_requested', scenarioHandler, scenarioScope = 'fixed_mock_user', savingsAdvisor = requestSavingsAdvice, conversation, resumeOnly = false,
+  onDiagnostic = () => {},
 }) {
   let replyContext = {};
-  const reply = (httpStatus, code, message, data) => ({ httpStatus, code, message, data, replyContext });
+  const reply = (httpStatus, code, message, data) => {
+    try { onDiagnostic({ event: 'agent_dispatch', action: data?.action || 'unknown', status: data?.status || 'unknown', enteredBusinessRoute: !['unsupported', 'error'].includes(data?.status), skippedModelReason: data?.status === 'cancelled' ? 'explicit_cancel' : undefined }); } catch { /* diagnostics are observational */ }
+    return { httpStatus, code, message, data, replyContext };
+  };
   const wealthReadHandler = (raw, financialContext) => createWealthSkill(repository)(raw, financialContext ? { financialContext } : {});
   const wealthHandler = async raw => {
     const extended = ['wealth.subscribe', 'wealth.redeem'].includes(raw.action) ||
