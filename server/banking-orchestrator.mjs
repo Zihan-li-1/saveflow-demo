@@ -220,7 +220,17 @@ export async function runBankingConversation(body, {
     if (continuation.conversation && !conversation) throw Object.assign(new Error('HTTP task credential cannot cross adapters'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
     replyContext = { slots: continuation.slots };
     if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:确认|确认转账|确认执行|执行|同意)[。！!]?\s*$/.test(body.message.trim())) throw inputError('CONFIRMATION_REQUIRED', '聊天文字不能确认执行，请在页面核对预览并完成所需确认与验证。', 403);
-    if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:取消|取消操作|取消本次操作|不用了)[。！!]?\s*$/.test(body.message.trim())) return reply(200, 'OK', '本次会话已取消，未执行资金或卡片操作。', { status: 'cancelled', action: continuation.action });
+    if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:取消|取消(?:本次)?(?:转账|操作)|不用了)[。！!]?\s*$/.test(body.message.trim())) {
+      if (conversation?.taskControl) {
+        const controlled = await conversation.taskControl({ kind: 'task_control', control: { command: 'undo', target: 'current' } });
+        if (controlled.status === 'cancelled') return reply(200, 'OK', '本次转账已取消，未执行资金操作。', { status: 'cancelled', action: continuation.action });
+        if (controlled.status === 'blocked') return reply(409, 'CONVERSATION_OPERATION_LOCKED', '这笔转账正在核实中，暂时不能撤回。为避免重复扣款，请先查询转账结果。', { status: 'operation_status_unknown', action: continuation.action, nextAction: 'query_status' });
+        if (controlled.status === 'already_succeeded') return reply(409, 'CONVERSATION_TASK_FINISHED', '这笔转账已经完成，不能通过聊天撤回。', { status: 'completed', action: continuation.action, nextAction: 'query_status' });
+        if (controlled.status === 'needs_clarification') return reply(200, 'NEEDS_CLARIFICATION', '请说明要取消哪一笔尚未完成的业务。', { status: 'needs_clarification', action: continuation.action });
+        return reply(409, 'CONVERSATION_TASK_FINISHED', '这笔转账已结束，无法重复取消。', { status: 'ended', action: continuation.action });
+      }
+      return reply(200, 'OK', '本次会话已取消，未执行资金或卡片操作。', { status: 'cancelled', action: continuation.action });
+    }
     if (expectedAction && continuation.action !== expectedAction) throw Object.assign(new Error('续接凭据与当前工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
     if (body.planInputs !== undefined) {
       if (continuation.action !== 'orchestrator.goal' || continuation.pendingSlot !== '__plan_inputs' || !continuation.slots.amount || !continuation.slots.deadline) throw inputError('CONTINUATION_INVALID', '储蓄数据与当前目标不匹配', 400);
