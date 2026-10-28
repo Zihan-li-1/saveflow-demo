@@ -4,7 +4,7 @@ import { verifyContinuationToken, issueContinuationToken } from '../src/agent/cl
 import { validateParsedIntent } from '../src/agent/validate-parsed-intent.mjs';
 import { buildParsedIntent } from '../src/agent/clarification/merge-intent.mjs';
 import { canonical } from '../src/banking-core/errors.mjs';
-import { buildTrustedTaskContext, handleAgentTaskControl } from './agent-task-control.mjs';
+import { handleTaskControl, validateTaskControlProposal } from './agent-task-control.mjs';
 
 const stores = new WeakMap();
 const active = task => task && ['ready', 'awaiting_input', 'awaiting_confirmation'].includes(task.status);
@@ -79,7 +79,7 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
   const refresh = async references => {
     for (const ref of references) await commit({ type: 'observe_operation', operationId: ref.operationId });
   };
-  const locked = ref => { throw error('CONVERSATION_OPERATION_LOCKED', '原操作已确认、正在执行或结果待核实，已查询原操作状态，请保留原编号继续核实，不能修改或重复提交。',
+  const locked = ref => { throw error('CONVERSATION_OPERATION_LOCKED', '您的转账请求已收到，但我们暂时无法确认最终结果。为避免重复扣款，请先查询转账结果，暂时不要重新发起相同转账。',
     { operationId: ref.operationId, action: ref.action, uncertain: true }); };
   const guardTask = async id => {
     await refresh(state.operationReferences.filter(ref => ref.taskId === id));
@@ -93,6 +93,58 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
     await refresh(state.operationReferences.filter(ref => !['succeeded', 'failed', 'cancelled'].includes(ref.coreState)));
     const blocked = state.operationReferences.find(ref => protectedStates.has(ref.coreState));
     if (blocked) locked(blocked);
+  };
+  const taskReference = task => state.operationReferences.filter(ref => ref.taskId === task.taskId).at(-1);
+  const controlTask = async (control) => {
+    const normalized = validateTaskControlProposal({ kind: 'task_control', control }).control;
+    const initialCurrent = state.currentTask;
+    const initialCandidates = [
+      ...(initialCurrent ? [initialCurrent] : []),
+      ...state.suspendedTasks,
+    ].filter(task => active(task) || task.status === 'suspended');
+    let selectedTaskId;
+    if (normalized.target === 'current') selectedTaskId = initialCurrent?.taskId;
+    else if (initialCandidates.length === 1) selectedTaskId = initialCandidates[0].taskId;
+    else if (initialCandidates.length > 1) return { status: 'needs_clarification', code: 'TASK_CONTROL_AMBIGUOUS', nextAction: 'choose_task' };
+    await refresh(state.operationReferences.filter(ref => !['succeeded', 'failed', 'cancelled'].includes(ref.coreState)));
+    const task = selectedTaskId && (state.currentTask?.taskId === selectedTaskId
+      ? state.currentTask
+      : state.suspendedTasks.find(item => item.taskId === selectedTaskId));
+    const historicalReference = selectedTaskId && state.operationReferences.filter(ref => ref.taskId === selectedTaskId).at(-1);
+    if (!task && historicalReference?.coreState === 'succeeded') return { status: 'already_succeeded', code: 'TASK_ALREADY_SUCCEEDED', nextAction: 'new_task' };
+    if (!task) return { status: 'not_found', code: 'TASK_NOT_FOUND', nextAction: 'start_new' };
+
+    const ref = taskReference(task);
+    if (ref?.coreState === 'succeeded') return { status: 'already_succeeded', code: 'TASK_ALREADY_SUCCEEDED', nextAction: 'new_task' };
+    if (!active(task) && task.status !== 'suspended') return { status: 'already_ended', code: 'TASK_ALREADY_ENDED', nextAction: 'start_new' };
+    if (ref && protectedStates.has(ref.coreState)) {
+      if (normalized.command === 'undo') return { status: 'blocked', code: 'TASK_OPERATION_UNCERTAIN', nextAction: 'query_status' };
+      return { status: 'blocked', code: 'TASK_OPERATION_UNCERTAIN', nextAction: 'query_status' };
+    }
+    if (normalized.command === 'undo') {
+      if (ref?.coreState === 'awaiting_confirmation') {
+        if (typeof core.decide !== 'function') return { status: 'blocked', code: 'TASK_CANCEL_UNAVAILABLE', nextAction: 'query_status' };
+        let decision;
+        try {
+          decision = await core.decide(ref.operationId, { previewHash: ref.previewHash, decision: 'reject', confirmedStepIds: [] });
+        } catch {
+          return { status: 'blocked', code: 'TASK_CANCEL_UNCERTAIN', nextAction: 'query_status' };
+        }
+        if (!decision?.ok || decision.data?.state !== 'cancelled') return { status: 'blocked', code: 'TASK_CANCEL_UNCERTAIN', nextAction: 'query_status' };
+        await commit({ type: 'observe_operation', operationId: ref.operationId });
+        return { status: 'cancelled', code: 'TASK_CANCELLED', nextAction: 'start_new' };
+      }
+      if (ref && !['failed', 'cancelled'].includes(ref.coreState)) return { status: 'blocked', code: 'TASK_CANCEL_UNCERTAIN', nextAction: 'query_status' };
+      if (state.currentTask?.taskId === task.taskId || state.suspendedTasks.some(item => item.taskId === task.taskId)) {
+        await commit({ type: 'end_task', taskId: task.taskId, outcome: 'cancelled' });
+        return { status: 'cancelled', code: 'TASK_CANCELLED', nextAction: 'start_new' };
+      }
+      return { status: 'already_ended', code: 'TASK_ALREADY_ENDED', nextAction: 'start_new' };
+    }
+
+    if (ref && !['failed', 'cancelled'].includes(ref.coreState)) return { status: 'blocked', code: 'TASK_OPERATION_UNCERTAIN', nextAction: 'query_status' };
+    if (task.status === 'suspended') await commit({ type: 'resume_task', taskId: task.taskId, suspendCurrent: true });
+    return { status: 'ready', code: normalized.command === 'modify' ? 'TASK_READY_TO_MODIFY' : 'TASK_READY_TO_RESUME', nextAction: normalized.command };
   };
   return {
     body: workflowBody,
@@ -142,35 +194,6 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
         throw error('CONTINUATION_INVALID', '补充、选择或恢复任务需要有效的原任务续接凭据。', { status: 400 });
       }
     },
-    /** Bounded model context derived only from server-owned state; never an authorization object. */
-    taskContextSummary() {
-      state = store.read(token);
-      return buildTrustedTaskContext(state);
-    },
-    /** V2-compatible control entry. Task identity and Core references never come from the proposal. */
-    async handleTaskControl(proposal) {
-      const result = await handleAgentTaskControl(proposal, {
-        readState: () => state,
-        transition: command => commit(command),
-        hasValidContinuation: task => !!continuation && continuation.conversation?.token === token &&
-          continuation.conversation.taskId === task.taskId && continuation.action === task.action &&
-          continuation.tokenId === task.latestContinuationId && continuation.expiresAt > now(),
-        rejectPreview: async reference => {
-          const decision = await core.decide(reference.operationId, {
-            previewHash: reference.previewHash,
-            decision: 'reject',
-            confirmedStepIds: [],
-          });
-          if (!decision.ok) throw error(decision.error.code, decision.error.message, {
-            operationId: reference.operationId,
-            action: reference.action,
-            uncertain: decision.error.uncertain === true,
-          });
-        },
-      });
-      accepted = true;
-      return result;
-    },
     async acceptIntent(proposal, modelOptions) {
       let intent = proposal;
       if (intent.action === 'unsupported') return intent;
@@ -199,6 +222,18 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
       if (!accepted || !active(state.currentTask)) throw error('CONVERSATION_INVALID_TRANSITION');
       await guardWrites();
       return core.prepare(request);
+    },
+    taskSummary() {
+      try { state = store.read(token); return store.taskSummary(token); } catch { return undefined; }
+    },
+    async controlTask(control) {
+      return controlTask(control);
+    },
+    async taskControl(proposal) {
+      return handleTaskControl(proposal, {
+        getTaskSummary: () => store.taskSummary(token),
+        controlTask,
+      });
     },
     async finish(result) {
       const data = result.data;

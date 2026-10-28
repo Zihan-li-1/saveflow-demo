@@ -2,22 +2,6 @@ import type { ActionResult, ActionState, OperationStatus } from '../src/banking-
 import type { ParsedIntent } from '../src/agent/parsed-intent';
 
 export type TaskStatus = 'ready' | 'awaiting_input' | 'awaiting_confirmation' | 'suspended' | 'completed' | 'cancelled' | 'failed' | 'expired';
-export type TrustedTaskSummary = {
-  action: string;
-  status: TaskStatus;
-  pendingSlots: string[];
-  verifiedContext?: Record<string, unknown>;
-  operationStates?: ActionState[];
-};
-export type TrustedTaskContext = {
-  currentTask: TrustedTaskSummary | null;
-  previousTasks: TrustedTaskSummary[];
-  recentResults: Array<{ action: string; status: Extract<ActionState, 'succeeded' | 'failed' | 'cancelled'> }>;
-};
-export type TaskControlProposal = {
-  kind: 'task_control';
-  control: { command: 'cancel' | 'undo' | 'modify' | 'resume'; target: 'current' | 'previous' };
-};
 export type ConversationTask = {
   taskId: string;
   action: string;
@@ -55,6 +39,28 @@ export type ConversationState = {
   updatedAt: number;
   expiresAt: number;
 };
+export type TaskSummaryItem = {
+  action: string;
+  status: TaskStatus;
+  pendingSlots: string[];
+  verifiedSlots: Record<string, unknown>;
+  operationState: ActionState | null;
+  hasOperation: boolean;
+};
+export type TaskSummary = {
+  currentTask: TaskSummaryItem | null;
+  previousTasks: TaskSummaryItem[];
+  recentOperations: Array<{
+    action: string;
+    state: ActionState;
+    outcome: 'pending' | 'succeeded' | 'failed' | 'cancelled';
+    hasReceipt: boolean;
+  }>;
+};
+export type TaskControlCommand = 'undo' | 'resume' | 'modify';
+export type TaskControlTarget = 'current' | 'previous';
+export type TaskControl = { command: TaskControlCommand; target: TaskControlTarget };
+export type TaskControlProposal = { kind: 'task_control'; control: TaskControl };
 export type ConversationCommand =
   | { type: 'start_task'; intent: ParsedIntent; continuationExpiresAt?: number; suspendCurrent?: boolean }
   | { type: 'update_task'; taskId: string; intent: ParsedIntent; continuationExpiresAt?: number }
@@ -67,6 +73,7 @@ export type ConversationCommand =
 export interface ConversationStore {
   create(): { conversationToken: string; state: ConversationState };
   read(conversationToken: string): ConversationState;
+  taskSummary(conversationToken: string): TaskSummary;
   transition(conversationToken: string, expectedRevision: number, command: ConversationCommand): Promise<ConversationState>;
   cleanup(): { conversationsRemoved: number; tasksExpired: number };
 }

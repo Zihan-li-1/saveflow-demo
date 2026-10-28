@@ -14,6 +14,7 @@ import { requestSavingsAdvice, verifySavingsAdvice } from './savings-advisor.mjs
 import { understandingContext } from './understanding-context.mjs';
 import { collectSavingsData } from './savings-data.mjs';
 import { buildFinancialAnalysisContext } from './financial-analysis-context.mjs';
+import { purchaseNeedsReservation, purchaseMissingQuestions } from '../src/lib/purchase-flow.mjs';
 
 const scenarioStores = new Map();
 const transferTypeChoices = [
@@ -83,29 +84,6 @@ function questionFor(action, slot, message, slots = {}) {
 
 function continuationSecret(env) {
   return env.CONTINUATION_TOKEN_SECRET;
-}
-
-// Narrow compatibility path. Richer wording belongs to the V2 understanding layer;
-// these exact phrases only bridge existing clients to the same server control entry.
-function deterministicTaskControl(message) {
-  if (typeof message !== 'string') return null;
-  const text = message.trim();
-  if (/^(?:取消|取消操作|取消本次操作|取消转账|不用了)[。！!]?$/.test(text)) {
-    return { kind: 'task_control', control: { command: 'cancel', target: 'current' } };
-  }
-  if (/^(?:撤回上一步操作|撤销上一步操作)[。！!]?$/.test(text)) {
-    return { kind: 'task_control', control: { command: 'undo', target: 'previous' } };
-  }
-  return null;
-}
-
-function taskControlReply(reply, result) {
-  if (result.status === 'cancelled') return reply(200, 'OK', result.previewRejected ? '已取消当前任务并使未确认预览失效。' : '已取消当前未完成任务。', result);
-  if (result.status === 'needs_clarification') return reply(200, 'NEEDS_CLARIFICATION', '存在多个仍可处理的任务，请明确要操作哪一个。', result);
-  if (result.status === 'query_required') return reply(409, 'CONVERSATION_OPERATION_LOCKED', '原操作已确认、正在执行或状态待核实，不能直接撤回；请先查询实际状态。', result);
-  if (result.status === 'cannot_undo_completed') return reply(409, 'CONVERSATION_TASK_FINISHED', '原操作已经执行成功，不能通过聊天直接撤回金融交易。', result);
-  if (result.status === 'needs_continuation') return reply(409, 'CONTINUATION_INVALID', '该任务需要使用仍有效的续接凭据继续。', result);
-  return reply(200, 'NO_ACTIVE_TASK', '当前没有可操作的未完成任务。', result);
 }
 
 function tokenError(error) {
@@ -237,20 +215,23 @@ export async function runBankingConversation(body, {
       error: { code, message }, ...(recovery ? { recovery } : {}) });
   };
   try {
-  const controlProposal = deterministicTaskControl(body.message);
-  if (!continuing && controlProposal && conversation) {
-    return taskControlReply(reply, await conversation.handleTaskControl(controlProposal));
-  }
   if (continuing) {
     try { continuation = verifyContinuationToken(body.continuationToken, continuationSecret(env), now()); }
     catch (error) { throw tokenError(error); }
     if (continuation.conversation && !conversation) throw Object.assign(new Error('HTTP task credential cannot cross adapters'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
     replyContext = { slots: continuation.slots };
     if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:确认|确认转账|确认执行|执行|同意)[。！!]?\s*$/.test(body.message.trim())) throw inputError('CONFIRMATION_REQUIRED', '聊天文字不能确认执行，请在页面核对预览并完成所需确认与验证。', 403);
-    if (continuation.pendingSlot !== '__scenario_confirmation' && controlProposal && conversation) {
-      return taskControlReply(reply, await conversation.handleTaskControl(controlProposal));
+    if (continuation.pendingSlot !== '__scenario_confirmation' && body.message && /^(?:取消|取消(?:本次)?(?:转账|操作)|不用了)[。！!]?\s*$/.test(body.message.trim())) {
+      if (conversation?.taskControl) {
+        const controlled = await conversation.taskControl({ kind: 'task_control', control: { command: 'undo', target: 'current' } });
+        if (controlled.status === 'cancelled') return reply(200, 'OK', '本次转账已取消，未执行资金操作。', { status: 'cancelled', action: continuation.action });
+        if (controlled.status === 'blocked') return reply(409, 'CONVERSATION_OPERATION_LOCKED', '这笔转账正在核实中，暂时不能撤回。为避免重复扣款，请先查询转账结果。', { status: 'operation_status_unknown', action: continuation.action, nextAction: 'query_status' });
+        if (controlled.status === 'already_succeeded') return reply(409, 'CONVERSATION_TASK_FINISHED', '这笔转账已经完成，不能通过聊天撤回。', { status: 'completed', action: continuation.action, nextAction: 'query_status' });
+        if (controlled.status === 'needs_clarification') return reply(200, 'NEEDS_CLARIFICATION', '请说明要取消哪一笔尚未完成的业务。', { status: 'needs_clarification', action: continuation.action });
+        return reply(409, 'CONVERSATION_TASK_FINISHED', '这笔转账已结束，无法重复取消。', { status: 'ended', action: continuation.action });
+      }
+      return reply(200, 'OK', '本次会话已取消，未执行资金或卡片操作。', { status: 'cancelled', action: continuation.action });
     }
-    if (continuation.pendingSlot !== '__scenario_confirmation' && controlProposal) return reply(200, 'OK', '本次会话已取消，未执行资金或卡片操作。', { status: 'cancelled', action: continuation.action });
     if (expectedAction && continuation.action !== expectedAction) throw Object.assign(new Error('续接凭据与当前工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
     if (body.planInputs !== undefined) {
       if (continuation.action !== 'orchestrator.goal' || continuation.pendingSlot !== '__plan_inputs' || !continuation.slots.amount || !continuation.slots.deadline) throw inputError('CONTINUATION_INVALID', '储蓄数据与当前目标不匹配', 400);
@@ -372,9 +353,19 @@ export async function runBankingConversation(body, {
   replyContext = { slots: parsed.slots };
   if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
   if (!continuing && parsed.choice) throw inputError('INVALID_CHOICE', '当前请求没有可选择的候选项', 400);
-  if (parsed.action === 'scenario.plan_purchase') return reply(200, 'OK', '请在购物流程中补齐预算和日期，再选择问答搭配或商品自选。', {
-    status: 'purchase_request', action: parsed.action, data: { slots: parsed.slots, synthetic_demo_only: true },
-  });
+  if (parsed.action === 'scenario.plan_purchase') {
+    const purchaseSlots = parsed.slots ?? {};
+    const needsReservation = purchaseNeedsReservation(purchaseSlots);
+    const missing = needsReservation ? purchaseMissingQuestions(purchaseSlots) : [];
+    const purchaseMessage = !needsReservation
+      ? '已解析你的购物需求并生成平台搜索链接。按现在就买处理，不预留预算、不设置提醒。'
+      : missing.length
+        ? `已解析你的购物需求并生成平台搜索链接。你提到了预留或时间，需要完整预算与提醒流程；还差：${missing.map(item => item.question).join('；')}`
+        : '已解析你的购物需求并生成平台搜索链接。已按你提到的信息进入预算与提醒流程，请核对并保存。';
+    return reply(200, 'OK', purchaseMessage, {
+      status: 'purchase_request', action: parsed.action, data: { slots: parsed.slots, synthetic_demo_only: true },
+    });
+  }
   if (parsed.action === 'orchestrator.goal' && (parsed.slots.amount || parsed.slots.deadline)) {
     for (const slot of ['amount', 'deadline']) if (!parsed.slots[slot]) return clarificationResponse(reply, { action: parsed.action, slot, question: questionFor(parsed.action, slot, body.message, parsed.slots), slots: parsed.slots, env, now });
     const currentDate = understandingContext({ now, timezone }).currentDate;
