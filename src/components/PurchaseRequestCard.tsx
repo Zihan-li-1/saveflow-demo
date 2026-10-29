@@ -95,6 +95,11 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
   ].filter(Boolean);
   const cardOptions = cards.length ? cards : ['娱乐虚拟卡', '日常虚拟卡'];
 
+  // 日期已过去：只回一句，不再展开任何信息或表单。
+  if (datePast) return <section aria-label="购物请求">
+    <p role="alert" style={{ margin: '12px 0 0' }}>所选日期已过去</p>
+  </section>;
+
   return <section aria-label="购物请求">
     {links.length > 0 && <div style={{ display: 'grid', gap: 6 }}>
       {links.map(link => <article key={link.category}>
@@ -144,7 +149,6 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
         <input aria-label="开始时间" type="time" value={startTime} onChange={event => setStartTime(event.target.value)} style={inputStyle} />–
         <input aria-label="结束时间" type="time" value={endTime} onChange={event => setEndTime(event.target.value)} style={inputStyle} />
       </div>
-      {datePast && <p role="alert">所选日期 {dateText} 已经过去，请改成今天（{today}）或之后的时间。</p>}
       {need('date_meaning') && <div style={fieldStyle}><span>届时怎么处理？ </span>
         {(['提醒我下单', '希望送达'] as const).map(option => {
           const value = option === '提醒我下单' ? 'order_on' as const : 'deliver_on' as const;
