@@ -358,18 +358,23 @@ export async function runBankingConversation(body, {
   if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
   if (!continuing && parsed.choice) throw inputError('INVALID_CHOICE', '当前请求没有可选择的候选项', 400);
   if (parsed.action === 'scenario.plan_purchase') {
-    const purchaseSlots = normalizePurchaseSlots(parsed.slots ?? {}, understandingContext({ now, timezone }).currentDate);
+    const currentDate = understandingContext({ now, timezone }).currentDate;
+    const purchaseSlots = normalizePurchaseSlots(parsed.slots ?? {}, currentDate);
     const needsReservation = purchaseNeedsReservation(purchaseSlots);
     const missing = needsReservation ? purchaseMissingQuestions(purchaseSlots) : [];
+    // 日期已过去时不再给别的话，卡片只显示「所选日期已过去」。
+    const purchaseDate = /^(\d{4}-\d{2}-\d{2})/.exec(purchaseSlots.date_expression ?? '')?.[1] ?? '';
+    const datePassed = purchaseDate !== '' && purchaseDate < currentDate;
     let fundingCardOptions = [];
     if (missing.some(item => item.field === 'funding_account_ref') && typeof repository.getCards === 'function') {
       try { fundingCardOptions = (await repository.getCards()).filter(card => card.status === 'active').map(card => card.name); } catch { /* 卡片选项不可用时不阻塞主流程 */ }
     }
-    const purchaseMessage = !needsReservation
-      ? '已生成平台搜索链接。按现在就买处理，不预留预算、不设置提醒。'
-      : missing.length
-        ? '已生成平台搜索链接。预留预算还差几项信息，请在下方选择或补充。'
-        : '已生成平台搜索链接。预算与提醒信息已齐，请在下方卡片核对并确认预留。';
+    const purchaseMessage = datePassed ? ''
+      : !needsReservation
+        ? '已生成平台搜索链接。按现在就买处理，不预留预算、不设置提醒。'
+        : missing.length
+          ? '已生成平台搜索链接。预留预算还差几项信息，请在下方选择或补充。'
+          : '已生成平台搜索链接。预算与提醒信息已齐，请在下方卡片核对并确认预留。';
     return reply(200, 'OK', purchaseMessage, {
       status: 'purchase_request', action: parsed.action, data: {
         slots: purchaseSlots, synthetic_demo_only: true,
