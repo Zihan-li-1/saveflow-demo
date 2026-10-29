@@ -151,6 +151,9 @@ export async function parseBankingIntent(
 ) {
   validateInput(message, history);
   const settings = bankingModelConfig(env);
+  const modelStartedAt = Date.now();
+  const diagnostic = (event, fields = {}) => { try { onDiagnostic({ event, provider: 'qwen', model: settings.model, requestId, ...fields }); } catch { /* diagnostics are observational */ } };
+  diagnostic('agent_model_request', { historyCount: history.length, hasContext: !!context });
   const report = (reason, validationRule = undefined) => {
     const entry = {
       event: 'banking_intent_validation_failed', schemaVersion: '1.0.0', reason,
@@ -194,5 +197,13 @@ export async function parseBankingIntent(
     report('invalid_response_json');
     throw new BankingIntentParserError('MODEL_FORMAT_ERROR', '模型响应格式无效。');
   }
-  return parseModelResponse(payload, report);
+  try {
+    const result = parseModelResponse(payload, report);
+    diagnostic('agent_intent_validation', { jsonParsed: true, schemaValid: true, action: result.action });
+    diagnostic('agent_model_response', { completed: true, success: true, durationMs: Date.now() - modelStartedAt });
+    return result;
+  } catch (error) {
+    diagnostic('agent_model_response', { completed: true, success: false, durationMs: Date.now() - modelStartedAt, errorCategory: error?.code || 'format_or_validation' });
+    throw error;
+  }
 }

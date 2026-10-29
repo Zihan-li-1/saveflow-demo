@@ -63,6 +63,7 @@ export type TaskControl = { command: TaskControlCommand; target: TaskControlTarg
 export type TaskControlProposal = { kind: 'task_control'; control: TaskControl };
 export type ConversationCommand =
   | { type: 'start_task'; intent: ParsedIntent; continuationExpiresAt?: number; suspendCurrent?: boolean }
+  | { type: 'start_plan'; goal: string; constraints?: Record<string, unknown>; continuationExpiresAt?: number; suspendCurrent?: boolean }
   | { type: 'update_task'; taskId: string; intent: ParsedIntent; continuationExpiresAt?: number }
   | { type: 'suspend_task'; taskId: string }
   | { type: 'resume_task'; taskId: string; suspendCurrent?: boolean }

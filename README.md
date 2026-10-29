@@ -1,6 +1,12 @@
 # SaveFlow Demo
 
-本地 Docker 运行方式与实际检测结果见 [Docker 检测报告](docs/docker-test-report.md)。容器网页：http://127.0.0.1:4300/。该报告为历史环境记录，不能代替当前统一 Banking 流程的部署验收。
+本地 Docker 运行方式与实际检测结果见 [Docker 检测报告](docs/docker-test-report.md)。正式本地网页入口固定为：http://localhost:4300/。该报告为历史环境记录，不能代替当前统一 Banking 流程的部署验收。
+
+## 一键更新
+
+在本目录运行 `powershell.exe -ExecutionPolicy Bypass -File .\scripts\Update-SaveFlow.ps1`。脚本会拒绝带未提交修改的部署目录，拉取 `origin/main`，执行持久化数据库迁移，重建并启动 Web、MCP、Bridge，核对 `/healthz`、`/version` 与镜像 Git SHA，成功后自动打开 `http://localhost:4300`。
+
+版本核验接口为 `http://localhost:4300/version`。只有 GitHub `origin/main`、部署目录 `HEAD`、运行 Web 镜像 label 和接口返回的 SHA 全部一致且健康检查通过时，脚本才输出“部署成功”。
 
 本轮分支推送、Draft PR 与 Netlify 预览结果见 [部署预览验收](docs/netlify-preview-report.md)。预览构建成功，当前业务验收被 Netlify 登录保护拦截。
 

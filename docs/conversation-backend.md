@@ -11,7 +11,7 @@
 | conversationToken | 服务端生成的不透明会话令牌。不能提交内部 conversationId。 |
 | conversationRevision | 客户端最后看到的版本；不匹配时返回 409。旧调用方可暂不发送，但仍受服务端互斥与最新续接凭据校验。 |
 | taskId | continue/resume 时匹配原任务；显式 resume 必须提供。不是执行授权。 |
-| taskMode | auto（默认）、new、continue、resume、sync。 |
+| taskMode | auto（默认）、new、plan、continue、resume、sync。`plan` 仅进入只读规划循环。 |
 
 首次正常请求不带会话字段，返回 `data.conversation`：token、revision、expiresAt、currentTask、suspendedTasks、operationReferences。任务摘要仅含 taskId、action、status、expiresAt；操作摘要仅含 operationId、taskId、coreState。没有向浏览器返回权威槽位快照、已选实体、确认决定或执行权限。
 

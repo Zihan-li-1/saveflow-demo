@@ -1,0 +1,17 @@
+{
+  "understanding": "real configured model",
+  "browser": "Chrome",
+  "results": [
+    {
+      "status": "awaiting_confirmation",
+      "typingVisible": true,
+      "inputEnabled": false
+    }
+  ],
+  "writes": {
+    "decide": 0,
+    "execute": 0
+  },
+  "pageErrors": 0,
+  "reproduced": true
+}

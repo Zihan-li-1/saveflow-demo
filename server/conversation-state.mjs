@@ -252,9 +252,10 @@ export function createConversationStore(options = {}) {
       const { key, state: original, at } = lookup(token);
       if (original.revision !== expectedRevision) fail('CONVERSATION_REVISION_CONFLICT');
       const state = structuredClone(original);
-      fields(command, ['type', 'taskId', 'intent', 'continuationExpiresAt', 'suspendCurrent', 'outcome', 'operationId', 'tokenId', 'expiresAt', 'pendingSlot', 'awaitingInput']);
+      fields(command, ['type', 'taskId', 'intent', 'goal', 'constraints', 'continuationExpiresAt', 'suspendCurrent', 'outcome', 'operationId', 'tokenId', 'expiresAt', 'pendingSlot', 'awaitingInput']);
       const allowed = {
         start_task: ['type', 'intent', 'continuationExpiresAt', 'suspendCurrent'], update_task: ['type', 'taskId', 'intent', 'continuationExpiresAt'],
+        start_plan: ['type', 'goal', 'constraints', 'continuationExpiresAt', 'suspendCurrent'],
         suspend_task: ['type', 'taskId'], resume_task: ['type', 'taskId', 'suspendCurrent'], end_task: ['type', 'taskId', 'outcome'],
         attach_preview: ['type', 'taskId', 'operationId'], observe_operation: ['type', 'operationId'],
         set_continuation: ['type', 'taskId', 'tokenId', 'expiresAt', 'pendingSlot', 'awaitingInput'],
@@ -271,6 +272,22 @@ export function createConversationStore(options = {}) {
           if (state.suspendedTasks.length + 1 > maxTasks) fail('CONVERSATION_TASK_CAPACITY');
           state.currentTask = { taskId: `task_${randomUUID()}`, action: value.action, status: value.pending.length ? 'awaiting_input' : 'ready',
             resumeStatus: null, verifiedSlots: value.slots, pendingSlots: value.pending, continuationExpiresAt: deadline(state, command.continuationExpiresAt, at), latestContinuationId: null,
+            previewOperationId: null, operationReferences: [], revision: 1, createdAt: at, updatedAt: at };
+          break;
+        }
+        case 'start_plan': {
+          if (typeof command.goal !== 'string' || !command.goal.trim() || command.goal.length > 2000 ||
+              (command.constraints !== undefined && (!command.constraints || typeof command.constraints !== 'object' || Array.isArray(command.constraints)))) fail('CONVERSATION_INVALID_INPUT');
+          try {
+            jsonData(command.constraints ?? {});
+            const encoded = JSON.stringify(command.constraints ?? {});
+            if (!encoded || encoded.length > 8192) fail('CONVERSATION_INVALID_INPUT');
+          } catch { fail('CONVERSATION_INVALID_INPUT'); }
+          suspendCurrent(state, command.suspendCurrent, at);
+          if (state.suspendedTasks.length + 1 > maxTasks) fail('CONVERSATION_TASK_CAPACITY');
+          state.currentTask = { taskId: `task_${randomUUID()}`, action: 'planning.read_only', status: 'ready',
+            resumeStatus: null, verifiedSlots: { goal: command.goal, constraints: structuredClone(command.constraints ?? {}) }, pendingSlots: [],
+            continuationExpiresAt: deadline(state, command.continuationExpiresAt, at), latestContinuationId: null,
             previewOperationId: null, operationReferences: [], revision: 1, createdAt: at, updatedAt: at };
           break;
         }

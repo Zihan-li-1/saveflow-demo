@@ -51,7 +51,7 @@ test('real HTTP bill includes September seed data in the same client and card', 
   assert.equal(turns[0].userMessage, '查看今年六到九月的账单');
   assert.equal(turns[0].calendar.currentDate, '2026-10-22');
   assert.equal(turns[0].calendar.timezone, 'Asia/Shanghai');
-  assert.deepEqual(turns[0].calendar.financialData.availableMonths, ['2026-06', '2026-07', '2026-08', '2026-09']);
+  assert.deepEqual(turns[0].calendar.financialData.availableMonths, ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10']);
   assert.notEqual(payload.data.data.monthlyBreakdown.at(-1).status, 'unavailable');
   assert.equal(payload.data.data.monthlyBreakdown.at(-1).totalExpenseFen, 740000);
   const data = await client(payload);

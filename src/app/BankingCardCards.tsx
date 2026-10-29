@@ -30,7 +30,6 @@ export function BankingCardResult({ data }: { data?: BankingAgentData }) {
       {Array.isArray(data.data?.guidance) && data.data.guidance.map((item: unknown, index: number) => <span key={index}>{index + 1}. {String(item)}</span>)}
       <small>{String(data.data?.product_capability_notice || "注销或更换虚拟卡号取决于发卡银行及具体产品规则。")}</small>
     </div>}
-    <small>卡片版本 {card.version} · 数据来源：{String(data?.evidence?.[0]?.source || "未知")} · 截至 {String(data?.evidence?.[0]?.asOf || "未知")}</small>
   </div>;
 }
 
@@ -47,9 +46,7 @@ export function BankingCardPreview({ data, active, busy, onConfirm, onReject, on
     <strong>{effect.cardName}</strong>
     <p>操作：{operation}</p>
     <p>变更前后：{change}</p>
-    <small>卡片版本 {effect.cardVersion} · 风险等级 {String(data.risk?.riskLevel || "未知")} · 有效期至 {String(preview.expiresAt || "未知")}</small>
     {Array.isArray(preview.warnings) && preview.warnings.map((warning, index) => <small key={index}>{String(warning)}</small>)}
-    <small>预览哈希：{String(preview.previewHash).slice(0, 16)}…</small>
     {trial ? <small>仅供预览，不支持确认或执行。可在聊天中改金额、换卡或取消。</small> : <>
       <button type="button" className="primary-button" onClick={() => onConfirm(data)} disabled={!active || busy}>{busy ? "处理中…" : "确认并执行"}</button>
       {active && <button type="button" className="secondary-button" onClick={() => onReject(data)} disabled={busy}>取消本次操作</button>}

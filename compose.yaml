@@ -5,6 +5,9 @@ services:
     build:
       context: .
       target: runtime
+      args:
+        SAVEFLOW_GIT_SHA: ${SAVEFLOW_GIT_SHA:-unknown}
+        SAVEFLOW_GIT_DIRTY: ${SAVEFLOW_GIT_DIRTY:-unknown}
     init: true
     ports:
       - "127.0.0.1:4300:3000"

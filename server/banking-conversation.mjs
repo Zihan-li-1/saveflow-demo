@@ -31,9 +31,9 @@ function hostStore(core, env, now) {
 export function openBankingConversation(body, { core, env, now, parseIntent, conversationHost }) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw error('INVALID_REQUEST', '请求体必须为对象。', { status: 400 });
   const invalidFields = Object.keys(body).some(key =>
-    !['message', 'history', 'consent', 'continuationToken', 'choice', 'replyStyle', 'planInputs', 'wealthInputs', 'conversationToken', 'conversationRevision', 'taskId', 'taskMode'].includes(key));
+    !['message', 'history', 'consent', 'continuationToken', 'choice', 'replyStyle', 'planInputs', 'wealthInputs', 'planning', 'planningConstraints', 'conversationToken', 'conversationRevision', 'taskId', 'taskMode'].includes(key));
   const mode = body.taskMode ?? 'auto';
-  const invalidAssociation = !['auto', 'new', 'continue', 'resume', 'sync'].includes(mode) ||
+  const invalidAssociation = !['auto', 'new', 'plan', 'continue', 'resume', 'sync'].includes(mode) ||
       (body.taskId !== undefined && (typeof body.taskId !== 'string' || !/^task_[a-f0-9-]{36}$/.test(body.taskId))) ||
       (body.conversationRevision !== undefined && (!Number.isSafeInteger(body.conversationRevision) || body.conversationRevision < 0));
   let continuation;
@@ -66,7 +66,7 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
   const fingerprint = body.conversationRevision !== undefined || continuation
     ? createHash('sha256').update(canonical(body)).digest('hex') : undefined;
   const workflowBody = Object.fromEntries(Object.entries(body).filter(([key]) =>
-    ['message', 'history', 'consent', 'continuationToken', 'choice', 'replyStyle', 'planInputs', 'wealthInputs'].includes(key)));
+    ['message', 'history', 'consent', 'continuationToken', 'choice', 'replyStyle', 'planInputs', 'wealthInputs', 'planning', 'planningConstraints'].includes(key)));
   if (mode === 'new') { delete workflowBody.continuationToken; continuation = undefined; }
   // Old chat history can explain language, but cannot donate another task's slots.
   if (!continuation) workflowBody.history = [];
@@ -193,6 +193,20 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
       } else if (mode === 'continue' || mode === 'resume' || body.choice || body.planInputs || body.wealthInputs || body.taskId) {
         throw error('CONTINUATION_INVALID', '补充、选择或恢复任务需要有效的原任务续接凭据。', { status: 400 });
       }
+    },
+    async startPlanning(goal, constraints = {}) {
+      if (typeof goal !== 'string' || !goal.trim() || goal.length > 2000 || !constraints || typeof constraints !== 'object' || Array.isArray(constraints)) {
+        throw error('INVALID_REQUEST', '规划目标或约束条件无效。', { status: 400 });
+      }
+      const suspendCurrent = !!active(state.currentTask);
+      await commit({ type: 'start_plan', goal, constraints, suspendCurrent });
+      return state.currentTask;
+    },
+    async endPlanning(outcome = 'completed') {
+      const task = state.currentTask;
+      if (!task || task.action !== 'planning.read_only' || !active(task)) return;
+      if (!['completed', 'cancelled'].includes(outcome)) throw error('INVALID_REQUEST', '规划任务结果无效。', { status: 400 });
+      await commit({ type: 'end_task', taskId: task.taskId, outcome });
     },
     async acceptIntent(proposal, modelOptions) {
       let intent = proposal;

@@ -19,24 +19,17 @@ export function BankingTransferReceipt({ receipt, verification }: { receipt?: Ac
       <span>收款人：{transfer.payeeName}（{transfer.accountNoMasked}）</span>
       <span>金额：{yuan(transfer.amountFen)}（手续费 {yuan(transfer.feeFen)}）</span>
       <span>付款账户：{transfer.accountName}</span>
-      <span>实际状态：{succeeded ? "已成功（succeeded）" : receipt.status}</span>
-      <span>交易编号：{receipt.transactionIds.length ? receipt.transactionIds.join("、") : "无"}</span>
     </>}
     {internal && <>
       <span>转账方向：{internal.accountName} → {internal.targetAccountName}</span>
       <span>金额：{yuan(internal.amountFen)}</span>
       <span>转出后余额：{yuan(internal.sourceBalanceAfterFen)} · 转入后余额：{yuan(internal.targetBalanceAfterFen)}</span>
-      <span>双方交易编号：{receipt.transactionIds.length ? receipt.transactionIds.join("、") : "无"}</span>
-      <span>实际状态：{succeeded ? "已成功（succeeded）" : receipt.status}</span>
     </>}
-    <span>回执编号：{receipt.receiptId}</span>
-    <span>执行时间：{receipt.executedAt}</span>
     {verification && <>
-      <span>后端交易记录：{verification.transactionId} · {yuan(verification.amountFen)} · {verification.status === "posted" ? "已记账（posted）" : verification.status}</span>
-      <span>后端查询余额：{yuan(verification.availableBalanceFen)}</span>
-      <small>已从同一后端重新查询账户余额与交易记录，结果与回执一致；重复确认只会返回本回执，不会产生第二笔交易。</small>
+      <span>转账后可用余额：{yuan(verification.availableBalanceFen)}</span>
+      <small>已核对账户余额与转账结果；重复确认不会产生第二笔交易。</small>
     </>}
     <small>{receipt.message} · 数据来源：合成数据，不接真实银行</small>
-    <small>该操作已进入终态，不能重复确认或取消；如需核实，请保留上述回执编号。</small>
+    <small>该转账已完成，不能重复确认或取消。</small>
   </div>;
 }

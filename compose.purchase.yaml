@@ -3,7 +3,7 @@ services:
   web:
     environment:
       PURCHASE_WORKER_ENABLED: "true"
-      SAVEFLOW_PUBLIC_ORIGIN: ${SAVEFLOW_PUBLIC_ORIGIN:-http://127.0.0.1:4300}
+      SAVEFLOW_PUBLIC_ORIGIN: ${SAVEFLOW_PUBLIC_ORIGIN:-http://localhost:4300}
     depends_on:
       purchase-worker:
         condition: service_started

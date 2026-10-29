@@ -65,7 +65,7 @@ test('HTTP MCP handshake exposes the trial tools and returns seed statistics and
     assert.equal(result.structuredContent.data.categoryTotals['餐饮'], 145000);
     assert.equal(result.structuredContent.amountUnit, 'fen');
     assert.equal(result.structuredContent.evidence[0].source, 'synthetic_demo_only');
-    assert.equal(result.structuredContent.evidence[0].asOf, '2026-10-01T00:00:00+08:00');
+    assert.equal(result.structuredContent.evidence[0].asOf, `${seed.snapshotDate}T00:00:00+08:00`);
     assert.equal(result.structuredContent.evidence[0].entityIds.length, 12);
   });
 });
@@ -102,11 +102,11 @@ test('month filtering returns different months and an honest empty result', asyn
     assert.equal(july.ok, true);
     assert.ok(july.evidence[0].entityIds.every(id => id.startsWith('TXN-202607')));
     assert.notEqual(july.data.totalExpenseFen, 846000);
-    const empty = (await call(client, { month: '2026-10' })).structuredContent;
+    const empty = (await call(client, { month: '2026-11' })).structuredContent;
     assert.equal(empty.ok, true);
     const { coverage, ...emptySummary } = empty.data;
     assert.match(coverage.warning, /无记录不代表/);
-    assert.deepEqual(emptySummary, { month: '2026-10', totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: 0, categoryTotals: {} });
+    assert.deepEqual(emptySummary, { month: '2026-11', totalIncomeFen: 0, totalExpenseFen: 0, transactionCount: 0, categoryTotals: {} });
     assert.deepEqual(empty.evidence[0].entityIds, []);
   });
 });
@@ -344,7 +344,7 @@ test('subscription and product tools return repository data and evidence with no
       assert.deepEqual(result.data, expected);
       assert.deepEqual(result.evidence[0].entityIds, expected.map(item => item.id));
       assert.equal(result.evidence[0].source, 'synthetic_demo_only');
-      assert.equal(result.context.asOf, '2026-10-01T00:00:00+08:00');
+      assert.equal(result.context.asOf, `${seed.snapshotDate}T00:00:00+08:00`);
       assert.equal((await callTool(client, name, { userId: 'OTHER' })).ok, false);
     }
     assert.equal(calls.prepare, 0);

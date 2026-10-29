@@ -22,14 +22,14 @@ test('B repository: all shared entities, fen normalization, seed provenance and 
   assert.equal(repo.getAccounts().length, 2);
   assert.equal(repo.getAccount('ACC-SAVINGS').type, 'saving');
   assert.equal(balance(core), 500000);
-  assert.equal(repo.getTransactions().length, 46);
+  assert.equal(repo.getTransactions().length, seed.transactions.length);
   assert.equal(repo.getTransactions({ month: '2026-08' }).length, 12);
   assert.equal(repo.getTransactions({ month: '2026-09' }).length, 10);
   assert.equal(repo.getCards().length, 2); assert.equal(repo.getSubscriptions().length, 2);
   assert.equal(repo.getPayee('payee_001').name, '张三');
   assert.equal(repo.getPayees().filter(p => p.aliases.includes('王先生')).length, 2);
   assert.deepEqual(repo.getInvestmentProducts().map(p => p.liquidity), ['T+0', 'T+1', 'AT_MATURITY']);
-  assert.equal(repo.getContextInfo().asOf, '2026-10-01T00:00:00+08:00');
+  assert.equal(repo.getContextInfo().asOf, `${seed.snapshotDate}T00:00:00+08:00`);
   assert.ok(repo.getContextInfo().completeMonths.includes('2026-09'));
   repo.getAccounts()[0].balanceFen = 1;
   repo.getPayees()[0].name = '改名';
@@ -175,12 +175,12 @@ test('B user scoping: shared store does not reveal another owner operation', asy
 
 test('B legacy context is computed from raw transactions, consistent with savings progress', async () => {
   const source = structuredClone(seed);
-  source.transactions.find(t => t.date.startsWith('2026-09') && t.type === 'expense').amount += 123;
+  source.transactions.find(t => t.date.startsWith('2026-10') && t.type === 'expense').amount += 123;
   const before = await getLegacyContextAsync(createBankingCore().repository), after = await getLegacyContextAsync(createBankingCore({ source }).repository);
   assert.equal(after.totalExpenseFen - before.totalExpenseFen, 12300);
   assert.equal(before.savedAmountFen, 0);
   assert.equal(before.defaultMonthlySavingFen, 250000);
-  assert.equal(before.currentMonth, '2026-09');
+  assert.equal(before.currentMonth, '2026-10');
 });
 
 test('legacy analysis resolves asynchronous repository reads and preserves mock totals', async () => {
