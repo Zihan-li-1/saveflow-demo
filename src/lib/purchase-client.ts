@@ -10,6 +10,7 @@ export type PurchaseWorkflow = {
   selected_candidates?: PurchaseCandidate[];
   reservation?: { total_minor: number; unallocated_minor: number; occupied_minor: number; consumed_minor: number; released_minor: number };
   pending_tasks?: Array<{ event_ref: string; status: string }>;
+  reminder?: { status: string; due_at: string };
   financial_basis?: FinancialBasis;
 };
 export type PurchaseCandidate = { candidate_ref: string; sku_ref: string; product_ref: string; category: 'flowers' | 'cake'; name: string;
@@ -27,7 +28,7 @@ export async function purchaseRequest<T>(action: string, input: unknown, accessC
   catch { throw new Error('购物预算服务连接失败，请稍后重试。'); }
   let body;
   try { body = await response.json(); } catch { throw new Error('无法核实购物预算服务响应，请刷新后查询原预算。'); }
-  if (!response.ok || body?.code !== 'OK') throw new Error(body?.message || '购物请求未完成。');
+  if (!response.ok || body?.code !== 'OK') throw Object.assign(new Error(body?.message || '购物请求未完成。'), { code: body?.code });
   if (!body.data || body.data.synthetic_demo_only !== true || body.data.execution_environment !== 'mock') throw new Error('购物响应环境无法核实。');
   return body.data as T;
 }

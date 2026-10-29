@@ -28,12 +28,14 @@ function timing(slots, nowMs) {
 const missing = slots => ['budget', 'budget_month', 'funding_account_ref', 'date_expression', 'date_meaning', 'items'].filter(key => slots[key] === undefined);
 function safeWorkflow(state, wf) {
   const { workflow_ref, version, status, slots, window, selected_candidate_refs = [], address_ref } = wf;
+  const job = state.jobs[`${workflow_ref}_v${version}`] ?? Object.values(state.jobs).find(job => job.workflow_ref === workflow_ref && job.status === 'scheduled');
   const orders = Object.values(state.operations).filter(op => op.workflow_ref === workflow_ref).map(op => ({
     operation_ref: op.operation_ref, status: op.status, amount_minor: op.amount_minor, category: op.category, receipt: op.receipt,
   }));
   return { workflow_ref, version, status, slots, window, selected_candidate_refs,
     selected_candidates: selected_candidate_refs.map(ref => wf.candidates[ref]).filter(Boolean), address_ref,
     missing_slots: missing(slots), reservation: state.reservations[workflow_ref], orders,
+    ...(job ? { reminder: { status: job.status, due_at: job.due_at } } : {}),
     financial_basis: wf.financial_context ? { source: wf.financial_context.source, as_of: wf.financial_context.as_of,
       available_minor: wf.financial_context.available_minor, obligations_minor: wf.financial_context.obligations_minor, repository_as_of: wf.financial_context.repository_as_of } : undefined,
     pending_tasks: Object.values(state.events).filter(event => event.workflow_ref === workflow_ref) };

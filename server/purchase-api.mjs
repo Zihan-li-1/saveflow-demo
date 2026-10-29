@@ -8,6 +8,8 @@ import { parseBankingIntent } from './banking-intent-parser.mjs';
 import { getConfiguredBankingCore } from '../src/banking-core/postgres-store.mjs';
 import { purchaseFinancialContext } from './purchase-financial-context.mjs';
 import { nextPurchaseQuestion } from '../src/lib/purchase-guidance.mjs';
+import { normalizePurchaseSlots } from '../src/lib/purchase-flow.mjs';
+import { localDate } from '../src/lib/calendar.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const equal = (a, b) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
@@ -116,6 +118,7 @@ export async function handlePurchaseRequest(request, options = {}) {
         const intent = validateParsedIntent(await parseIntent(input.message, { env, now, history: [],
           context: wf ? { action: 'scenario.plan_purchase', slots: wf.slots, pendingSlot: 'preferences', question: nextPurchaseQuestion(wf.slots) } : undefined }));
         if (intent.action !== 'scenario.plan_purchase') fail('PURCHASE_INTENT_REQUIRED');
+        intent.slots = normalizePurchaseSlots(intent.slots, localDate(now()));
         if (!wf) data = await skill.perform(current.owner, intent.action, intent.slots);
         else if (wf.status === 'draft') data = await skill.reviseDraft(current.owner, wf.workflow_ref, wf.version, { ...wf.slots, ...intent.slots,
           ...(intent.slots.preferences ? { preferences: { ...wf.slots.preferences, ...intent.slots.preferences } } : {}) });

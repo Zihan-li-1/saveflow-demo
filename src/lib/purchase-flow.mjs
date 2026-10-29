@@ -1,4 +1,31 @@
+import { localDate, validCalendarDate } from './calendar.mjs';
+
 const DATE_WINDOW = /^(\d{4}-\d{2}-\d{2}) \d{2}:\d{2}-\d{2}:\d{2}$/;
+
+/** Preserve partial dates: knowing the day does not imply knowing the time. */
+export function purchaseDateFields(expression = '', currentDate = localDate(Date.now())) {
+  const digits = '零一二三四五六七八九';
+  const number = value => {
+    if (/^\d+$/.test(value)) return Number(value);
+    if (!/^(?:[一二三]?十[一二三四五六七八九]?|[一二三四五六七八九])$/.test(value)) return NaN;
+    const [tens, units] = value.split('十');
+    return value.includes('十') ? (tens ? digits.indexOf(tens) : 1) * 10 + (units ? digits.indexOf(units) : 0) : digits.indexOf(value);
+  };
+  const match = /^(?:(\d{4})[-/.年])?([\d一二三四五六七八九十]+)[-/.月]([\d一二三四五六七八九十]+)(?:日|号)?(?:\s+(\d{2}:\d{2})(?:-(\d{2}:\d{2}))?)?$/.exec(expression.trim());
+  if (!match) return { date: '', start: '', end: '' };
+  let year = Number(match[1] || currentDate.slice(0, 4));
+  const monthDay = `${String(number(match[2])).padStart(2, '0')}-${String(number(match[3])).padStart(2, '0')}`;
+  let date = `${year}-${monthDay}`;
+  if (!match[1] && date < currentDate) date = `${++year}-${monthDay}`;
+  if (!validCalendarDate(date)) return { date: '', start: '', end: '' };
+  return { date, start: match[4] ?? '', end: match[5] ?? '' };
+}
+
+export function normalizePurchaseSlots(slots, currentDate) {
+  const { date, start, end } = purchaseDateFields(slots.date_expression, currentDate);
+  if (!date) return slots;
+  return { ...slots, date_expression: `${date}${start ? ` ${start}${end ? `-${end}` : ''}` : ''}`, budget_month: date.slice(0, 7) };
+}
 
 /** 只有用户提到未来日期时间才进入预留预算与提醒流程；没提时间一律按现在就买。 */
 export function purchaseNeedsReservation(slots = {}) {

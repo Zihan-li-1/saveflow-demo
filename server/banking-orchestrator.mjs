@@ -14,7 +14,7 @@ import { requestSavingsAdvice, verifySavingsAdvice } from './savings-advisor.mjs
 import { understandingContext } from './understanding-context.mjs';
 import { collectSavingsData } from './savings-data.mjs';
 import { buildFinancialAnalysisContext } from './financial-analysis-context.mjs';
-import { purchaseNeedsReservation, purchaseMissingQuestions } from '../src/lib/purchase-flow.mjs';
+import { purchaseNeedsReservation, purchaseMissingQuestions, normalizePurchaseSlots } from '../src/lib/purchase-flow.mjs';
 
 const scenarioStores = new Map();
 const transferTypeChoices = [
@@ -358,7 +358,7 @@ export async function runBankingConversation(body, {
   if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
   if (!continuing && parsed.choice) throw inputError('INVALID_CHOICE', '当前请求没有可选择的候选项', 400);
   if (parsed.action === 'scenario.plan_purchase') {
-    const purchaseSlots = parsed.slots ?? {};
+    const purchaseSlots = normalizePurchaseSlots(parsed.slots ?? {}, understandingContext({ now, timezone }).currentDate);
     const needsReservation = purchaseNeedsReservation(purchaseSlots);
     const missing = needsReservation ? purchaseMissingQuestions(purchaseSlots) : [];
     let fundingCardOptions = [];
@@ -372,7 +372,7 @@ export async function runBankingConversation(body, {
         : '已生成平台搜索链接。预算与提醒信息已齐，请在下方卡片核对并确认预留。';
     return reply(200, 'OK', purchaseMessage, {
       status: 'purchase_request', action: parsed.action, data: {
-        slots: parsed.slots, synthetic_demo_only: true,
+        slots: purchaseSlots, synthetic_demo_only: true,
         ...(fundingCardOptions.length ? { funding_card_options: fundingCardOptions } : {}),
       },
     });
