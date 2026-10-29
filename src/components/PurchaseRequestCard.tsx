@@ -84,9 +84,10 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
   const toggleCat = (category: 'flowers' | 'cake') =>
     setCats(current => current.includes(category) ? current.filter(item => item !== category) : [...current, category]);
 
-  const confirmed = [
+  const recognised = [
+    items.length ? items.map(item => categoryLabel(item.category)).join('、') : '',
+    slots.date_expression ? `${meaningLabel(slots.date_meaning)} ${slots.date_expression}`.trim() : '',
     slots.budget ? `预留 ${yuan(slots.budget.amount_minor)}` : '',
-    meaningLabel(slots.date_meaning),
     slots.funding_account_ref ? `卡「${slots.funding_account_ref}」` : '',
   ].filter(Boolean);
   const cardOptions = cards.length ? cards : ['娱乐虚拟卡', '日常虚拟卡'];
@@ -124,8 +125,8 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
         <button type="button" disabled={busy} onClick={() => { setPreview(undefined); setError(''); setEditing(true); }} style={submitStyle}>返回修改</button>
       </div> : <>
       <b>预留预算与提醒</b>
-      {!editing && confirmed.length > 0 && <p style={{ margin: '6px 0 2px' }}>
-        {confirmed.join(' · ')}
+      {!editing && recognised.length > 0 && <p style={{ margin: '6px 0 2px' }}>
+        已识别：{recognised.join(' · ')}
       </p>}
       <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}>
       {need('items') && <div style={fieldStyle}><span>买什么？ </span>
