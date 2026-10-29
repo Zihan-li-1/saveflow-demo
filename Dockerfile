@@ -11,8 +11,10 @@ FROM source AS test
 CMD ["sh", "-c", "npm test && npm run lint && npx next typegen && npm run typecheck"]
 
 FROM source AS build
-ENV NEXT_PUBLIC_SAVEFLOW_API_MODE=http
-RUN npm run build
+ENV NEXT_PUBLIC_SAVEFLOW_API_MODE=http SAVEFLOW_STATIC_EXPORT=true
+# The container's Node server handles /api/banking-agent; this Next route is
+# only for local `next dev` and cannot be included in a static export.
+RUN rm src/app/api/banking-agent/route.ts && npm run build
 
 FROM dependencies AS production-dependencies
 RUN npm prune --omit=dev --no-audit --no-fund

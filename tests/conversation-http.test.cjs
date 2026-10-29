@@ -173,6 +173,8 @@ test('Core confirmed, executing and unknown operations are read by original ID a
     const reads = f.calls.reads;
     const result = await f.post({ ...continueTask(a), message: '改成100元' });
     assert.equal(result.code, 'CONVERSATION_OPERATION_LOCKED');
+    assert.equal(result.message, '您的转账请求已收到，但我们暂时无法确认最终结果。为避免重复扣款，请先查询转账结果，暂时不要重新发起相同转账。');
+    assert.equal(result.message.includes('confirmed'), false);
     assert.equal(result.data.operationId, a.data.operationId);
     assert.equal(result.data.error.uncertain, true);
     assert.equal(result.data.error.nextAction, 'query_status');

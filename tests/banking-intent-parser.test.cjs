@@ -185,13 +185,15 @@ test('diagnostics record only schema rules and correlation ID, never model or us
     env, requestId, onDiagnostic: entry => entries.push(entry),
     fetchImpl: async () => upstream(invalid),
   }), { code: 'MODEL_FORMAT_ERROR' });
-  assert.deepEqual(entries, [{ event: 'banking_intent_validation_failed', schemaVersion: '1.0.0', reason: 'schema_validation_failed', validationRule: 'ParsedIntent contains unknown fields', requestId }]);
+  assert.deepEqual(entries.find(entry => entry.event === 'banking_intent_validation_failed'), { event: 'banking_intent_validation_failed', schemaVersion: '1.0.0', reason: 'schema_validation_failed', validationRule: 'ParsedIntent contains unknown fields', requestId });
+  assert.ok(entries.some(entry => entry.event === 'agent_model_request'));
+  assert.ok(entries.some(entry => entry.event === 'agent_model_response' && entry.success === false));
   assert.equal(JSON.stringify(entries).includes(secret), false);
   assert.equal(JSON.stringify(entries).includes(env.DASHSCOPE_API_KEY), false);
   for (const [content, finish, reason] of [[secret, 'stop', 'invalid_json'], [secret, 'length', 'incomplete_response']]) {
     entries.length = 0;
     await assert.rejects(parseBankingIntent(secret, { env, onDiagnostic: entry => entries.push(entry), fetchImpl: async () => rawUpstream(content, finish) }), { code: 'MODEL_FORMAT_ERROR' });
-    assert.equal(entries[0].reason, reason);
+    assert.equal(entries.find(entry => entry.reason)?.reason, reason);
     assert.equal(JSON.stringify(entries).includes(secret), false);
   }
 });

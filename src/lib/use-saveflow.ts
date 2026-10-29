@@ -455,7 +455,10 @@ export function useSaveflow() {
           : await client.request("action.decide", { operationId: id, previewHash: previewHash as string, decision: "reject", confirmedStepIds: [] });
         if (!live()) return;
         if (!status.receipt) {
-          const awaiting = mode === "check" && ["awaiting_confirmation", "confirmed"].includes(status.state);
+          // `confirmed` only records the user's approval. Without a receipt it
+          // must remain query-only; reactivating it would permit a duplicate
+          // execute after a lost response.
+          const awaiting = mode === "check" && status.state === "awaiting_confirmation";
           const owner = Object.values(bankingFlowsRef.current).find(flow => flow.previewOperationId === id);
           const currentOwner = !owner?.taskId || bankingConversation.current?.currentTask?.taskId === owner.taskId;
           if (awaiting && !data.historySnapshot && currentOwner) {
@@ -464,7 +467,9 @@ export function useSaveflow() {
             if (kind === "card") setActiveCardOperationId(id); else setActiveTransferOperationId(id);
           }
           setCoreOperation(id, awaiting ? "plan" : "unknown");
-          addMessage({ role: "agent", text: `操作 ${id} 状态：${status.state}，尚未取得最终回执。请查询操作状态，勿重复提交。` });
+          addMessage({ role: "agent", text: awaiting
+            ? "这笔转账尚未确认执行，可以继续核对预览。"
+            : "您的转账请求已收到，但我们暂时无法确认最终结果。为避免重复扣款，请先不要再次发起相同转账。" });
           return;
         }
         receipt = status.receipt;
@@ -488,7 +493,11 @@ export function useSaveflow() {
       const uncertain = mode === "check" || mode === "reject" || verifyingReceipt || !(error instanceof ApiError) || error.uncertain;
       setCoreOperation(id, uncertain ? "unknown" : "error");
       retirePreview(data, kind);
-      addMessage({ role: "agent", kind: "error", text: error instanceof Error ? error.message : "操作未取得可靠结果", errorHint: uncertain ? `结果待核实，操作编号：${id}。请查询操作状态，勿重复提交。` : `操作失败，编号：${id}。可修改请求并生成新预览。` });
+      addMessage({ role: "agent", kind: "error", text: uncertain
+        ? "您的转账请求已收到，但我们暂时无法确认最终结果。"
+        : error instanceof Error ? error.message : "操作未取得可靠结果", errorHint: uncertain
+          ? "为避免重复扣款，请先查询转账结果；无需重新填写转账信息。"
+          : "操作未完成，可以修改请求并生成新的预览。" });
     } finally {
       if (live()) { busyRef.current = false; setBusy(false); }
     }
@@ -653,6 +662,7 @@ export function useSaveflow() {
   };
   const restartBankingFlow = () => {
     if (!canTransition(stageRef.current, 'START')) return;
+    if (hasUnresolvedWrite()) { setValidation('原转账结果正在核实，请先查询原交易；确认结果前不能开始可能重复付款的新业务。'); return; }
     setBankingContinuation(null); setFocusedFlowId(null); forceNewTask.current = true; setBankingFailure(null);
     setMessages(current => current.map(m => m.kind === 'banking_clarification' ? { ...m, banking: { ...m.banking!, choices: [] } } : m));
     setInput(flowStartMessage.current); setValidation('请重新描述或修改这项业务后发送；聊天记录已保留。');
@@ -663,11 +673,38 @@ export function useSaveflow() {
     if (!flow) { setValidation('本标签页没有这项业务的续接凭据，请重新开始当前业务。'); return; }
     return startBanking('', undefined, flow.id);
   };
+  const cancelBankingTask = (taskId: string) => {
+    if (modelMode !== 'banking' || sessionPhase !== 'ready' || coreBlocked()) return;
+    const flow = Object.values(bankingFlowsRef.current).find(item => item.taskId === taskId);
+    if (!flow || !flow.taskId) return;
+    return startBanking('取消本次操作', undefined, flow.id);
+  };
+  const checkBankingTask = (operationId: string) => {
+    const data = messages.find(message => message.banking?.operationId === operationId)?.banking;
+    if (data) return data.action?.startsWith('transfer.') ? checkTransferOperation(data) : checkCardOperation(data);
+    // A bounded history snapshot may omit the preview card while the verified
+    // conversation still retains the operation reference. Rebuild only the
+    // minimal query descriptor from that server-owned reference; no preview,
+    // amount or execution authority is recreated here.
+    const reference = sessionView?.operationReferences.find(item => item.operationId === operationId);
+    if (!reference || !sessionView) return;
+    const task = [...(sessionView.currentTask ? [sessionView.currentTask] : []), ...sessionView.suspendedTasks]
+      .find(item => item.taskId === reference.taskId);
+    if (!task || !['transfer.create', 'card.freeze', 'card.unfreeze', 'card.set_budget', 'card.set_controls', 'wealth.subscribe', 'wealth.redeem'].includes(task.action)) return;
+    const queryData = { status: 'core_error', action: task.action, operationId } as BankingAgentData;
+    return task.action === 'transfer.create' ? checkTransferOperation(queryData) : checkCardOperation(queryData);
+  };
   const unresolvedWrite = Object.values(coreOperations).some(coreOperationBlocksInput);
   const sessionTasks = sessionPhase === 'ready' && sessionView ? [...(sessionView.currentTask ? [sessionView.currentTask] : []), ...sessionView.suspendedTasks]
     .filter(task => ['ready', 'awaiting_input', 'awaiting_confirmation', 'suspended'].includes(task.status))
-    .map(task => ({ ...task, canResume: !!bankingFlows[task.taskId], blocked: sessionView.operationReferences.some(ref => ref.taskId === task.taskId && ['confirmed', 'executing', 'checking', 'unknown'].includes(ref.coreState)) ||
-      (unresolvedWrite && ['transfer.create', 'card.freeze', 'card.unfreeze', 'card.set_budget', 'card.set_controls', 'wealth.subscribe', 'wealth.redeem', 'scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule'].includes(task.action)) })) : [];
-  return { sessionPhase, sessionTasks, resumeBankingTask, verifyBankingSession: () => startBanking('', undefined, undefined, undefined, undefined, true), bankingFailure, restartBankingFlow, stage, coreOperations, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, submitSavingsInputs, submitWealthInputs, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => !flow.taskId && flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, otpChallenge, otpError, verifyTransferOperation, cancelTransferVerification, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" ? bankingFailure?.retryable && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId, lastBankingRequest.current.savings, lastBankingRequest.current.wealth, lastBankingRequest.current.syncOnly) : undefined : startDemo(goal.current), canStart: !coreLocked && canTransition(stage, "START"), canReset: !coreLocked && canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
+    .map(task => {
+      const reference = sessionView.operationReferences.find(ref => ref.taskId === task.taskId);
+      return { ...task, operationId: reference?.operationId, coreState: reference?.coreState, canResume: !!bankingFlows[task.taskId], blocked: sessionView.operationReferences.some(ref => ref.taskId === task.taskId && ['confirmed', 'executing', 'checking', 'unknown'].includes(ref.coreState)) ||
+        (unresolvedWrite && ['transfer.create', 'card.freeze', 'card.unfreeze', 'card.set_budget', 'card.set_controls', 'wealth.subscribe', 'wealth.redeem', 'scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule'].includes(task.action)) };
+    }) : [];
+  // A Core operation without a live conversation task is handled by the
+  // operation-status card. It must not manufacture a resumable session panel.
+  const hasSessionWork = sessionTasks.length > 0 || Object.values(bankingFlows).some(flow => !!flow.taskId);
+  return { sessionPhase, sessionTasks, hasSessionWork, resumeBankingTask, cancelBankingTask, checkBankingTask, verifyBankingSession: () => startBanking('', undefined, undefined, undefined, undefined, true), bankingFailure, restartBankingFlow, stage, coreOperations, messages, input, setInput, monthlySaving, setMonthlySaving, consent, setConsent, validation, operationId, failure, startDemo, chooseBankingOption, submitSavingsInputs, submitWealthInputs, editTransferPreview, bankingContinuation, resumableTransferIds: Object.values(bankingFlows).filter(flow => !flow.taskId && flow.action === "transfer.create").map(flow => flow.previewOperationId).filter((id): id is string => !!id), confirmCardOperation, rejectCardOperation, checkCardOperation, activeCardOperationId, cardBusy, confirmTransferOperation, rejectTransferOperation, checkTransferOperation, activeTransferOperationId, transferBusy, otpChallenge, otpError, verifyTransferOperation, cancelTransferVerification, confirmPlan, checkResult, editPlan, savePlan, cancelPlan, restart, retryAnalysis: () => modelMode === "banking" ? bankingFailure?.retryable && lastBankingRequest.current ? startBanking(lastBankingRequest.current.text, lastBankingRequest.current.choice, lastBankingRequest.current.resumeFlowId, lastBankingRequest.current.savings, lastBankingRequest.current.wealth, lastBankingRequest.current.syncOnly) : undefined : startDemo(goal.current), canStart: !coreLocked && canTransition(stage, "START"), canReset: !coreLocked && canTransition(stage, "RESET"), modelMode, changeModelMode, accessCode, setAccessCode, targetAmountFen, usage, replyStyle, setReplyStyle };
 }
 

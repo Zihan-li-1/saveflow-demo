@@ -1,0 +1,48 @@
+{
+  "understanding": "real configured model",
+  "browser": "Chrome",
+  "results": [
+    {
+      "status": "awaiting_confirmation",
+      "typingVisible": false,
+      "inputEnabled": true,
+      "sendEnabled": true
+    },
+    {
+      "status": "bill_result",
+      "typingVisible": false,
+      "inputEnabled": true,
+      "sendEnabled": true
+    },
+    {
+      "status": "card_result",
+      "typingVisible": false,
+      "inputEnabled": true,
+      "sendEnabled": true
+    },
+    {
+      "status": "awaiting_confirmation",
+      "typingVisible": false,
+      "inputEnabled": true,
+      "sendEnabled": true
+    },
+    {
+      "status": "card_result",
+      "typingVisible": false,
+      "inputEnabled": true,
+      "sendEnabled": true
+    },
+    {
+      "status": "bill_result",
+      "typingVisible": false,
+      "inputEnabled": true,
+      "sendEnabled": true
+    }
+  ],
+  "writes": {
+    "decide": 1,
+    "execute": 1
+  },
+  "pageErrors": 0,
+  "passed": true
+}
