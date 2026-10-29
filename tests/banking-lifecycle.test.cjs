@@ -290,18 +290,36 @@ test('stale response/finally after reset cannot settle or overwrite the next req
   assert.equal(flow.messages.filter(message => message.text === reply.text).length, 1);
 });
 
-test('pending status and failed status query retain unknown without resubmission', async () => {
+test('confirmed status and failed status query retain query-only state without resubmission', async () => {
   await mount(); await start('card.freeze'); const data = preview();
   intercept = async (body, run) => { if (body.action === 'action.execute') throw new Error('disconnected before response'); return run(); };
   await act(async () => { await flow.confirmCardOperation(data); });
   intercept = null;
   await act(async () => { await flow.checkCardOperation(data); });
-  assert.equal(flow.coreOperations[data.operationId], 'plan'); assert.equal(flow.canStart, true);
-  assert.equal(flow.activeCardOperationId, data.operationId);
+  assert.equal(flow.coreOperations[data.operationId], 'unknown'); assert.equal(flow.canStart, true);
+  assert.equal(flow.activeCardOperationId, null);
   intercept = async () => { throw new Error('offline'); };
   await act(async () => { await flow.checkCardOperation(data); });
   assert.equal(flow.coreOperations[data.operationId], 'unknown'); assert.equal(flow.cardBusy, false);
   assert.equal(calls.filter(action => action === 'action.execute').length, 1);
+});
+
+test('confirmed without a receipt remains query-only and never reactivates the preview', async () => {
+  await mount(); await start('card.freeze'); const data = preview();
+  let statusOverride = false;
+  intercept = async (body, run) => {
+    if (body.action === 'action.execute') { await run(); throw new Error('lost response'); }
+    if (body.action === 'action.status' && statusOverride) return Response.json({ code: 'OK', requestId: 'status-confirmed', data: { operationId: data.operationId, state: 'confirmed', status: 'pending' } });
+    return run();
+  };
+  await act(async () => { await flow.confirmCardOperation(data); });
+  statusOverride = true;
+  await act(async () => { await flow.checkCardOperation(data); });
+  assert.equal(flow.coreOperations[data.operationId], 'unknown');
+  assert.equal(flow.activeCardOperationId, null);
+  const before = calls.filter(action => action === 'action.execute').length;
+  await act(async () => { await flow.confirmCardOperation(data); });
+  assert.equal(calls.filter(action => action === 'action.execute').length, before);
 });
 
 test('unknown survives remount with query entry and no execution authority', async () => {

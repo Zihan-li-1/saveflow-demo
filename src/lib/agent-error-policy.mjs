@@ -43,7 +43,7 @@ export function agentErrorHint(policy) {
     edit_input: '请修改输入或补充信息，也可以直接提出新的完整请求。',
     restart_flow: '本次续接已失效，请重新描述要办理的业务；无需清空聊天记录。',
     retry_request: '可以重试理解或查询请求；不会自动确认或执行金融操作。',
-    query_status: '操作结果待核实，请查询原操作状态，勿重复提交。',
+    query_status: '正在核实转账结果。为避免重复扣款，请查询转账结果，暂时不要重复提交。',
     contact_support: '当前请求受到限制，请核对权限或联系银行；可继续其他查询。',
     new_request: '请重新描述或选择其他可行操作，也可以继续查询。',
   }[policy.nextAction] ?? '请继续输入新的请求。';
