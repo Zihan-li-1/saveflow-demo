@@ -14,7 +14,7 @@ export function validBankingConversation(value: unknown): value is BankingConver
       typeof value.token !== 'string' || !/^cs1\.[A-Za-z0-9_-]{43}$/.test(value.token) || !integer(value.revision) || !integer(value.expiresAt) || value.expiresAt === 0 ||
       !Array.isArray(value.suspendedTasks) || value.suspendedTasks.length > 25 || !Array.isArray(value.operationReferences) || value.operationReferences.length > 100) return false;
   const task = (v: unknown) => record(v) && keys(v, ['taskId', 'action', 'status', 'expiresAt']) && taskId(v.taskId) &&
-    PARSED_INTENT_ACTIONS.includes(v.action as typeof PARSED_INTENT_ACTIONS[number]) && v.action !== 'unsupported' &&
+    (PARSED_INTENT_ACTIONS.includes(v.action as typeof PARSED_INTENT_ACTIONS[number]) && v.action !== 'unsupported' || v.action === 'planning.read_only') &&
     ['ready', 'awaiting_input', 'awaiting_confirmation', 'suspended', 'completed', 'cancelled', 'failed', 'expired'].includes(String(v.status)) &&
     integer(v.expiresAt) && v.expiresAt <= Number(value.expiresAt);
   if ((value.currentTask !== null && !task(value.currentTask)) || value.suspendedTasks.some(v => !task(v) || v.status !== 'suspended') ||

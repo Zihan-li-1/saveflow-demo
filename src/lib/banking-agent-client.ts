@@ -59,7 +59,9 @@ export type BankingAgentRequest = {
   conversationToken?: string;
   conversationRevision?: number;
   taskId?: string;
-  taskMode?: 'auto' | 'new' | 'continue' | 'resume' | 'sync';
+  taskMode?: 'auto' | 'new' | 'plan' | 'continue' | 'resume' | 'sync';
+  planning?: boolean;
+  planningConstraints?: Record<string, unknown>;
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   message?: string;
   continuationToken?: string;

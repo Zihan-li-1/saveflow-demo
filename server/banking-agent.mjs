@@ -7,6 +7,8 @@ import { parseTrueforgeBankingIntent } from './trueforge-banking-runtime.mjs';
 import { bankingReply, validateReplyStyle } from './banking-reply.mjs';
 import { agentErrorPolicy } from '../src/lib/agent-error-policy.mjs';
 import { openBankingConversation } from './banking-conversation.mjs';
+import { runReadOnlyPlanner } from './read-only-planner.mjs';
+import { createPlanningRuntimeClient } from './planning-runtime.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const RATE_LIMIT = 10;
@@ -115,6 +117,8 @@ export async function handleBankingAgent(
     if (configStatus.continuationSecret !== 'configured') return authFailure(`CONTINUATION_CONFIG_${configStatus.continuationSecret.toUpperCase()}`, 503, 'CONTINUATION_CONFIG_ERROR', '服务暂时不可用，请联系演示维护者。');
 
     const body = await readBody(request);
+    if (body?.planning !== undefined && typeof body.planning !== 'boolean') throw Object.assign(new Error('planning 必须是布尔值'), { code: 'INVALID_REQUEST', status: 400 });
+    if (body?.planningConstraints !== undefined && (!body.planningConstraints || typeof body.planningConstraints !== 'object' || Array.isArray(body.planningConstraints))) throw Object.assign(new Error('planningConstraints 必须是对象'), { code: 'INVALID_REQUEST', status: 400 });
     style = validateReplyStyle(body?.replyStyle);
     const implementation = env.SAVEFLOW_BANKING_RUNTIME || 'trueforge';
     if (!['trueforge', 'legacy-qwen'].includes(implementation)) throw Object.assign(new Error('Runtime configuration'), { code: 'BANKING_RUNTIME_CONFIG_ERROR', status: 503 });
@@ -128,6 +132,13 @@ export async function handleBankingAgent(
     const replay = await conversation.begin();
     if (replay) return replay;
     if (conversation.syncOnly) return reply(200, 'OK', '已核验服务端会话，历史预览不会自动执行。', { status: 'conversation_state' });
+    if (body.planning === true || body.taskMode === 'plan') {
+      const planningTask = await conversation.startPlanning(body.message, body.planningConstraints ?? {});
+      const planningClient = options.planningRuntimeClient ?? createPlanningRuntimeClient({ env, fetchImpl });
+      const plan = await runReadOnlyPlanner({ message: body.message, history: body.history ?? [], constraints: body.planningConstraints ?? {}, repository, runtimeClient: planningClient, env, now, timezone: options.timezone ?? 'Asia/Shanghai', signal: request.signal, requestId, taskId: planningTask?.taskId, conversation: conversation.metadata() });
+      if (['completed', 'cancelled', 'unsupported', 'business_intent'].includes(plan.status)) await conversation.endPlanning(plan.status === 'cancelled' ? 'cancelled' : 'completed');
+      return reply(200, 'OK', plan.status === 'needs_clarification' ? plan.question : '只读规划已完成', { status: plan.status, plan });
+    }
     const scenarioScope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
     const result = await conversation.finish(await runBankingConversation(conversation.body, { core: { ...core, prepare: request => conversation.prepare(request) }, repository, env, now, timezone: options.timezone ?? 'Asia/Shanghai', parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope, savingsAdvisor: options.savingsAdvisor, conversation, resumeOnly: conversation.resumeOnly }));
     const data = result.data?.recovery ? { ...result.data, recovery: { ...result.data.recovery, continuationToken: result.data.recovery.continuationToken ?? result.data.continuationToken } } : result.data;
