@@ -6,12 +6,13 @@ import { bankingIntentSystemPrompt } from '../server/banking-intent-parser.mjs';
 import { bankingAgentSpec } from '../server/trueforge-banking-runtime.mjs';
 import { normalizePurchaseSlots, purchaseDateFields } from '../src/lib/purchase-flow.mjs';
 
-test('purchase keeps a known month/day without inventing a time, and preserves explicit years', () => {
+test('purchase keeps a known month/day without inventing a time, and defaults the year to the current one', () => {
   for (const expression of ['9.1号', '九月一号', '9月1日', '9/1']) {
-    assert.deepEqual(purchaseDateFields(expression, '2026-10-29'), { date: '2027-09-01', start: '', end: '' });
+    assert.deepEqual(purchaseDateFields(expression, '2026-10-29'), { date: '2026-09-01', start: '', end: '' });
     assert.equal(purchaseDateFields(expression, '2026-08-01').date, '2026-09-01');
   }
   assert.deepEqual(purchaseDateFields('2026-09-01 09:00-12:00', '2026-10-29'), { date: '2026-09-01', start: '09:00', end: '12:00' });
+  assert.equal(purchaseDateFields('2025年12月31日', '2026-10-29').date, '2025-12-31');
   for (const expression of ['2026-02-30', '九月三十一号', '十一一月一号', '下个月某天']) assert.equal(purchaseDateFields(expression, '2026-10-29').date, '');
   assert.deepEqual(normalizePurchaseSlots({ date_expression: '十一月一日', preferences: { occasion: '生日' } }, '2026-10-29'), {
     date_expression: '2026-11-01', budget_month: '2026-11', preferences: { occasion: '生日' },
@@ -26,11 +27,11 @@ test('banking purchase response fills September 1 from the model slots before as
   const request = new Request('http://localhost/api/banking-agent', { method: 'POST', headers: {
     'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'content-type': 'application/json', 'x-forwarded-for': 'purchase-date-test',
   }, body: JSON.stringify({ consent: true, history: [], message: '提醒我在九月一号买花' }) });
-  const response = await handleBankingAgent(request, { env, now: () => Date.parse('2026-10-29T00:00:00Z'), parseIntent: async () => intent });
+  const response = await handleBankingAgent(request, { env, now: () => Date.parse('2026-08-15T00:00:00Z'), parseIntent: async () => intent });
   assert.equal(response.status, 200);
   const slots = (await response.json()).data.data.slots;
-  assert.equal(slots.date_expression, '2027-09-01');
-  assert.equal(slots.budget_month, '2027-09');
+  assert.equal(slots.date_expression, '2026-09-01');
+  assert.equal(slots.budget_month, '2026-09');
   assert.equal(slots.date_meaning, 'order_on');
   assert.equal(slots.budget, undefined);
 });

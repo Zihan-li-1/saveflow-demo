@@ -2,7 +2,7 @@ import { localDate, validCalendarDate } from './calendar.mjs';
 
 const DATE_WINDOW = /^(\d{4}-\d{2}-\d{2}) \d{2}:\d{2}-\d{2}:\d{2}$/;
 
-/** Preserve partial dates: knowing the day does not imply knowing the time. */
+/** Preserve partial dates: knowing the day does not imply knowing the time. Missing year means the current year. */
 export function purchaseDateFields(expression = '', currentDate = localDate(Date.now())) {
   const digits = '零一二三四五六七八九';
   const number = value => {
@@ -13,10 +13,9 @@ export function purchaseDateFields(expression = '', currentDate = localDate(Date
   };
   const match = /^(?:(\d{4})[-/.年])?([\d一二三四五六七八九十]+)[-/.月]([\d一二三四五六七八九十]+)(?:日|号)?(?:\s+(\d{2}:\d{2})(?:-(\d{2}:\d{2}))?)?$/.exec(expression.trim());
   if (!match) return { date: '', start: '', end: '' };
-  let year = Number(match[1] || currentDate.slice(0, 4));
+  const year = Number(match[1] || currentDate.slice(0, 4));
   const monthDay = `${String(number(match[2])).padStart(2, '0')}-${String(number(match[3])).padStart(2, '0')}`;
-  let date = `${year}-${monthDay}`;
-  if (!match[1] && date < currentDate) date = `${++year}-${monthDay}`;
+  const date = `${year}-${monthDay}`;
   if (!validCalendarDate(date)) return { date: '', start: '', end: '' };
   return { date, start: match[4] ?? '', end: match[5] ?? '' };
 }

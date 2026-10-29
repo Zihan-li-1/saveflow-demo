@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { shoppingSearchLinks } from '../lib/purchase-links.mjs';
 import { yuan, inputMinor, purchaseRequest, type PurchaseSlots, type PurchaseWorkflow, type PlanPreview } from '../lib/purchase-client';
 import { purchaseNeedsReservation, purchaseMissingQuestions, purchaseDateFields } from '../lib/purchase-flow.mjs';
+import { localDate } from '../lib/calendar.mjs';
 
 const categoryLabel = (category: 'flowers' | 'cake') => (category === 'flowers' ? '鲜花' : '蛋糕');
 const meaningLabel = (meaning?: 'order_on' | 'deliver_on') =>
@@ -45,7 +46,9 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
   const [balance, setBalance] = useState(''), [obligations, setObligations] = useState('');
   const inFlight = useRef(false);
   const call = <T,>(action: string, input: unknown) => purchaseRequest<T>(action, input, accessCode, consent);
-  const ready = cats.length > 0 && dateText && startTime && endTime && meaning && Number(amount) > 0 && card;
+  const today = localDate(Date.now());
+  const datePast = Boolean(dateText) && dateText < today;
+  const ready = cats.length > 0 && dateText && startTime && endTime && meaning && Number(amount) > 0 && card && !datePast;
 
   async function run(work: () => Promise<void>) {
     if (inFlight.current) return;
@@ -137,10 +140,11 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
         })}
       </div>}
       <div style={fieldStyle}><span>{dateFields.date ? need('date_expression') ? '日期已填入，请补充时间段：' : '已识别的购买时间：' : '哪天、哪个时间段？'} </span>
-        <input aria-label="购买日期" type="date" value={dateText} onChange={event => setDateText(event.target.value)} style={inputStyle} />
+        <input aria-label="购买日期" type="date" min={today} value={dateText} onChange={event => setDateText(event.target.value)} style={inputStyle} />
         <input aria-label="开始时间" type="time" value={startTime} onChange={event => setStartTime(event.target.value)} style={inputStyle} />–
         <input aria-label="结束时间" type="time" value={endTime} onChange={event => setEndTime(event.target.value)} style={inputStyle} />
       </div>
+      {datePast && <p role="alert">所选日期 {dateText} 已经过去，请改成今天（{today}）或之后的时间。</p>}
       {need('date_meaning') && <div style={fieldStyle}><span>届时怎么处理？ </span>
         {(['提醒我下单', '希望送达'] as const).map(option => {
           const value = option === '提醒我下单' ? 'order_on' as const : 'deliver_on' as const;

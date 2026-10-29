@@ -20,6 +20,11 @@ test('purchase request pre-fills the known day and only asks for missing informa
   assert.match(html, /日期已填入，请补充时间段/);
   assert.match(html, /预览提醒设置/);
   assert.doesNotMatch(html, />补充<|手动填写完整表单|届时怎么处理|value="09:00"|预提醒已设置成功/);
+  const past = renderToStaticMarkup(React.createElement(PurchaseRequestCard, { slots: {
+    date_expression: '2020-01-01', date_meaning: 'order_on', items: [{ category: 'flowers', quantity: 1 }],
+  } }));
+  assert.match(past, /已经过去/);
+  assert.match(past, /<button[^>]*disabled[^>]*>预览提醒设置</);
   const immediate = renderToStaticMarkup(React.createElement(PurchaseRequestCard, { slots: { items: [{ category: 'flowers', quantity: 1 }] } }));
   assert.match(immediate, /search.jd.com/);
   assert.doesNotMatch(immediate, /预览提醒设置|type="date"/);
