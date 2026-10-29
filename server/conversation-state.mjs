@@ -56,15 +56,15 @@ const summaryValueLimit = 512;
 const internalReferenceKey = /(?:^|_)(?:id|taskid|operationid|entityid|optionid|token|secret)$/i;
 /** @param {unknown} value @param {number} [depth] @returns {unknown} */
 function summaryValue(value, depth = 0) {
-  if (depth > 4) return '[å·²çœç•¥]';
+  if (depth > 4) return '[已省略]';
   if (value === null || typeof value === 'boolean' || typeof value === 'number') return value;
-  if (typeof value === 'string') return value.length > summaryValueLimit ? `${value.slice(0, summaryValueLimit)}â€¦` : value;
-  if (!value || typeof value !== 'object' || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return '[å·²çœç•¥]';
+  if (typeof value === 'string') return value.length > summaryValueLimit ? `${value.slice(0, summaryValueLimit)}…` : value;
+  if (!value || typeof value !== 'object' || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return '[已省略]';
   if (Array.isArray(value)) return value.slice(0, summaryKeyLimit).map(item => summaryValue(item, depth + 1));
   /** @type {Record<string, unknown>} */
   const result = {};
   for (const [key, child] of Object.entries(value).slice(0, summaryKeyLimit)) {
-    if (internalReferenceKey.test(key) || /id$/i.test(key) || key.endsWith('_ref')) result[key] = '[å·²æ ¸éªŒå¼•ç”¨]';
+    if (internalReferenceKey.test(key) || /id$/i.test(key) || key.endsWith('_ref')) result[key] = '[已核验引用]';
     else result[key] = summaryValue(child, depth + 1);
   }
   return result;

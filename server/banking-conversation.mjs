@@ -198,7 +198,7 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
       if (typeof goal !== 'string' || !goal.trim() || goal.length > 2000 || !constraints || typeof constraints !== 'object' || Array.isArray(constraints)) {
         throw error('INVALID_REQUEST', '规划目标或约束条件无效。', { status: 400 });
       }
-      const suspendCurrent = active(state.currentTask);
+      const suspendCurrent = !!active(state.currentTask);
       await commit({ type: 'start_plan', goal, constraints, suspendCurrent });
       return state.currentTask;
     },

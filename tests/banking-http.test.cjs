@@ -30,7 +30,7 @@ async function confirmed(client) {
 test('B HTTP: real handler and typed client run reads, preview, confirmation, execution and lookup', async () => {
   const { client, core } = await setup();
   for (const action of ['account.list', 'payee.list', 'transaction.list', 'product.list', 'card.list', 'subscription.list']) assert.ok((await client.request(action, {})).length > 0);
-  assert.equal((await client.request('context.get', {})).currentMonth, '2026-08');
+  assert.equal((await client.request('context.get', {})).currentMonth, '2026-09');
   const p = await confirmed(client);
   assert.equal(core.repository.getAccount(input.fromAccountId).balanceFen, 500000);
   const executeInput = { operationId: p.operationId, previewHash: p.preview.previewHash };

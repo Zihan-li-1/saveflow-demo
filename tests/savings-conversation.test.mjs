@@ -7,8 +7,9 @@ const env = { SAVEFLOW_ACCESS_CODE: 'savings-test-access', CONTINUATION_TOKEN_SE
 const now = () => Date.parse('2026-10-22T12:00:00+08:00');
 const intent = { schemaVersion: '1.0.0', action: 'orchestrator.goal', slots: { goal_text: '年底存够一万元', amount: { amount_minor: 1000000, currency: 'CNY' }, deadline: '2026-12-31' }, missingSlots: [], status: 'ready_for_resolution' };
 const expenses = { 房租: 300000, 餐饮: 145000, 交通: 40000, 通信: 10000, 日用品: 50000, 娱乐: 112000, 购物: 128000, 订阅: 9000, 其他: 52000 };
-const planInputs = { month: '2026-09', saved_amount_minor: 0, income_minor: 1200000, category_expenses_minor: expenses };
-const advice = { observations: [], category_budgets: Object.entries(expenses).map(([category, suggested_minor]) => ({ category, suggested_minor, reason: '按近期支出暂作参考', evidence_refs: [`recent:${category}`] })), caveats: ['收入与支出来自用户填写'], self_review: { passed: true, data_coverage: true, category_evidence: true, fixed_costs: true, budget_totals: true, uncertainty: true, failed_items: [] } };
+const planInputs = { saved_amount_minor: 0 };
+const manualOverride = { ...planInputs, month: '2026-09', income_minor: 1200000, category_expenses_minor: expenses };
+const advice = { observations: [], category_budgets: Object.entries(expenses).map(([category, suggested_minor]) => ({ category, suggested_minor, reason: '按近期支出暂作参考', evidence_refs: [`recent:${category}`] })), caveats: ['演示账单数据仅供参考'], self_review: { passed: true, data_coverage: true, category_evidence: true, fixed_costs: true, budget_totals: true, uncertainty: true, failed_items: [] } };
 let serial = 0;
 const request = data => new Request('http://localhost/api/banking-agent', { method: 'POST', headers: { 'content-type': 'application/json', 'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'x-forwarded-for': `savings-${++serial}` }, body: JSON.stringify({ history: [], consent: true, ...data }) });
 const options = { env, now, parseIntent: async () => intent, savingsAdvisor: async facts => {
@@ -20,11 +21,13 @@ const options = { env, now, parseIntent: async () => intent, savingsAdvisor: asy
   return { ...advice, observations: [{ category, trend, evidence_refs: [`recent:${category}`, `history:${facts.history[0].month}:${category}`], reason: '近期与历史演示数据仅供参考', uncertain: true }] };
 } };
 
-test('savings goal asks for recent category data before producing a verified card', async () => {
+test('savings goal reads bill categories and asks only for saved progress before producing a verified card', async () => {
   const initial = await (await handleBankingAgent(request({ message: '我要年底存够一万' }), options)).json();
   assert.equal(initial.data.status, 'needs_plan_inputs');
   assert.equal(initial.data.requiredMonth, '2026-09');
-  assert.equal(initial.data.recentSource, 'user_provided');
+  assert.equal(initial.data.recentSource, 'repository');
+  assert.equal(initial.data.recent.income_minor, 1200000);
+  assert.equal(initial.data.recent.category_expenses_minor.购物, 80000);
   assert.deepEqual(initial.data.goal, { target_amount_minor: 1000000, deadline: '2026-12-31' });
   assert.ok(initial.data.continuationToken);
   const final = await (await handleBankingAgent(request({ continuationToken: initial.data.continuationToken, planInputs }), options)).json();
@@ -63,7 +66,7 @@ test('fresh repository figures replace the recent form and user cannot override 
   const initial = await (await handleBankingAgent(request({ message: '我要年底存够一万' }), enhanced)).json();
   assert.equal(initial.data.recentSource, 'repository');
   assert.equal(initial.data.recent.income_minor, 1200000);
-  const override = await (await handleBankingAgent(request({ continuationToken: initial.data.continuationToken, planInputs }), enhanced)).json();
+  const override = await (await handleBankingAgent(request({ continuationToken: initial.data.continuationToken, planInputs: manualOverride }), enhanced)).json();
   assert.equal(override.code, 'PLAN_INPUT_INVALID');
   const final = await (await handleBankingAgent(request({ continuationToken: initial.data.continuationToken, planInputs: { saved_amount_minor: 0 } }), enhanced)).json();
   assert.equal(final.data.status, 'goal_plan');
