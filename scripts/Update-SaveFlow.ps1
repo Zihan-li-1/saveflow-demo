@@ -59,6 +59,8 @@ if ($githubSha -notmatch '^[0-9a-f]{40}$') { Fail "invalid origin/main SHA: $git
 $localBefore = (git rev-parse HEAD).Trim()
 Run 'git' @('merge', '--no-edit', 'origin/main')
 $deploymentSha = (git rev-parse HEAD).Trim()
+& git diff --quiet origin/main -- .
+if ($LASTEXITCODE -ne 0) { Fail 'deployment tree contains changes absent from GitHub main; merge the integration branch into main before deploying' }
 
 $portOwners = @(docker ps --format '{{.Names}} {{.Ports}}' | Where-Object { $_ -match '0\.0\.0\.0:4300|127\.0\.0\.1:4300' })
 if ($portOwners.Count -gt 0 -and ($portOwners -notmatch 'saveflow-local-check-web-1')) { Fail "port 4300 is occupied by: $($portOwners -join '; ')" }
