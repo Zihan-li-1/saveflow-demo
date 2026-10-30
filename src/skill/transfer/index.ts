@@ -1,4 +1,7 @@
 // skill/transfer/index.ts
+// ⚠️ @deprecated —— 本目录是「阶段一」的 TS 平行实现，仅被测试引用，未接进生产。
+// 生产路径为 src/agent/runtime.mjs 的 resolveTransferIntent；方向判定规则须与
+// src/agent/transfer-direction.mjs 保持一致，如需改动请两处同步。
 import { resolvePayee } from "./resolve_payee";
 import { prepareTransfer } from "./prepare_transfer";
 import type {
@@ -19,6 +22,7 @@ function needsClarification(clarification: Clarification): ResolvedTransferInten
 }
 
 /**
+ * @deprecated 生产环境请使用 src/agent/runtime.mjs 的 resolveTransferIntent；本实现仅被测试引用。
  * 解析转账意图（transfer.create）：把 LLM 抽取的口语槽位解析为服务端实体引用并组装转账预览。
  *
  * 输出 snake_case 的 ResolvedTransferIntent：

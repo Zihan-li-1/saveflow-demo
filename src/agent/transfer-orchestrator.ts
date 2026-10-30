@@ -1,3 +1,4 @@
+// ⚠️ @deprecated —— 测试用平行实现，生产走 src/agent/runtime.mjs 的 prepareTransferPreview / orchestrateTransferPreview。
 import { transferFromResolvedIntent } from "../banking-core/wire.mjs";
 import type {
   ActionRequest,

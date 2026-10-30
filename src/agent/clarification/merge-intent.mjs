@@ -1,4 +1,5 @@
 import { validateParsedIntent } from '../validate-parsed-intent.mjs';
+import { transferDirection } from '../transfer-direction.mjs';
 
 const required = {
   clarify: ['action'],
@@ -23,10 +24,9 @@ const required = {
 };
 
 function transferRequiredSlots(slots) {
-  const internal = 'target_account_ref' in slots || slots.transfer_type === 'internal';
-  const external = 'payee_ref' in slots || slots.transfer_type === 'external';
-  if (!internal && !external) return ['transfer_type', 'amount', 'source_account_ref'];
-  return ['amount', 'source_account_ref', internal ? 'target_account_ref' : 'payee_ref'];
+  const direction = transferDirection(slots); // 方向判定唯一权威定义：见 transfer-direction.mjs
+  if (direction === 'unclear') return ['transfer_type', 'amount', 'source_account_ref'];
+  return ['amount', 'source_account_ref', direction === 'internal' ? 'target_account_ref' : 'payee_ref'];
 }
 
 export function buildParsedIntent(action, slots) {

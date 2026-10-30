@@ -1,3 +1,4 @@
+// ⚠️ @deprecated —— 测试用平行实现，生产走 src/agent/runtime.mjs 的 handleTransfer。
 import { resolveTransferIntent } from "../../skill/transfer";
 import type { TransferDependencies } from "../../skill/transfer/types";
 import type { DispatchResult } from "../dispatch-result";
