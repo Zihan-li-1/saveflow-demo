@@ -1,9 +1,10 @@
 import { writeOutcomeTransitions } from "../banking-core/action-machine.mjs";
+import { projectCoreOperationState } from "./operation-state";
+export { coreOperationBlocksInput } from "./operation-state";
+export type { CoreOperationStage } from "./operation-state";
 
 export type Stage = "welcome" | "analyzing" | "plan" | "edit" | "executing" | "success" | "cancelled" | "error" | "unknown" | "checking" | "clarifying" | "answered";
 // Agent request completion and Core operation completion are independent.
-export type CoreOperationStage = Extract<Stage, "plan" | "executing" | "checking" | "unknown" | "success" | "error" | "cancelled">;
-export const coreOperationBlocksInput = (stage: CoreOperationStage) => ["executing", "checking", "unknown"].includes(stage);
 export type FlowEvent = "START" | "ANALYZED" | "EDIT" | "SAVE" | "CONFIRM" | "SUCCEEDED" | "FAILED" | "UNCERTAIN" | "CHECK" | "CANCEL" | "RESET" | "CLARIFY" | "ANSWER";
 
 // No write retry or reset is permitted while the outcome is unknown.
@@ -15,7 +16,7 @@ export const transitions: Partial<Record<Stage, Partial<Record<FlowEvent, Stage>
   plan: { EDIT: "edit", CONFIRM: "executing", CANCEL: "cancelled", RESET: "welcome" },
   edit: { SAVE: "plan", CANCEL: "cancelled", RESET: "welcome" },
   ...Object.fromEntries(Object.entries(writeOutcomeTransitions).map(([state, events]) => [state,
-    Object.fromEntries(Object.entries(events).map(([event, next]) => [event, next === "succeeded" ? "success" : next === "failed" ? "error" : next])),
+    Object.fromEntries(Object.entries(events).map(([event, next]) => [event, projectCoreOperationState(next)])),
   ])),
   error: { START: "analyzing", EDIT: "edit", RESET: "welcome" },
   success: { START: "analyzing", RESET: "welcome" },
@@ -23,6 +24,12 @@ export const transitions: Partial<Record<Stage, Partial<Record<FlowEvent, Stage>
 };
 export function transition(stage: Stage, event: FlowEvent): Stage {
   return transitions[stage]?.[event] ?? stage;
+}
+/** Strict variant for tests and development diagnostics; production callers use the safe no-op transition. */
+export function transitionStrict(stage: Stage, event: FlowEvent): Stage {
+  const next = transitions[stage]?.[event];
+  if (!next) throw new Error(`Invalid flow transition: ${stage} + ${event}`);
+  return next;
 }
 export function canTransition(stage: Stage, event: FlowEvent) {
   return transitions[stage]?.[event] !== undefined;

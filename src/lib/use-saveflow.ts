@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { canTransition, coreOperationBlocksInput, transition, type CoreOperationStage, type FlowEvent, type Stage } from "./flow-machine";
+import { isActionState, isTerminalCoreOperationStage, projectCoreOperationState } from "./operation-state";
 import { saveflowMock } from "./saveflow-mock";
 import { request } from "./api/client";
 import { apiConfig } from "./api/config";
@@ -96,12 +97,15 @@ export function useSaveflow() {
         if (id && (!ref || ref.coreState !== 'awaiting_confirmation' || ref.taskId !== answer.conversation.currentTask?.taskId)) {
           activePreviews.current[kind] = null;
           if (kind === 'card') setActiveCardOperationId(null); else setActiveTransferOperationId(null);
-          if (ref && ['succeeded', 'cancelled', 'failed'].includes(ref.coreState)) setCoreOperation(id, ref.coreState === 'succeeded' ? 'success' : ref.coreState === 'failed' ? 'error' : 'cancelled');
+          if (ref && isActionState(ref.coreState)) {
+            const projected = projectCoreOperationState(ref.coreState);
+            if (isTerminalCoreOperationStage(projected)) setCoreOperation(id, projected);
+          }
         }
       }
 
       for (const reference of answer.conversation.operationReferences) {
-        if (['confirmed', 'executing', 'checking', 'unknown'].includes(reference.coreState) && !['success', 'cancelled', 'error'].includes(coreOperationsRef.current[reference.operationId])) setCoreOperation(reference.operationId, 'unknown');
+        if (isActionState(reference.coreState) && ["confirmed", "executing", "checking", "unknown"].includes(reference.coreState) && !isTerminalCoreOperationStage(coreOperationsRef.current[reference.operationId])) setCoreOperation(reference.operationId, 'unknown');
       }
     }
     installFlows(updateBankingFlows(bankingFlowsRef.current, flowId, answer));

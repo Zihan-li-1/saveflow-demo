@@ -85,6 +85,20 @@ test('bill.analyze supports an inclusive custom date range and equal-length comp
   assert.ok(result.evidence[0].entity_ids.every((id) => typeof id === 'string'));
 });
 
+test('bill.analyze assigns midnight-boundary transactions using the requested timezone', async () => {
+  const boundary = transaction('expense', 8800, '餐饮', 'txn_boundary');
+  boundary.occurredAt = '2026-08-31T16:30:00Z'; // 2026-09-01 in Asia/Shanghai
+  const repository = {
+    getContextInfo: () => ({ asOf: '2026-09-02T00:00:00+08:00', dataSource: 'synthetic_demo_only' }),
+    getAccount: () => undefined,
+    getTransactions: () => [boundary],
+  };
+  const shanghai = await analyzeBills(repository, { action: 'bill.analyze', period: { month: '2026-09', timezone: 'Asia/Shanghai' } });
+  const utc = await analyzeBills(repository, { action: 'bill.analyze', period: { month: '2026-09', timezone: 'UTC' } });
+  assert.equal(shanghai.period_expense_minor, 8800);
+  assert.equal(utc.period_expense_minor, 0);
+});
+
 test('subscription.list returns current snapshot without claiming cancellation capability', async () => {
   const { repository } = createFinancialContext();
   const result = await listSubscriptions(repository);

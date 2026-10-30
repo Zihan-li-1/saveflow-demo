@@ -4,6 +4,7 @@ import type {
   Transaction,
   Subscription,
 } from "../../banking-core/contracts";
+import { localDate as calendarLocalDate } from "../../lib/calendar.mjs";
 import type {
   BillAnalyzeAction,
   SubscriptionListAction,
@@ -183,10 +184,11 @@ function resolvePeriods(period: BillAnalyzeAction["period"]): {
 async function transactionsInRange(
   repository: FinancialContextRepository,
   accountId: string | undefined,
-  range: { start: string; end: string }
+  range: { start: string; end: string },
+  timezone: string,
 ): Promise<Transaction[]> {
   return (await repository.getTransactions({ accountId })).filter((transaction) => {
-    const localDate = transaction.occurredAt.slice(0, 10);
+    const localDate = calendarLocalDate(transaction.occurredAt, timezone);
     return localDate >= range.start && localDate <= range.end;
   });
 }
@@ -230,8 +232,8 @@ export async function analyzeBills(
 
   const ranges = resolvePeriods(input.period);
   const [current, previous] = await Promise.all([
-    transactionsInRange(repository, accountId, ranges.current),
-    transactionsInRange(repository, accountId, ranges.comparison),
+    transactionsInRange(repository, accountId, ranges.current, input.period.timezone),
+    transactionsInRange(repository, accountId, ranges.comparison, input.period.timezone),
   ]);
   const currentTotal = totalExpense(current);
   const previousTotal = totalExpense(previous);
