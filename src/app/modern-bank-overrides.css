@@ -16,6 +16,14 @@
 .banking-choice-list button:hover { background: #edf4ff; }
 .banking-choice-card small, .banking-result-card small, .banking-preview-card small { display: block; color: #8e9aa6; font-size: 10px; margin-top: 9px; }
 .banking-result-card { display: grid; gap: 5px; color: #586675; font-size: 11px; }
+.wealth-product-sections { display: grid; gap: 12px; margin-top: 8px; }
+.wealth-product-section { display: grid; gap: 8px; }
+.wealth-product-section h3 { margin: 0; color: #315e9e; font-size: 13px; }
+.wealth-product-list { display: grid; gap: 9px; }
+.wealth-product-card { display: grid; gap: 6px; padding: 12px; border: 1px solid #e1e9f2; border-radius: 10px; background: #fff; }
+.wealth-product-card strong { color: #34445a; font-size: 13px; }
+.wealth-product-card a { width: fit-content; color: #3474cf; font-size: 11px; text-decoration: none; }
+.wealth-product-card a:hover { text-decoration: underline; }
 .banking-task-panel { display: none !important; }
 .error-actions details { display: none; }
 .banking-preview-card > div { display: flex; justify-content: space-between; gap: 12px; color: #83909d; font-size: 10px; }

@@ -66,7 +66,7 @@ export function validateWealthAction(value) {
 /** @param {import('../../banking-core/contracts').InvestmentProduct} product */
 function productView(product) {
   return {
-    product_ref: product.id, name: product.name, risk_level: product.riskLevel,
+    product_ref: product.id, name: product.name, category: product.category, product_code: product.displayCode, risk_level: product.riskLevel,
     expected_yield_bps: product.expectedYield, liquidity: product.liquidity,
     minimum_amount_minor: product.minimumAmountFen, duration_days: product.durationDays,
     currency: product.currency, synthetic: product.isSynthetic,
