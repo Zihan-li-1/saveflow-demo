@@ -8,7 +8,7 @@ const yuan = (fen: number) => `¥${(fen / 100).toFixed(2)}`;
 
 /** Two initialized virtual cards, overlaid with verified card.get results after operations. */
 export function BankingCardManagement({ messages, operationStates = {} }: { messages: Message[]; operationStates?: Readonly<Record<string, string>> }) {
-  const cards = synchronizeManagedCards(saveflowMock.cards, messages);
+  const cards = synchronizeManagedCards(saveflowMock.cards, messages, operationStates);
   const activities = cardActivities(messages, operationStates);
   return <section className="card-management" aria-labelledby="card-management-title">
     <header className="card-management-header">

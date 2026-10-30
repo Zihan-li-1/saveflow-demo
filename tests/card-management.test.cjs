@@ -30,6 +30,42 @@ test('card management initializes two cards and syncs only verified operation re
   assert.equal(result[1].version, 2);
 });
 
+test('card management follows a successful freeze task even when only its verified task state is available', () => {
+  const preview = {
+    id: 3,
+    role: 'agent',
+    text: 'freeze preview',
+    kind: 'banking_card_preview',
+    banking: {
+      operationId: 'op-freeze',
+      status: 'awaiting_confirmation',
+      action: 'card.freeze',
+      preview: {
+        exactEffects: [{
+          kind: 'card_change',
+          cardId: 'CARD-ENT',
+          cardName: '娱乐虚拟卡',
+          cardVersion: 1,
+          after: { status: 'frozen' },
+        }],
+      },
+    },
+  };
+
+  assert.equal(synchronizeManagedCards(cards, [preview], {})[1].status, 'active');
+  assert.equal(synchronizeManagedCards(cards, [preview], { 'op-freeze': 'executing' })[1].status, 'active');
+  const completed = synchronizeManagedCards(cards, [preview], { 'op-freeze': 'success' });
+  assert.equal(completed[1].status, 'frozen');
+  assert.equal(completed[1].version, 2);
+});
+
+test('later verified card queries remain authoritative after a completed task', () => {
+  const preview = { id: 1, role: 'agent', kind: 'banking_card_preview', banking: { operationId: 'op-freeze', action: 'card.freeze', preview: { exactEffects: [{ kind: 'card_change', cardId: 'CARD-ENT', after: { status: 'frozen' } }] } } };
+  const queried = { ...cards[1], status: 'active', version: 3 };
+  const query = { id: 2, role: 'agent', kind: 'banking_card', banking: { status: 'card_result', data: { card: queried } } };
+  assert.equal(synchronizeManagedCards(cards, [preview, query], { 'op-freeze': 'success' })[1].status, 'active');
+});
+
 test('budget balance alerts fire at amount, percentage and exhaustion thresholds', () => {
   assert.match(budgetBalanceAlert({ monthlyBudgetFen: 80000, monthlySpentFen: 76000, balanceReminderAmountFen: 5000, balanceReminderPercent: null }), /临界点/);
   assert.match(budgetBalanceAlert({ monthlyBudgetFen: 80000, monthlySpentFen: 65000, balanceReminderAmountFen: null, balanceReminderPercent: 20 }), /临界点/);
