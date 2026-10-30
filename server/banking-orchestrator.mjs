@@ -143,7 +143,7 @@ function nextMissingSlot(intent) {
 /** Shared clarification and preview workflow. The only Core capability used is prepare(). */
 export async function runBankingConversation(body, {
   core, repository = core.repository, env = process.env, now = Date.now, timezone = 'Asia/Shanghai',
-  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, requestId = crypto.randomUUID(), origin = 'user_requested', scenarioHandler, scenarioScope = 'fixed_mock_user', savingsAdvisor = requestSavingsAdvice, conversation, resumeOnly = false,
+  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, signal, requestId = crypto.randomUUID(), origin = 'user_requested', scenarioHandler, scenarioScope = 'fixed_mock_user', savingsAdvisor = requestSavingsAdvice, conversation, resumeOnly = false,
   onDiagnostic = () => {},
 }) {
   let replyContext = {};
@@ -250,7 +250,7 @@ export async function runBankingConversation(body, {
       const calculation = calculateSavingsGoal({ targetAmountMinor: continuation.slots.amount.amount_minor, deadline: continuation.slots.deadline, ...normalized, currentDate });
       const recent = financial.recent || { month: normalized.month, income_minor: normalized.incomeMinor, category_expenses_minor: normalized.categoryExpensesMinor };
       const facts = { recent, history: financial.history, sources: financial.sources, required_monthly_minor: calculation.required_monthly_minor };
-      const candidate = await savingsAdvisor(facts, { env, fetchImpl });
+      const candidate = await savingsAdvisor(facts, { env, fetchImpl, signal });
       const advice = verifySavingsAdvice(candidate, facts);
       const generic = await handleGoal({ slots: continuation.slots }, repository);
       const wealthHandoffToken = core.wealthPorts ? issueState({ action: 'wealth.recommend', slots: { goal: { kind: 'steady_growth', target_date: calculation.deadline } }, pendingSlot: '__wealth_screening', env, now }) : undefined;
