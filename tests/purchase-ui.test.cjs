@@ -27,7 +27,7 @@ test('purchase request pre-fills the known day and only asks for missing informa
   assert.doesNotMatch(past, /预览提醒设置|已识别：|type="date"|search.jd.com/);
   const immediate = renderToStaticMarkup(React.createElement(PurchaseRequestCard, { slots: { items: [{ category: 'flowers', quantity: 1 }] } }));
   assert.match(immediate, /search.jd.com/);
-  assert.doesNotMatch(immediate, /预览提醒设置|type="date"/);
+  assert.doesNotMatch(immediate, /预览提醒设置|type="date"|现在就买/);
 });
 
 test('supplement → preview → confirm calls the real purchase API and only receipts a persisted reminder', async t => {
