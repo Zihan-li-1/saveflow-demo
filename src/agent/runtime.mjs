@@ -1,6 +1,7 @@
 import { validateParsedIntent } from './validate-parsed-intent.mjs';
 import { localDate as calendarLocalDate } from '../lib/calendar.mjs';
 import { transferFromResolvedIntent } from '../banking-core/wire.mjs';
+import { transferDirection } from './transfer-direction.mjs';
 import { handleCard } from './handlers/card-handler.mjs';
 import { agentErrorPolicy } from '../lib/agent-error-policy.mjs';
 import { buildBillInsights, previousMonth } from './bill-insights.mjs';
@@ -171,7 +172,13 @@ async function resolveTransferIntent(repository, slots) {
   if (!Number.isSafeInteger(amount.amount_minor) || amount.amount_minor <= 0) return { state: 'needs_clarification', clarification: { reason: 'invalid_amount', slot: 'amount', question: '转账金额必须是大于 0 的整数分。' } };
   if (amount.currency !== 'CNY') return { state: 'needs_clarification', clarification: { reason: 'invalid_amount', slot: 'amount', question: '目前仅支持人民币（CNY）转账。' } };
   const targetRef = typeof slots.target_account_ref === 'string' ? slots.target_account_ref.trim() : '';
-  if (targetRef) return resolveInternalTransfer(repository, amount, slots, targetRef);
+  // 方向判定与契约层/续接层共用 transfer-direction.mjs 的权威定义。
+  // dispatchParsedIntent 会在 needs_clarification 时短路，保证「transfer_type==='internal'
+  // 但缺 target_account_ref」的意图不会到这里；此处仍自包含防御，单独调用行为也正确。
+  if (transferDirection(slots) === 'internal') {
+    if (!targetRef) return { state: 'needs_clarification', clarification: { reason: 'missing_slot', slot: 'target_account_ref', question: '请确认转入哪个本人账户。' } };
+    return resolveInternalTransfer(repository, amount, slots, targetRef);
+  }
   // —— 对外转账（既有路径，保持不变）——
   const source = typeof slots.source_account_ref === 'string' ? slots.source_account_ref.trim() : '';
   if (!source) return { state: 'needs_clarification', clarification: { reason: 'missing_slot', slot: 'source_account_ref', question: '请确认从哪个账户转出。' } };

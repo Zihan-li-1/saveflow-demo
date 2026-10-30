@@ -1,6 +1,7 @@
 import { validCalendarDate, validTimezone } from '../lib/calendar.mjs';
 import { validateWealthIntent } from '../skills/wealth/wealth-action-skill.mjs';
 import { validatePurchaseAction } from '../skills/scenario/purchase-contract.mjs';
+import { transferDirection } from './transfer-direction.mjs';
 
 export const PARSED_INTENT_SCHEMA_VERSION = '1.0.0';
 export const PARSED_INTENT_ACTIONS = Object.freeze([
@@ -162,7 +163,10 @@ function validateTransfer(input, slots) {
   if ('amount' in slots) validateAmount(slots.amount);
   if ('source_account_ref' in slots) requireRawReference(slots.source_account_ref, 'slots.source_account_ref');
   // 对外转账用 payee_ref，本人账户互转用 target_account_ref；两者互斥。
-  const directionKey = internal || slots.transfer_type === 'internal' ? 'target_account_ref' : external || slots.transfer_type === 'external' ? 'payee_ref' : 'transfer_type';
+  // 方向判定（含 transfer_type）统一走 transfer-direction.mjs 的权威定义；
+  // 上面的 internal/external 仅用于「互斥/匹配」的合法性校验（严格按 *_ref 是否存在）。
+  const direction = transferDirection(slots);
+  const directionKey = direction === 'internal' ? 'target_account_ref' : direction === 'external' ? 'payee_ref' : 'transfer_type';
   const required = directionKey === 'transfer_type' ? ['transfer_type', 'amount', 'source_account_ref'] : ['amount', 'source_account_ref', directionKey];
   const missing = required.filter((slot) => !(slot in slots));
   requireMissingSlots(input.missingSlots, missing);

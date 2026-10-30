@@ -86,6 +86,8 @@ export interface TransferIntentSlots {
 
 /** clarification 追问信息（交由上层 Orchestrator 向用户澄清） */
 export interface Clarification {
+  /** 澄清原因。注意：missing_transfer_type 仅本 TS 平行实现产出；生产 MJS 路径（runtime.mjs）
+   * 把「未说明方向」当作 transfer_type 槽位缺失、在契约层（merge-intent / validate-parsed-intent）澄清，不产出该 reason。 */
   reason:
     | "missing_slot"
     | "invalid_amount"
