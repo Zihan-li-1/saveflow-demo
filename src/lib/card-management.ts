@@ -1,9 +1,11 @@
 import type { Message } from "./use-saveflow";
+import type { Card } from "../banking-core/contracts";
+import { cardActivityStatus, type CardActivityStatus, type CoreOperationStage } from "./operation-state";
 
 export type ManagedCard = {
   id: string;
   name: string;
-  status: string;
+  status: Card["status"];
   monthlyBudgetFen: number;
   monthlySpentFen: number;
   onlinePaymentsEnabled: boolean;
@@ -19,7 +21,7 @@ export type CardActivity = {
   cardName: string;
   label: string;
   detail: string;
-  status: "待确认" | "处理中" | "已完成" | "已取消" | "操作失败" | "结果待核实";
+  status: CardActivityStatus;
 };
 
 const actionLabel: Record<string, string> = {
@@ -29,16 +31,53 @@ const actionLabel: Record<string, string> = {
   "card.unfreeze": "解冻卡片",
 };
 
-/** Apply only verified card-result messages; previews must never change the displayed cards. */
-export function synchronizeManagedCards(initialCards: readonly ManagedCard[], messages: readonly Message[]): ManagedCard[] {
+type CardChangeEffect = {
+  kind?: string;
+  cardId?: string;
+  cardName?: string;
+  cardVersion?: number;
+  after?: Partial<ManagedCard>;
+};
+
+const mergeVerifiedCard = (current: ManagedCard, update: Partial<ManagedCard>): ManagedCard => ({
+  ...current,
+  ...update,
+  id: current.id,
+  blockedCategories: Array.isArray(update.blockedCategories) ? [...update.blockedCategories] : [...current.blockedCategories],
+});
+
+/**
+ * Follow verified card state from both fresh card.get results and completed write tasks.
+ * A preview is applied only when its operation state is `success`; pending, failed and
+ * unknown operations never change the displayed card.
+ */
+export function synchronizeManagedCards(
+  initialCards: readonly ManagedCard[],
+  messages: readonly Message[],
+  operationStates: Readonly<Record<string, CoreOperationStage>> = {},
+): ManagedCard[] {
   const cards = new Map<string, ManagedCard>(initialCards.map(card => [card.id, {
     ...card,
     blockedCategories: [...card.blockedCategories],
   }]));
   for (const message of messages) {
-    if (message.kind !== "banking_card" || message.banking?.status !== "card_result") continue;
-    const card = message.banking.data?.card as ManagedCard | undefined;
-    if (card?.id && cards.has(card.id)) cards.set(card.id, { ...card, blockedCategories: [...(card.blockedCategories || [])] });
+    if (message.kind === "banking_card" && message.banking?.status === "card_result") {
+      const card = message.banking.data?.card as ManagedCard | undefined;
+      if (card?.id && cards.has(card.id)) cards.set(card.id, mergeVerifiedCard(cards.get(card.id)!, card));
+      continue;
+    }
+
+    const data = message.banking;
+    if (message.kind !== "banking_card_preview" || !data?.operationId || operationStates[data.operationId] !== "success") continue;
+    const preview = data.preview as { exactEffects?: CardChangeEffect[] } | undefined;
+    const effect = preview?.exactEffects?.find(item => item.kind === "card_change");
+    if (!effect?.after) continue;
+    const card = effect.cardId ? cards.get(effect.cardId) : [...cards.values()].find(item => item.name === effect.cardName);
+    if (!card) continue;
+    cards.set(card.id, mergeVerifiedCard(card, {
+      ...effect.after,
+      ...(Number.isSafeInteger(effect.cardVersion) ? { version: Math.max(card.version, Number(effect.cardVersion) + 1) } : {}),
+    }));
   }
   return [...cards.values()];
 }
@@ -52,14 +91,14 @@ export function budgetBalanceAlert(card: Pick<ManagedCard, "monthlyBudgetFen" | 
 }
 
 /** Present card write requests from the conversation without treating previews as completed changes. */
-export function cardActivities(messages: readonly Message[], operationStates: Readonly<Record<string, string>>): CardActivity[] {
+export function cardActivities(messages: readonly Message[], operationStates: Readonly<Record<string, CoreOperationStage>>): CardActivity[] {
   return messages.flatMap(message => {
     const data = message.banking;
     if (message.kind !== "banking_card_preview" || !data?.operationId || !data.action || !actionLabel[data.action]) return [];
     const preview = data.preview as { exactEffects?: Array<{ kind?: string; cardName?: string; after?: { monthlyBudgetFen?: number; onlinePaymentsEnabled?: boolean; blockedCategories?: string[] } }> } | undefined;
     const effect = preview?.exactEffects?.find(item => item.kind === "card_change");
     const state = operationStates[data.operationId];
-    const status: CardActivity["status"] = state === "success" ? "已完成" : state === "cancelled" ? "已取消" : state === "error" ? "操作失败" : state === "executing" || state === "checking" ? "处理中" : state === "unknown" ? "结果待核实" : "待确认";
+    const status = cardActivityStatus(state);
     const detail = data.action === "card.set_budget" && Number.isSafeInteger(effect?.after?.monthlyBudgetFen)
       ? `新预算 ¥${(Number(effect?.after?.monthlyBudgetFen) / 100).toFixed(2)}`
       : data.action === "card.set_controls"

@@ -1,9 +1,12 @@
 import { PARSED_INTENT_ACTIONS } from '../agent/parsed-intent';
+import type { ActionState } from '../banking-core/contracts';
+import { isActionState } from './operation-state';
 
-export type BankingTask = { taskId: string; action: string; status: string; expiresAt: number };
+export type BankingTaskStatus = 'ready' | 'awaiting_input' | 'awaiting_confirmation' | 'suspended' | 'completed' | 'cancelled' | 'failed' | 'expired';
+export type BankingTask = { taskId: string; action: string; status: BankingTaskStatus; expiresAt: number };
 export type BankingConversation = {
   token: string; revision: number; expiresAt: number; currentTask: BankingTask | null; suspendedTasks: BankingTask[];
-  operationReferences: Array<{ operationId: string; taskId: string; coreState: string }>;
+  operationReferences: Array<{ operationId: string; taskId: string; coreState: ActionState }>;
 };
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const keys = (value: Record<string, unknown>, allowed: string[]) => Object.keys(value).every(key => allowed.includes(key));
@@ -24,5 +27,5 @@ export function validBankingConversation(value: unknown): value is BankingConver
     new Set(value.operationReferences.map(v => record(v) ? v.operationId : null)).size === value.operationReferences.length &&
     value.operationReferences.every(v => record(v) && keys(v, ['operationId', 'taskId', 'coreState']) && typeof v.operationId === 'string' &&
       /^op_[A-Za-z0-9-]{1,128}$/.test(v.operationId) && taskId(v.taskId) &&
-      ['preparing', 'risk_check', 'awaiting_confirmation', 'confirmed', 'executing', 'succeeded', 'failed', 'cancelled', 'unknown', 'checking'].includes(String(v.coreState)));
+      isActionState(v.coreState));
 }

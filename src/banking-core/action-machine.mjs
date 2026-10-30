@@ -15,5 +15,12 @@ export const actionTransitions = Object.freeze({
 });
 /** @param {import('./contracts').ActionState} state @param {string} event */
 export function transitionAction(state, event) { return actionTransitions[state]?.[event] ?? state; }
+/** Strict diagnostic variant; the normal transition remains a safe no-op for invalid events. */
+/** @param {import('./contracts').ActionState} state @param {string} event */
+export function transitionActionStrict(state, event) {
+  const next = actionTransitions[state]?.[event];
+  if (!next) throw new Error(`Invalid Core action transition: ${state} + ${event}`);
+  return next;
+}
 /** @param {import('./contracts').ActionState} state @param {string} event */
 export function canTransitionAction(state, event) { return actionTransitions[state]?.[event] !== undefined; }

@@ -9,7 +9,8 @@ require.extensions['.ts'] = (module, filename) => {
 };
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { transition, canTransition } = require('../src/lib/flow-machine.ts');
+const { transition, transitionStrict, canTransition } = require('../src/lib/flow-machine.ts');
+const { cardActivityStatus, projectCoreOperationState } = require('../src/lib/operation-state.ts');
 const { mockRequest } = require('../src/lib/api/mock.ts');
 const { validatePlan } = require('../src/lib/api/contracts.ts');
 
@@ -30,11 +31,27 @@ test('confirmation cannot skip analysis or draft review; double submit is blocke
   for (const event of ['CONFIRM', 'START', 'CANCEL', 'RESET']) assert.equal(canTransition(stage, event), false);
   assert.equal(transition(stage, 'SUCCEEDED'), 'success');
 });
+test('strict state transition reports programming errors while safe transition remains a no-op', () => {
+  assert.equal(transition('welcome', 'CONFIRM'), 'welcome');
+  assert.throws(() => transitionStrict('welcome', 'CONFIRM'), /Invalid flow transition/);
+});
 test('uncertain operation must be queried, never replayed or reset', () => {
   const stage = transition('executing', 'UNCERTAIN');
   for (const event of ['CONFIRM', 'START', 'EDIT', 'RESET', 'CANCEL']) assert.equal(canTransition(stage, event), false);
   assert.equal(transition(transition(stage, 'CHECK'), 'SUCCEEDED'), 'success');
   assert.equal(transition('checking', 'UNCERTAIN'), 'unknown');
+});
+test('all Banking Core states use one explicit UI projection', () => {
+  assert.deepEqual({
+    awaiting: projectCoreOperationState('awaiting_confirmation'),
+    confirmed: projectCoreOperationState('confirmed'),
+    succeeded: projectCoreOperationState('succeeded'),
+    failed: projectCoreOperationState('failed'),
+    cancelled: projectCoreOperationState('cancelled'),
+    unknown: projectCoreOperationState('unknown'),
+  }, { awaiting: 'plan', confirmed: 'executing', succeeded: 'success', failed: 'error', cancelled: 'cancelled', unknown: 'unknown' });
+  assert.equal(cardActivityStatus(projectCoreOperationState('succeeded')), '已完成');
+  assert.equal(cardActivityStatus(projectCoreOperationState('unknown')), '结果待核实');
 });
 test('invalid amounts and fractional cents are rejected', () => {
   for (const amount of [0, -1, NaN, Infinity, 0.5, 300001]) assert.ok(validatePlan({ ...plan, monthlySavingFen: amount }));

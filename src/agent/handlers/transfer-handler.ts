@@ -1,12 +1,12 @@
 import { resolveTransferIntent } from "../../skill/transfer";
 import type { TransferDependencies } from "../../skill/transfer/types";
-import type { DispatchResult } from "../dispatch-result";
+import type { DispatchResult, TransferDispatchResult } from "../dispatch-result";
 import type { TransferCreateIntent } from "../dispatcher";
 
 export async function handleTransfer(
   intent: TransferCreateIntent,
   dependencies: TransferDependencies,
-): Promise<DispatchResult> {
+): Promise<TransferDispatchResult | Extract<DispatchResult, { ok: false; kind: "needs_clarification" }>> {
   const resolved = await resolveTransferIntent(dependencies, intent.slots);
 
   if (resolved.state === "needs_clarification") {

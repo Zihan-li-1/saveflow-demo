@@ -1,14 +1,14 @@
 import { localDate as calendarLocalDate } from "../../lib/calendar.mjs";
 import type { FinancialContextRepository } from "../../banking-core/contracts";
-import { summarizeBills } from "../../skills/bill/bill-skill";
+import { summarizeBills } from "../../skills/bill/bill-skill.ts";
 import { buildBillInsights, previousMonth } from "../bill-insights.mjs";
-import type { DispatchResult } from "../dispatch-result";
+import type { BillDispatchResult, BillSummaryData } from "../dispatch-result";
 import type { BillSummaryIntent } from "../dispatcher";
 
 export async function handleBillSummary(
   intent: BillSummaryIntent,
   repository: FinancialContextRepository,
-): Promise<DispatchResult> {
+): Promise<BillDispatchResult> {
   const month = intent.slots.month;
   const period = intent.slots.period;
   if (!month && !period) throw new Error("bill.summary requires a resolved time period before dispatch");
@@ -36,7 +36,7 @@ export async function handleBillSummary(
     const monthStart = `${value}-01`;
     const monthEnd = new Date(Date.UTC(year, oneBasedMonth, 0)).toISOString().slice(0, 10);
     const isPartialSelection = !!period && (period.start_date > monthStart || period.end_date < monthEnd);
-    const status = !(context.availableMonths ?? []).includes(value) ? "unavailable" : monthStart > asOfDate ? "future" : monthEnd >= asOfDate || isPartialSelection ? "partial" : "complete";
+    const status: NonNullable<BillSummaryData["monthlyBreakdown"]>[number]["status"] = !(context.availableMonths ?? []).includes(value) ? "unavailable" : monthStart > asOfDate ? "future" : monthEnd >= asOfDate || isPartialSelection ? "partial" : "complete";
     return { month: value, status, ...summarizeBills(items) };
   });
   const comparableMonths = monthlyBreakdown.filter(item => item.status === "complete");

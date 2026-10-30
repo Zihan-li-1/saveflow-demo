@@ -1,5 +1,5 @@
 import type { FinancialContextRepository, Subscription } from "../../banking-core/contracts";
-import type { DispatchResult } from "../dispatch-result";
+import type { SubscriptionDispatchResult, SubscriptionView } from "../dispatch-result";
 import type { SubscriptionListIntent } from "../dispatcher";
 
 function calendarDays(from: string, to: string): number | undefined {
@@ -24,12 +24,12 @@ function explain(subscription: Subscription, inactivityDays: number | undefined)
 export async function handleSubscriptionList(
   _intent: SubscriptionListIntent,
   repository: FinancialContextRepository,
-): Promise<DispatchResult> {
+): Promise<SubscriptionDispatchResult> {
   const [subscriptions, context] = await Promise.all([repository.getSubscriptions(), repository.getContextInfo()]);
   const asOfDate = context.asOf.slice(0, 10);
   const enriched = subscriptions.map(subscription => {
     const inactivityDays = calendarDays(subscription.lastUsedDate, asOfDate);
-    const confidence = subscription.status !== "active" || !subscription.isPotentiallyUnused ? "not_flagged" : inactivityDays !== undefined && inactivityDays >= 90 ? "high" : "medium";
+    const confidence: SubscriptionView["recognition"]["confidence"] = subscription.status !== "active" || !subscription.isPotentiallyUnused ? "not_flagged" : inactivityDays !== undefined && inactivityDays >= 90 ? "high" : "medium";
     const recognitionSignals = [
       subscription.isPotentiallyUnused ? "数据源标记为可能闲置" : "数据源未标记为闲置",
       inactivityDays === undefined ? "最近使用时间无法换算" : `距最近使用 ${inactivityDays} 天`,
