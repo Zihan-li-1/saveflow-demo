@@ -363,6 +363,13 @@ export async function runBankingConversation(body, {
   }
   // Apply exactly the same boundary to all configured/injected understanders.
   parsed = validateParsedIntent(parsed);
+  // 模型可能把「买花 / 买蛋糕 + 提醒」判成 unsupported、clarify，甚至 scenario.create_rule；
+  // 只要原话是购物请求，就按原话重建购物意图，绝不能因为模型一句话让购物流程消失。
+  // 必须在 conversation/acceptIntent 之前改，否则状态机会按错误动作留下挂起任务。
+  if (!continuing && !expectedAction && parsed.action !== 'scenario.plan_purchase') {
+    const recovered = purchaseIntentFromMessage(body.message);
+    if (recovered) parsed = { schemaVersion: parsed.schemaVersion ?? '1.0.0', action: 'scenario.plan_purchase', slots: recovered, missingSlots: [], status: 'ready_for_resolution' };
+  }
   if (conversation) {
     parsed = await conversation.acceptIntent(parsed, modelOptions);
     if (continuation && parsed.action !== continuation.action) selections = {};
@@ -370,11 +377,6 @@ export async function runBankingConversation(body, {
   replyContext = { slots: parsed.slots };
   if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
   if (!continuing && parsed.choice) throw inputError('INVALID_CHOICE', '当前请求没有可选择的候选项', 400);
-  // 模型可能把「买花 / 买蛋糕 + 提醒」判成 unsupported 或 clarify；购物流程不能因为模型一句话就消失，按原话重建一次购物意图。
-  if (parsed.action === 'unsupported' || parsed.action === 'clarify') {
-    const recovered = purchaseIntentFromMessage(body.message);
-    if (recovered) parsed = { schemaVersion: parsed.schemaVersion ?? '1.0.0', action: 'scenario.plan_purchase', slots: recovered, missingSlots: [], status: 'ready_for_resolution' };
-  }
   if (parsed.action === 'scenario.plan_purchase') {
     const currentDate = understandingContext({ now, timezone }).currentDate;
     const purchaseSlots = normalizePurchaseSlots(parsed.slots ?? {}, currentDate);
