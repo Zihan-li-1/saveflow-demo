@@ -23,9 +23,9 @@ export function createFinancialContext(source = seed) {
   const cards = raw.cards.map(c => ({ id: c.id, name: c.name, accountId: c.linkedAccountId, status: c.status === 'active' ? 'active' : 'frozen', monthlyBudgetFen: seedYuanToFen(c.monthlyBudget), monthlySpentFen: seedYuanToFen(c.monthlySpent), onlinePaymentsEnabled: true, blockedCategories: [], alertThresholdFen: seedYuanToFen(c.monthlyBudget), balanceReminderAmountFen: null, balanceReminderPercent: null, version: 0, previewGeneration: 0 }));
   /** @type {import('./contracts').InvestmentProduct[]} */
   const products = [
-    { id: 'product_001', name: '模拟灵活现金 A', riskLevel: 'R1', expectedYield: 150, liquidity: 'T+0', minimumAmountFen: 100, durationDays: 0, currency: 'CNY', isSynthetic: true },
-    { id: 'product_002', name: '模拟稳健现金 B', riskLevel: 'R2', expectedYield: 210, liquidity: 'T+1', minimumAmountFen: 10000, durationDays: 0, currency: 'CNY', isSynthetic: true },
-    { id: 'product_003', name: '模拟定期组合 C', riskLevel: 'R3', expectedYield: 300, liquidity: 'AT_MATURITY', minimumAmountFen: 100000, durationDays: 30, currency: 'CNY', isSynthetic: true },
+    { id: 'product_001', name: '模拟灵活现金 A', category: 'fund', displayCode: 'DEMO001', riskLevel: 'R1', expectedYield: 150, liquidity: 'T+0', minimumAmountFen: 100, durationDays: 0, currency: 'CNY', isSynthetic: true },
+    { id: 'product_002', name: '模拟稳健现金 B', category: 'fund', displayCode: 'DEMO002', riskLevel: 'R2', expectedYield: 210, liquidity: 'T+1', minimumAmountFen: 10000, durationDays: 0, currency: 'CNY', isSynthetic: true },
+    { id: 'product_003', name: '模拟定期组合 C', category: 'fund', displayCode: 'DEMO003', riskLevel: 'R3', expectedYield: 300, liquidity: 'AT_MATURITY', minimumAmountFen: 100000, durationDays: 30, currency: 'CNY', isSynthetic: true },
   ];
   const holdings = [
     { id: 'holding_001', product_id: 'product_002', amount_fen: 200000, units_milli: 200000, currency: 'CNY', lock_until: null, version: 0 },

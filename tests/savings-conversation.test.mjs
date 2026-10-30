@@ -2,8 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { handleBankingAgent } from '../server/banking-agent.mjs';
 import { createBankingCore } from '../src/banking-core/core.mjs';
+import { requestSavingsAdvice } from '../server/savings-advisor.mjs';
+import { createSavingsAdviceRuntimeClient } from '../server/trueforge-savings-runtime.mjs';
+import { savingsAdviceFixture, savingsSdkFixture } from './fixtures/savings-runtime.mjs';
 
-const env = { SAVEFLOW_ACCESS_CODE: 'savings-test-access', CONTINUATION_TOKEN_SECRET: 'savings-test-secret-123', DASHSCOPE_API_KEY: 'unused' };
+const env = { SAVEFLOW_ACCESS_CODE: 'savings-test-access', CONTINUATION_TOKEN_SECRET: 'savings-test-secret-123', TRUEFORGE_BASE_URL: 'http://localhost:8790', TRUEFORGE_MODEL: 'test/deepseek-v4-1-flash' };
 const now = () => Date.parse('2026-10-22T12:00:00+08:00');
 const intent = { schemaVersion: '1.0.0', action: 'orchestrator.goal', slots: { goal_text: '年底存够一万元', amount: { amount_minor: 1000000, currency: 'CNY' }, deadline: '2026-12-31' }, missingSlots: [], status: 'ready_for_resolution' };
 const expenses = { 房租: 300000, 餐饮: 145000, 交通: 40000, 通信: 10000, 日用品: 50000, 娱乐: 112000, 购物: 128000, 订阅: 9000, 其他: 52000 };
@@ -12,13 +15,9 @@ const manualOverride = { ...planInputs, month: '2026-09', income_minor: 1200000,
 const advice = { observations: [], category_budgets: Object.entries(expenses).map(([category, suggested_minor]) => ({ category, suggested_minor, reason: '按近期支出暂作参考', evidence_refs: [`recent:${category}`] })), caveats: ['演示账单数据仅供参考'], self_review: { passed: true, data_coverage: true, category_evidence: true, fixed_costs: true, budget_totals: true, uncertainty: true, failed_items: [] } };
 let serial = 0;
 const request = data => new Request('http://localhost/api/banking-agent', { method: 'POST', headers: { 'content-type': 'application/json', 'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'x-forwarded-for': `savings-${++serial}` }, body: JSON.stringify({ history: [], consent: true, ...data }) });
-const options = { env, now, parseIntent: async () => intent, savingsAdvisor: async facts => {
-  const category = '购物';
-  const previous = facts.history.map(month => month.category_expenses_minor[category]).filter(Number.isSafeInteger);
-  const average = previous.reduce((sum, value) => sum + value, 0) / previous.length;
-  const difference = facts.recent.category_expenses_minor[category] - average;
-  const trend = difference > Math.max(1000, average * .1) ? 'up' : difference < -Math.max(1000, average * .1) ? 'down' : 'flat';
-  return { ...advice, observations: [{ category, trend, evidence_refs: [`recent:${category}`, `history:${facts.history[0].month}:${category}`], reason: '近期与历史演示数据仅供参考', uncertain: true }] };
+const options = { env, now, parseIntent: async () => intent, savingsAdvisor: async (facts, config) => {
+  const sdk = savingsSdkFixture({ env, output: JSON.stringify(savingsAdviceFixture(facts)) });
+  return requestSavingsAdvice(facts, { ...config, client: createSavingsAdviceRuntimeClient({ env, sdk }) });
 } };
 
 test('savings goal reads bill categories and asks only for saved progress before producing a verified card', async () => {
@@ -137,5 +136,29 @@ test('missing trusted risk assessment returns the questionnaire without a produc
   assert.equal(screening.data.data.kind, 'questionnaire_required');
   assert.equal(screening.data.data.screening_context, undefined);
   assert.equal(screening.data.data.questionnaire.source, 'trusted_ui');
+});
+
+test('generation or review failure performs no financial write and signed form can retry', async () => {
+  for (const failure of ['unavailable', 'malformed', 'self_check', 'fixed_cost']) {
+    const base = createBankingCore({ now });
+    const before = await base.repository.getAccounts();
+    const core = { ...base, prepare: async () => assert.fail('no prepare'), decide: async () => assert.fail('no decision'), execute: async () => assert.fail('no execute') };
+    const initial = await (await handleBankingAgent(request({ message: '我要年底存够一万' }), { ...options, core })).json();
+    const failingAdvisor = async (facts, config) => {
+      if (failure === 'unavailable') throw Object.assign(new Error('offline'), { code: 'TRUEFORGE_UNAVAILABLE' });
+      const candidate = savingsAdviceFixture(facts);
+      if (failure === 'self_check') candidate.self_review.passed = false;
+      if (failure === 'fixed_cost') candidate.category_budgets.find(item => item.category === '房租').suggested_minor = 0;
+      const sdk = savingsSdkFixture({ env, output: failure === 'malformed' ? 'not JSON' : JSON.stringify(candidate) });
+      return requestSavingsAdvice(facts, { ...config, client: createSavingsAdviceRuntimeClient({ env, sdk }) });
+    };
+    const failed = await (await handleBankingAgent(request({ continuationToken: initial.data.continuationToken, planInputs }), { ...options, core, savingsAdvisor: failingAdvisor })).json();
+    assert.notEqual(failed.data?.status, 'goal_plan');
+    assert.equal(failed.data?.data?.verification_status, undefined);
+    const retry = await (await handleBankingAgent(request({ continuationToken: initial.data.continuationToken, planInputs }), { ...options, core })).json();
+    assert.equal(retry.data.status, 'goal_plan');
+    assert.equal(retry.data.data.execution_allowed, false);
+    assert.deepEqual(await base.repository.getAccounts(), before);
+  }
 });
 

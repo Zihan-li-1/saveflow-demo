@@ -52,7 +52,7 @@
 
 `orchestrator.goal.slots` 新增可选 `amount`、`deadline:YYYY-MM-DD`，实际结果返回 `targetAmountFen`、`deadline`。目标需要精确值而尚不确定时可将 `amount/deadline` 放入 `missingSlots`，保留其他已知内容并续接；普通只读建议不强制提供这两项。未增加规划算法或执行权限。
 
-储蓄消费建议由 `server/savings-advisor.mjs` 通过现有 TrueForge SDK 无工具私有会话生成，使用 `TRUEFORGE_BASE_URL`、`TRUEFORGE_MODEL` 和可选 `TRUEFORGE_TOKEN`，跟随当前配置的 DeepSeek 模型，不再依赖 `bankingModelConfig()` 或 `DASHSCOPE_API_KEY`。只发送分类汇总，保留 20 秒 deadline、调用中断与无重试策略；返回 JSON 后仍由原 `verifySavingsAdvice()` 独立核验趋势、证据、固定开销及预算合计。迁移期 `legacy-qwen` 意图解析和独立 `/api/agent` 的配置不受此修改影响。
+储蓄消费建议由 `server/savings-advisor.mjs` 调用独立 `trueforge-savings-runtime.mjs`，通过现有 TrueForge SDK 无工具私有会话生成，使用 `TRUEFORGE_BASE_URL`、`TRUEFORGE_MODEL` 和可选 `TRUEFORGE_TOKEN`，跟随当前配置的 DeepSeek 模型，不再依赖 `bankingModelConfig()` 或 `DASHSCOPE_API_KEY`。只发送最小化分类汇总，使用最多 25 秒 deadline、调用中断与无自动重试策略；返回 JSON 先验证精确字段和类型，再由 `verifySavingsAdvice()` 独立核验完整可比趋势、证据、固定开销及预算合计。无可比历史时允许空观察。迁移期 `legacy-qwen` 意图解析和独立 `/api/agent` 的配置不受此修改影响。详见 [储蓄迁移记录](savings-trueforge.md)。
 
 独立 `/api/agent` 储蓄助手也获得相同日历基准，新增结构化 `deadline` 与 `goal` 返回值；已存在的月数计算由宿主按截止日期换算，现有确认保存请求和模拟计划记录保留截止日期。MCP 的结构化参数/按钮仍可直接处理，自由文本补参由配置的理解器处理；服务不可用时明确报错，不退回固定解析。
 
