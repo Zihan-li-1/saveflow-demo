@@ -28,14 +28,14 @@ hook.useSaveflow = () => { flow = realHook(); return flow; };
 const Home = require('../src/app/page.tsx').default;
 const env = { SAVEFLOW_ACCESS_CODE: 'test-access-code-1234', CONTINUATION_TOKEN_SECRET: 'test-continuation-secret-1234' };
 const originalFetch = global.fetch;
-let intent, calls, intercept, naturalRoute, routedInputs, requestSequence = 0;
+let intent, calls, intercept, naturalRoute, routedInputs, savingsRejectOnce, requestSequence = 0;
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const reply = { text: 'test response', style: 'concise', safetyNotices: [] };
 const composer = () => root.root.findAllByType('input').find(node => node.props.placeholder === '自然提问，或描述你想办理的业务…');
 const loading = () => root.root.findAll(node => node.props.className === 'typing').length > 0;
 const preview = () => { const message = flow.messages.findLast(message => message.banking?.status === 'awaiting_confirmation'); assert.ok(message, JSON.stringify(flow.messages)); return message.banking; };
 async function mount() {
-  calls = []; intercept = null; naturalRoute = null; routedInputs = [];
+  calls = []; intercept = null; naturalRoute = null; routedInputs = []; savingsRejectOnce = false;
   const storage = new Map();
   global.sessionStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
   const { createBankingCore } = await import('../src/banking-core/core.mjs');
@@ -45,7 +45,10 @@ async function mount() {
     const body = JSON.parse(init.body); calls.push(body.action || 'agent');
     const routing = naturalRoute ? { conversationRuntimeClient: { async createSession() { return 'ui-router-fixture'; }, async cancel() {}, async runTurn(_id, wire) { routedInputs.push(JSON.parse(wire)); return JSON.stringify(naturalRoute); } } } : {};
     const run = () => url === '/api/banking-agent'
-      ? handleAgent(new Request(`http://localhost${url}`, init), { env, core, ...routing, parseIntent: async () => intent, savingsAdvisor: async facts => savingsAdviceFixture(facts) })
+      ? handleAgent(new Request(`http://localhost${url}`, init), { env, core, ...routing, parseIntent: async () => intent, savingsAdvisor: async facts => {
+        if (savingsRejectOnce) { savingsRejectOnce = false; throw Object.assign(new Error('private-review-detail'), { code: 'ADVICE_REVIEW_FAILED' }); }
+        return savingsAdviceFixture(facts);
+      } })
       : handleBanking(new Request(`http://localhost${url}`, init), { env, core });
     return intercept ? intercept(body, run) : run();
   };
@@ -190,6 +193,32 @@ test('an authoritative invalid-continuation error still retires preview controls
   await act(async () => { await flow.startDemo('改成100元'); });
   assert.equal(flow.activeTransferOperationId, null); assert.equal(flow.bankingContinuation, null);
   assert.equal((await core.getOperation(p.operationId)).data.state, 'awaiting_confirmation'); assert.equal(calls.includes('action.execute'), false);
+});
+
+test('savings review failure keeps form values and retries only on an explicit click', async () => {
+  await mount();
+  intent = { schemaVersion: '1.0.0', action: 'orchestrator.goal', slots: { goal_text: '年底存一万', amount: { amount_minor: 1000000, currency: 'CNY' }, deadline: '2026-12-31' }, missingSlots: [], status: 'ready_for_resolution' };
+  await act(async () => { await flow.startDemo('年底存一万'); });
+  const submissions = [];
+  intercept = (body, run) => { if (body.planInputs) submissions.push(body); return run(); };
+  const form = () => root.root.findAll(node => node.type === 'form' && node.props['aria-label'] === '补充储蓄计划数据')[0];
+  await act(async () => { form().findAllByType('input')[0].props.onChange({ target: { value: '650' } }); });
+  savingsRejectOnce = true;
+  await act(async () => { await form().props.onSubmit({ preventDefault() {} }); });
+  assert.equal(flow.bankingFailure.category, 'advice_review');
+  assert.equal(flow.bankingFailure.retryable, true);
+  assert.equal(form().findAllByType('input')[0].props.value, '650');
+  assert.equal(flow.bankingContinuation, submissions[0].continuationToken);
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+  assert.equal(submissions.length, 1);
+  const retry = root.root.findAllByType('button').find(button => button.children.includes('重试本次请求'));
+  assert.ok(retry);
+  await act(async () => { await retry.props.onClick(); });
+  assert.equal(submissions.length, 2);
+  assert.deepEqual(submissions[1].planInputs, { saved_amount_minor: 65000 });
+  assert.equal(submissions[1].continuationToken, submissions[0].continuationToken);
+  assert.equal(flow.messages.findLast(message => message.banking?.status === 'goal_plan')?.banking?.data?.verification_status, 'verified');
+  assert.equal(calls.filter(action => action.startsWith('action.')).length, 0);
 });
 
 test('refresh resumes the separate Wealth screening without skipping its required inputs', async () => {

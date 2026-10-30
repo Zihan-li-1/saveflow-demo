@@ -1,0 +1,31 @@
+{
+  "baseCommit": "416433c",
+  "baselineFailingTests": [
+    "A: three distinct business schemas map real MCP values without preparing Core",
+    "B repository: all shared entities, fen normalization, seed provenance and defensive copies",
+    "E agent: product names reach wealth.compare through parser, dispatcher and HTTP",
+    "browser accepts Wealth result, preview and the verified execution receipt",
+    "flat recommend without financial context keeps the original contract",
+    "merged bill periods and wealth comparisons pass through the unified runtime and styled reply envelope",
+    "query actions resolve products and return synthetic evidence without a write",
+    "redemption requires separate confirmation; changing holdings invalidates preview",
+    "subscription requires preview and exact confirmation; repeated execution has one effect",
+    "wealth preview and verified receipt end independently from Agent request",
+    "账单净现金流不会改写风险等级与投资金额"
+  ],
+  "repairFailingTests": [
+    "A: three distinct business schemas map real MCP values without preparing Core",
+    "B repository: all shared entities, fen normalization, seed provenance and defensive copies",
+    "E agent: product names reach wealth.compare through parser, dispatcher and HTTP",
+    "browser accepts Wealth result, preview and the verified execution receipt",
+    "flat recommend without financial context keeps the original contract",
+    "merged bill periods and wealth comparisons pass through the unified runtime and styled reply envelope",
+    "query actions resolve products and return synthetic evidence without a write",
+    "redemption requires separate confirmation; changing holdings invalidates preview",
+    "subscription requires preview and exact confirmation; repeated execution has one effect",
+    "wealth preview and verified receipt end independently from Agent request",
+    "账单净现金流不会改写风险等级与投资金额"
+  ],
+  "sameExistingFailures": true,
+  "coreLogicChanged": false
+}

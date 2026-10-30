@@ -162,3 +162,29 @@ test('generation or review failure performs no financial write and signed form c
   }
 });
 
+test('review diagnostics correlate with the HTTP error while preserving a manual signed retry', async () => {
+  const diagnostics = [];
+  const config = { ...options, env: { ...env, SAVEFLOW_AGENT_DIAGNOSTICS: 'true' }, diagnosticSink: line => diagnostics.push(JSON.parse(line)) };
+  const initial = await (await handleBankingAgent(request({ message: '我要年底存够一万' }), config)).json();
+  const token = initial.data.continuationToken;
+  const failedResponse = await handleBankingAgent(request({ continuationToken: token, planInputs: { saved_amount_minor: 65000 } }), {
+    ...config, savingsAdvisor: async (facts, settings) => {
+      const sdk = savingsSdkFixture({ env, output: '{' });
+      return requestSavingsAdvice(facts, { ...settings, client: createSavingsAdviceRuntimeClient({ env, sdk }) });
+    },
+  });
+  const failed = await failedResponse.json();
+  assert.equal(failedResponse.status, 502);
+  assert.equal(failed.code, 'ADVICE_REVIEW_FAILED');
+  assert.deepEqual(failed.data.error.category, 'advice_review');
+  assert.equal(failed.data.error.retryable, true);
+  assert.equal(failed.data.error.context, 'preserve');
+  assert.match(failed.message, /储蓄建议.*复核/);
+  const review = diagnostics.find(item => item.event === 'savings_advice_review');
+  assert.deepEqual(review, { event: 'savings_advice_review', requestId: failed.requestId, stage: 'json_parse', reason: 'json_invalid', code: 'ADVICE_REVIEW_FAILED' });
+  assert.doesNotMatch(JSON.stringify(diagnostics), /65000|savings-test-secret|continuationToken|evidence_refs|category_expenses_minor/);
+  const retry = await (await handleBankingAgent(request({ continuationToken: token, planInputs: { saved_amount_minor: 65000 } }), config)).json();
+  assert.equal(retry.data.status, 'goal_plan');
+  assert.equal(retry.data.data.calculation.saved_amount_minor, 65000);
+});
+

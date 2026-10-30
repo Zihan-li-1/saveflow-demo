@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-30",
+  "runningWebsiteSha": "d8ef2d5f76f9e1ffe8fdc7f1fc7aabe66a811137",
+  "sourceBase": "416433c",
+  "historicalRequestId": "7edc6120-1847-4164-a434-a7c3968115f3",
+  "historicalExactRule": "not recoverable: old detailed diagnostics were disabled",
+  "model": "real configured TrueForge/DeepSeek; no injected replies",
+  "cases": [
+    {
+      "httpStatus": 502,
+      "code": "ADVICE_REVIEW_FAILED",
+      "status": "error",
+      "requestId": "0a4d5f62-cf87-4bb3-bb3e-51a270beeecc",
+      "category": "internal"
+    },
+    {
+      "httpStatus": 502,
+      "code": "ADVICE_REVIEW_FAILED",
+      "status": "error",
+      "requestId": "47ea9f6f-5986-484d-918f-99255bb3d4e9",
+      "category": "internal"
+    }
+  ],
+  "diagnostics": [
+    {
+      "event": "savings_advice_review",
+      "requestId": "0a4d5f62-cf87-4bb3-bb3e-51a270beeecc",
+      "stage": "semantic_review",
+      "reason": "trend_mismatch",
+      "code": "ADVICE_REVIEW_FAILED"
+    },
+    {
+      "event": "savings_advice_review",
+      "requestId": "47ea9f6f-5986-484d-918f-99255bb3d4e9",
+      "stage": "semantic_review",
+      "reason": "trend_mismatch",
+      "code": "ADVICE_REVIEW_FAILED"
+    }
+  ]
+}

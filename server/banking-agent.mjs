@@ -32,6 +32,7 @@ function allowRequest(request, now = Date.now()) {
 function publicMessage(code, fallback) {
   return {
     CONTINUATION_CONFIG_ERROR: '澄清续接服务未配置。',
+    ADVICE_REVIEW_FAILED: '本次储蓄建议未通过安全复核，尚未生成计划。请保留本次填写，手动重试。',
     MODEL_TIMEOUT: '模型请求超时。', MODEL_RATE_LIMIT: '模型请求过于频繁，请稍后重试。',
     MODEL_FORMAT_ERROR: '模型结果格式无效，请重新描述请求。', MODEL_AUTH_ERROR: '模型服务鉴权失败。',
     MODEL_UPSTREAM_ERROR: '模型服务暂时不可用，请稍后重试。', MODEL_UNAVAILABLE: '模型服务暂时不可用，请稍后重试。',

@@ -11,6 +11,7 @@ import { createInMemoryScenarioStore, createScenarioSkill } from '../src/skills/
 import { agentErrorPolicy } from '../src/lib/agent-error-policy.mjs';
 import { calculateSavingsGoal, validatePlanInputs, validateSavedAmount } from '../src/agent/savings-plan.mjs';
 import { requestSavingsAdvice, verifySavingsAdvice } from './savings-advisor.mjs';
+import { savingsFailureDiagnostic } from './savings-advice-contract.mjs';
 import { understandingContext } from './understanding-context.mjs';
 import { collectSavingsData } from './savings-data.mjs';
 import { buildFinancialAnalysisContext } from './financial-analysis-context.mjs';
@@ -250,8 +251,20 @@ export async function runBankingConversation(body, {
       const calculation = calculateSavingsGoal({ targetAmountMinor: continuation.slots.amount.amount_minor, deadline: continuation.slots.deadline, ...normalized, currentDate });
       const recent = financial.recent || { month: normalized.month, income_minor: normalized.incomeMinor, category_expenses_minor: normalized.categoryExpensesMinor };
       const facts = { recent, history: financial.history, sources: financial.sources, required_monthly_minor: calculation.required_monthly_minor };
-      const candidate = await savingsAdvisor(facts, { env, fetchImpl, signal });
-      const advice = verifySavingsAdvice(candidate, facts);
+      let advice;
+      try {
+        const candidate = await savingsAdvisor(facts, { env, fetchImpl, signal });
+        advice = verifySavingsAdvice(candidate, facts);
+        try { onDiagnostic('savings_advice_review', { requestId, stage: 'complete', code: 'OK', reason: 'checks_passed' }); } catch { /* observational */ }
+      } catch (error) {
+        // A malformed advice reply is a rejected read-only generation, not bad user input.
+        if (['MODEL_FORMAT_ERROR', 'TRUEFORGE_FORMAT_ERROR', 'TRUEFORGE_TURN_FAILED'].includes(error?.code)) {
+          error.savingsReview ??= { reason: 'turn_output_invalid' };
+          error.code = 'ADVICE_REVIEW_FAILED'; delete error.userMessage;
+        }
+        try { onDiagnostic('savings_advice_review', { requestId, ...savingsFailureDiagnostic(error) }); } catch { /* observational */ }
+        throw error;
+      }
       const generic = await handleGoal({ slots: continuation.slots }, repository);
       const wealthHandoffToken = core.wealthPorts ? issueState({ action: 'wealth.recommend', slots: { goal: { kind: 'steady_growth', target_date: calculation.deadline } }, pendingSlot: '__wealth_screening', env, now }) : undefined;
       return reply(200, 'OK', '储蓄计划已核算', { status: 'goal_plan', action: 'orchestrator.goal', data: {

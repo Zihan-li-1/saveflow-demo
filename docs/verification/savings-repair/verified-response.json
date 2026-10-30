@@ -1,0 +1,313 @@
+{
+  "httpStatus": 200,
+  "redactions": "signed continuation and conversation credentials removed",
+  "body": {
+    "code": "OK",
+    "message": "储蓄计划已核算",
+    "requestId": "43321e97-1417-4437-831e-1d13bc3cb255",
+    "reply": {
+      "text": "储蓄计划已核算",
+      "style": "concise",
+      "safetyNotices": []
+    },
+    "data": {
+      "status": "goal_plan",
+      "action": "orchestrator.goal",
+      "data": {
+        "goal_text": "在2026年12月31日前存够一万元",
+        "horizon": null,
+        "targetAmountFen": 1000000,
+        "deadline": "2026-12-31",
+        "constraints": null,
+        "steps": [
+          {
+            "action": "bill.analyze",
+            "origin": "agent_suggested",
+            "reason": "先核对目标期间的收入、支出和异常交易。",
+            "requires_confirmation": false
+          },
+          {
+            "action": "subscription.list",
+            "origin": "agent_suggested",
+            "reason": "发现 1 项可能闲置订阅，建议先核实；不会自动取消。",
+            "requires_confirmation": false
+          },
+          {
+            "action": "card.get",
+            "origin": "agent_suggested",
+            "reason": "查看现有卡片预算和消费情况；不会自动调整预算。",
+            "requires_confirmation": false
+          },
+          {
+            "action": "wealth.recommend",
+            "origin": "agent_suggested",
+            "reason": "如有明确风险、期限和流动性约束，可进行只读产品筛选。",
+            "requires_confirmation": false
+          }
+        ],
+        "snapshot": {
+          "available_balance_minor": 4000000,
+          "active_subscription_count": 2,
+          "potentially_unused_subscription_count": 1,
+          "card_count": 2
+        },
+        "execution_allowed": false,
+        "verification_status": "verified",
+        "recent_month": "2026-09",
+        "recent": {
+          "month": "2026-09",
+          "income_minor": 1200000,
+          "category_expenses_minor": {
+            "房租": 300000,
+            "餐饮": 140000,
+            "交通": 42000,
+            "通信": 10000,
+            "日用品": 50000,
+            "娱乐": 60000,
+            "购物": 80000,
+            "订阅": 9000,
+            "其他": 49000
+          }
+        },
+        "recent_source": "repository",
+        "calculation": {
+          "target_amount_minor": 1000000,
+          "saved_amount_minor": 200000,
+          "remaining_minor": 800000,
+          "deadline": "2026-12-31",
+          "opportunity_dates": [
+            "2026-11-01",
+            "2026-12-01"
+          ],
+          "required_monthly_minor": 400000,
+          "observed_income_minor": 1200000,
+          "observed_expense_minor": 740000,
+          "observed_surplus_minor": 460000,
+          "monthly_gap_minor": 0
+        },
+        "advice": {
+          "observations": [
+            {
+              "category": "房租",
+              "trend": "flat",
+              "evidence_refs": [
+                "recent:房租",
+                "history:2026-08:房租",
+                "history:2026-07:房租"
+              ],
+              "reason": "演示账单中的最近月支出接近8个有该类别记录的历史演示月份平均额；没有记录的月份不计为零。",
+              "uncertain": true
+            },
+            {
+              "category": "餐饮",
+              "trend": "flat",
+              "evidence_refs": [
+                "recent:餐饮",
+                "history:2026-08:餐饮",
+                "history:2026-07:餐饮"
+              ],
+              "reason": "演示账单中的最近月支出接近8个有该类别记录的历史演示月份平均额；没有记录的月份不计为零。",
+              "uncertain": true
+            },
+            {
+              "category": "交通",
+              "trend": "up",
+              "evidence_refs": [
+                "recent:交通",
+                "history:2026-08:交通",
+                "history:2026-07:交通"
+              ],
+              "reason": "演示账单中的最近月支出高于8个有该类别记录的历史演示月份平均额；没有记录的月份不计为零。",
+              "uncertain": true
+            },
+            {
+              "category": "通信",
+              "trend": "flat",
+              "evidence_refs": [
+                "recent:通信",
+                "history:2026-08:通信",
+                "history:2026-07:通信"
+              ],
+              "reason": "演示账单中的最近月支出接近8个有该类别记录的历史演示月份平均额；没有记录的月份不计为零。",
+              "uncertain": true
+            },
+            {
+              "category": "日用品",
+              "trend": "up",
+              "evidence_refs": [
+                "recent:日用品",
+                "history:2026-08:日用品",
+                "history:2026-07:日用品"
+              ],
+              "reason": "演示账单中的最近月支出高于8个有该类别记录的历史演示月份平均额；没有记录的月份不计为零。",
+              "uncertain": true
+            },
+            {
+              "category": "娱乐",
+              "trend": "down",
+              "evidence_refs": [
+                "recent:娱乐",
+                "history:2026-08:娱乐",
+                "history:2026-07:娱乐"
+              ],
+              "reason": "演示账单中的最近月支出低于8个有该类别记录的历史演示月份平均额；没有记录的月份不计为零。",
+              "uncertain": true
+            },
+            {
+              "category": "购物",
+              "trend": "down",
+              "evidence_refs": [
+                "recent:购物",
+                "history:2026-08:购物",
+                "history:2026-07:购物"
+              ],
+              "reason": "演示账单中的最近月支出低于8个有该类别记录的历史演示月份平均额；没有记录的月份不计为零。",
+              "uncertain": true
+            },
+            {
+              "category": "订阅",
+              "trend": "up",
+              "evidence_refs": [
+                "recent:订阅",
+                "history:2026-08:订阅",
+                "history:2026-07:订阅"
+              ],
+              "reason": "演示账单中的最近月支出高于8个有该类别记录的历史演示月份平均额；没有记录的月份不计为零。",
+              "uncertain": true
+            },
+            {
+              "category": "其他",
+              "trend": "up",
+              "evidence_refs": [
+                "recent:其他",
+                "history:2026-08:其他",
+                "history:2026-07:其他"
+              ],
+              "reason": "演示账单中的最近月支出高于8个有该类别记录的历史演示月份平均额；没有记录的月份不计为零。",
+              "uncertain": true
+            }
+          ],
+          "category_budgets": [
+            {
+              "category": "房租",
+              "suggested_minor": 300000,
+              "reason": "历史有该类别记录的8个月月均约¥3000.00；根据最近月该类别支出，模型提出保持预算，实际能否执行需要你确认。",
+              "evidence_refs": [
+                "recent:房租",
+                "history:2026-08:房租"
+              ]
+            },
+            {
+              "category": "餐饮",
+              "suggested_minor": 140000,
+              "reason": "历史有该类别记录的8个月月均约¥1343.75；根据最近月该类别支出，模型提出保持预算，实际能否执行需要你确认。",
+              "evidence_refs": [
+                "recent:餐饮",
+                "history:2026-08:餐饮"
+              ]
+            },
+            {
+              "category": "交通",
+              "suggested_minor": 42000,
+              "reason": "历史有该类别记录的8个月月均约¥378.75；根据最近月该类别支出，模型提出保持预算，实际能否执行需要你确认。",
+              "evidence_refs": [
+                "recent:交通",
+                "history:2026-08:交通"
+              ]
+            },
+            {
+              "category": "通信",
+              "suggested_minor": 10000,
+              "reason": "历史有该类别记录的8个月月均约¥100.00；根据最近月该类别支出，模型提出保持预算，实际能否执行需要你确认。",
+              "evidence_refs": [
+                "recent:通信",
+                "history:2026-08:通信"
+              ]
+            },
+            {
+              "category": "日用品",
+              "suggested_minor": 50000,
+              "reason": "历史有该类别记录的8个月月均约¥448.75；根据最近月该类别支出，模型提出保持预算，实际能否执行需要你确认。",
+              "evidence_refs": [
+                "recent:日用品",
+                "history:2026-08:日用品"
+              ]
+            },
+            {
+              "category": "娱乐",
+              "suggested_minor": 55000,
+              "reason": "历史有该类别记录的8个月月均约¥793.75；根据最近月该类别支出，模型提出下调预算，实际能否执行需要你确认。",
+              "evidence_refs": [
+                "recent:娱乐",
+                "history:2026-08:娱乐"
+              ]
+            },
+            {
+              "category": "购物",
+              "suggested_minor": 70000,
+              "reason": "历史有该类别记录的8个月月均约¥1022.50；根据最近月该类别支出，模型提出下调预算，实际能否执行需要你确认。",
+              "evidence_refs": [
+                "recent:购物",
+                "history:2026-08:购物"
+              ]
+            },
+            {
+              "category": "订阅",
+              "suggested_minor": 9000,
+              "reason": "历史有该类别记录的8个月月均约¥67.50；根据最近月该类别支出，模型提出保持预算，实际能否执行需要你确认。",
+              "evidence_refs": [
+                "recent:订阅",
+                "history:2026-08:订阅"
+              ]
+            },
+            {
+              "category": "其他",
+              "suggested_minor": 45000,
+              "reason": "历史有该类别记录的8个月月均约¥285.00；根据最近月该类别支出，模型提出下调预算，实际能否执行需要你确认。",
+              "evidence_refs": [
+                "recent:其他",
+                "history:2026-08:其他"
+              ]
+            }
+          ],
+          "caveats": [
+            "近期收支来自演示账单快照，并非真实银行账户。",
+            "历史分类数据来自合成演示账单，不能预测未来消费。",
+            "本计划不保证达成目标或取得投资收益。"
+          ],
+          "proposed_expense_minor": 721000,
+          "feasible": true,
+          "remaining_gap_minor": 0
+        }
+      },
+      "evidence": [
+        {
+          "source": "synthetic_demo_only",
+          "asOf": "2026-10-22T00:00:00+08:00",
+          "entityIds": [
+            "ACC-CHECKING",
+            "ACC-SAVINGS",
+            "SUB-001",
+            "SUB-002",
+            "CARD-MAIN",
+            "CARD-ENT",
+            "product_001",
+            "product_002",
+            "product_003",
+            "product_004",
+            "product_005",
+            "product_006",
+            "product_007",
+            "product_008",
+            "product_009"
+          ]
+        },
+        {
+          "source": "synthetic_demo_only",
+          "asOf": "2026-10-22T00:00:00+08:00",
+          "entityIds": []
+        }
+      ]
+    }
+  }
+}

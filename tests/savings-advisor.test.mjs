@@ -1,14 +1,56 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { requestSavingsAdvice, verifySavingsAdvice } from '../server/savings-advisor.mjs';
+import { requestSavingsAdvice, verifySavingsAdvice, calculateSavingsEvidence } from '../server/savings-advisor.mjs';
 import { createSavingsAdviceRuntimeClient, savingsAdviceAgentSpec } from '../server/trueforge-savings-runtime.mjs';
 import { savingsAdviceFixture, savingsSdkFixture } from './fixtures/savings-runtime.mjs';
+import { savingsFailureDiagnostic } from '../server/savings-advice-contract.mjs';
+import { createAgentDiagnostics } from '../server/agent-diagnostics.mjs';
 
 const recent = { month: '2026-09', income_minor: 1200000, category_expenses_minor: { 房租: 300000, 餐饮: 145000, 交通: 40000, 通信: 10000, 日用品: 50000, 娱乐: 112000, 购物: 128000, 订阅: 9000, 其他: 52000 } };
 const facts = { recent, history: [{ month: '2026-08', category_expenses_minor: { ...recent.category_expenses_minor } }], sources: { recent: 'user_provided', recent_as_of: '2026-10-22', history: 'synthetic_demo_only', history_as_of: '2026-09-01T00:00:00+08:00' }, required_monthly_minor: 500000 };
 const budgets = Object.entries(recent.category_expenses_minor).map(([category, suggested_minor]) => ({ category, suggested_minor, reason: '按最近完整月金额暂作参考', evidence_refs: [`recent:${category}`] }));
 const advice = savingsAdviceFixture(facts);
 const env = { TRUEFORGE_BASE_URL: 'http://localhost:8790', TRUEFORGE_MODEL: 'test/deepseek-v4-1-flash' };
+
+test('eight-month statistics, unknown categories, exact boundaries and evidence come from the server', () => {
+  const input = { ...facts, recent: { ...recent, category_expenses_minor: { 交通: 42000, 日用品: 50000, 订阅: 9000, 新增: 100 } },
+    history: Array.from({ length: 8 }, (_, index) => ({ month: `2026-${String(index + 1).padStart(2, '0')}`, category_expenses_minor: {
+      交通: index === 7 ? 37000 : 38000, 日用品: index === 7 ? 51000 : 44000, 订阅: index === 7 ? 5000 : 7000,
+    } })) };
+  const result = calculateSavingsEvidence(input);
+  assert.deepEqual(result.comparisons.map(item => [item.category, item.history_month_count, item.history_average_minor, item.trend]),
+    [['交通', 8, 37875, 'up'], ['日用品', 8, 44875, 'up'], ['订阅', 8, 6750, 'up']]);
+  assert.equal(result.category_evidence.find(item => item.category === '新增').evidence_refs.length, 1);
+  for (const item of result.category_evidence) for (const ref of item.allowed_evidence_refs) {
+    assert.ok(ref === `recent:${item.category}` || input.history.some(month => ref === `history:${month.month}:${item.category}` && Object.hasOwn(month.category_expenses_minor, item.category)));
+  }
+  const boundary = { ...input, recent: { ...recent, category_expenses_minor: { 测试: 11000 } }, history: [{ month: '2026-08', category_expenses_minor: { 测试: 10000 } }] };
+  assert.equal(calculateSavingsEvidence(boundary).comparisons[0].trend, 'flat');
+  boundary.history[0].category_expenses_minor.测试 = 9999;
+  assert.equal(calculateSavingsEvidence(boundary).comparisons[0].trend, 'up');
+});
+
+test('diagnostic reasons are static and distinguish facts, shape, self-check and semantics', () => {
+  for (const [candidate, input, stage, reason] of [
+    [advice, { ...facts, sources: null }, 'facts', 'facts_invalid'],
+    [{ ...advice, secret: 'never log' }, facts, 'shape', 'shape_top_fields'],
+    [{ ...advice, category_budgets: [{ ...budgets[0], reason: null }] }, facts, 'shape', 'shape_budgets'],
+    [{ ...advice, self_review: { ...advice.self_review, passed: false } }, facts, 'semantic_review', 'self_review_failed'],
+    [{ ...advice, observations: advice.observations.map(item => ({ ...item, trend: 'up' })) }, facts, 'semantic_review', 'trend_mismatch'],
+  ]) {
+    assert.throws(() => verifySavingsAdvice(candidate, input), error => {
+      assert.deepEqual(savingsFailureDiagnostic(error), { stage, reason, code: 'ADVICE_REVIEW_FAILED' }); return true;
+    });
+  }
+  assert.doesNotMatch(JSON.stringify(savingsFailureDiagnostic({ code: 'private-key', message: 'secret', savingsReview: { reason: 'private-token' } })), /private|secret/);
+});
+
+test('review diagnostics stay on with debug off and strip arbitrary context fields and labels', () => {
+  const entries = [];
+  const diagnostics = createAgentDiagnostics({}, '12345678-1234-1234-1234-123456789abc', line => entries.push(JSON.parse(line)));
+  diagnostics.emit('savings_advice_review', { stage: 'private', reason: 'private-token', code: 'secret', context: 'raw user context', key: 'api-key' });
+  assert.deepEqual(entries, [{ event: 'savings_advice_review', stage: 'model_transport', reason: 'model_request_failed', code: 'ADVICE_REVIEW_FAILED', requestId: '12345678-1234-1234-1234-123456789abc' }]);
+});
 
 test('verified advice retains evidence and reports unaffordable budget without calling it feasible', () => {
   const result = verifySavingsAdvice(advice, facts);
@@ -47,7 +89,9 @@ test('DeepSeek advice succeeds without DashScope and sends only projected aggreg
   const result = await requestSavingsAdvice(extra, { env, client });
   assert.equal(result.self_review.passed, true);
   assert.equal(verifySavingsAdvice(result, facts).remaining_gap_minor, 146000);
-  assert.deepEqual(JSON.parse(sdk.seen.inputs[0].request.input[0].content), facts);
+  const modelInput = JSON.parse(sdk.seen.inputs[0].request.input[0].content);
+  assert.deepEqual(modelInput, { recent: facts.recent, sources: facts.sources, required_monthly_minor: facts.required_monthly_minor, ...calculateSavingsEvidence(facts) });
+  assert.equal(modelInput.history, undefined);
   assert.doesNotMatch(JSON.stringify(sdk.seen.creates) + JSON.stringify(sdk.seen.inputs), /secret|card_number|transactions|ParsedIntent/);
   assert.equal(sdk.seen.creates[0].agent.spec.model.name, env.TRUEFORGE_MODEL);
   assert.equal(sdk.seen.creates[0].agent.spec.responseFormat.type, 'json_object');
@@ -191,7 +235,7 @@ test('TrueForge SDK uses TRUEFORGE_MODEL without a DashScope key and sends only 
   assert.equal(seen.spec.responseFormat.type, 'json_object');
   assert.deepEqual(seen.spec.mcpServers, []); assert.deepEqual(seen.spec.skills, []);
   assert.equal(seen.spec.config.sandbox.enabled, false);
-  assert.deepEqual(seen.input, facts);
+  assert.deepEqual(seen.input, { recent: facts.recent, sources: facts.sources, required_monthly_minor: facts.required_monthly_minor, ...calculateSavingsEvidence(facts) });
   assert.equal(JSON.stringify(seen.input).includes('card_number'), false);
   assert.equal(seen.turns, 1); assert.equal(seen.createOptions.maxRetries, 0); assert.equal(seen.turnOptions.maxRetries, 0);
   assert.equal(verifySavingsAdvice(result, facts).remaining_gap_minor, 146000);
