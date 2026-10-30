@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-30",
+  "model": "test/deepseek-v4-1-flash",
+  "transport": "real HTTP + installed TrueForge SDK",
+  "modelOutput": "live, no injected JSON",
+  "browser": "Chrome headless",
+  "checks": [
+    "live understanding keeps orchestrator.goal and asks for signed savings inputs",
+    "saved amount submitted through signed form; live advice independently verified and rendered",
+    "goal math and all category budgets displayed",
+    "no financial write requests; no browser errors"
+  ],
+  "pageErrors": 0,
+  "financialWrites": 0,
+  "resolvedModel": {
+    "name": "test/deepseek-v4-1-flash",
+    "modelId": "deepseek-flash",
+    "provider": "test"
+  },
+  "lastResponse": {
+    "code": "OK",
+    "status": "goal_plan"
+  },
+  "calculation": {
+    "saved_minor": 200000,
+    "required_monthly_minor": 400000,
+    "remaining_gap_minor": 0,
+    "feasible": true
+  },
+  "passed": true
+}

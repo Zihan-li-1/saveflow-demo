@@ -145,7 +145,7 @@ export async function handleBankingAgent(
     if (replay) return replay;
     if (conversation.syncOnly) return reply(200, 'OK', '已核验服务端会话，历史预览不会自动执行。', { status: 'conversation_state' });
     const scenarioScope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
-    const result = await conversation.finish(await runBankingConversation(conversation.body, { core: { ...core, prepare: request => conversation.prepare(request) }, repository, env, now, timezone: options.timezone ?? 'Asia/Shanghai', parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope, savingsAdvisor: options.savingsAdvisor, conversation, resumeOnly: conversation.resumeOnly, onDiagnostic: diagnostics.emit }));
+    const result = await conversation.finish(await runBankingConversation(conversation.body, { core: { ...core, prepare: request => conversation.prepare(request) }, repository, env, now, timezone: options.timezone ?? 'Asia/Shanghai', parseIntent, fetchImpl, signal: request.signal, requestId, scenarioHandler: options.scenarioHandler, scenarioScope, savingsAdvisor: options.savingsAdvisor, conversation, resumeOnly: conversation.resumeOnly, onDiagnostic: diagnostics.emit }));
     const data = result.data?.recovery ? { ...result.data, recovery: { ...result.data.recovery, continuationToken: result.data.recovery.continuationToken ?? result.data.continuationToken } } : result.data;
     return reply(result.httpStatus, result.code, result.message, data, result.replyContext);
   } catch (error) {

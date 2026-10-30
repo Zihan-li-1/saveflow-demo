@@ -23,7 +23,7 @@ const hook = require('../src/lib/use-saveflow.ts');
 const { ApiError } = require('../src/lib/api/contracts.ts');
 const realHook = hook.useSaveflow;
 const realAsk = agent.askBankingAgent;
-let flow, root, core, handleBanking, handleAgent;
+let flow, root, core, handleBanking, handleAgent, savingsAdviceFixture;
 hook.useSaveflow = () => { flow = realHook(); return flow; };
 const Home = require('../src/app/page.tsx').default;
 const env = { SAVEFLOW_ACCESS_CODE: 'test-access-code-1234', CONTINUATION_TOKEN_SECRET: 'test-continuation-secret-1234' };
@@ -34,14 +34,6 @@ const reply = { text: 'test response', style: 'concise', safetyNotices: [] };
 const composer = () => root.root.findAllByType('input').find(node => node.props.placeholder === '输入转账、账单或卡片请求…');
 const loading = () => root.root.findAll(node => node.props.className === 'typing').length > 0;
 const preview = () => { const message = flow.messages.findLast(message => message.banking?.status === 'awaiting_confirmation'); assert.ok(message, JSON.stringify(flow.messages)); return message.banking; };
-const savingsObservation = facts => {
-  const category = '购物';
-  const previous = facts.history.map(month => month.category_expenses_minor[category]).filter(Number.isSafeInteger);
-  const average = previous.reduce((sum, value) => sum + value, 0) / previous.length;
-  const difference = facts.recent.category_expenses_minor[category] - average;
-  const trend = difference > Math.max(1000, average * .1) ? 'up' : difference < -Math.max(1000, average * .1) ? 'down' : 'flat';
-  return { category, trend, evidence_refs: [`recent:${category}`, `history:${facts.history[0].month}:${category}`], reason: '近期与历史演示数据仅供参考', uncertain: true };
-};
 async function mount() {
   calls = []; intercept = null;
   const storage = new Map();
@@ -52,7 +44,7 @@ async function mount() {
     init.headers["x-forwarded-for"] = `lifecycle-${++requestSequence}`;
     const body = JSON.parse(init.body); calls.push(body.action || 'agent');
     const run = () => url === '/api/banking-agent'
-      ? handleAgent(new Request(`http://localhost${url}`, init), { env, core, parseIntent: async () => intent, savingsAdvisor: async facts => ({ observations: [savingsObservation(facts)], category_budgets: Object.entries(facts.recent.category_expenses_minor).map(([category, suggested_minor]) => ({ category, suggested_minor, reason: '近期数据参考', evidence_refs: [`recent:${category}`] })), caveats: [], self_review: { passed: true, data_coverage: true, category_evidence: true, fixed_costs: true, budget_totals: true, uncertainty: true, failed_items: [] } }) })
+      ? handleAgent(new Request(`http://localhost${url}`, init), { env, core, parseIntent: async () => intent, savingsAdvisor: async facts => savingsAdviceFixture(facts) })
       : handleBanking(new Request(`http://localhost${url}`, init), { env, core });
     return intercept ? intercept(body, run) : run();
   };
@@ -72,6 +64,7 @@ function ready() {
   assert.equal(root.root.findAllByType('button').find(node => node.props.className === 'send').props.disabled, !flow.consent);
 }
 before(async () => {
+  ({ savingsAdviceFixture } = await import('./fixtures/savings-runtime.mjs'));
   ({ handleBanking } = await import('../server/banking.mjs'));
   ({ handleBankingAgent: handleAgent } = await import('../server/banking-agent.mjs'));
 });
