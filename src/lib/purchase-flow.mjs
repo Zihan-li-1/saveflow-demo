@@ -27,10 +27,10 @@ export function normalizePurchaseSlots(slots, currentDate) {
 }
 
 const PURCHASE_ACTION = /(买|购买|订购|订|准备|预留|提醒)/;
-const NON_PURCHASE = /(取消|退订|订阅|规则|比例|退款|退货|花呗|花销)/;
+const NON_PURCHASE = /(取消|退订|订阅|规则|比例|退款|退货|花呗|花销|转账|汇款|转给|订单|物流|快递|到货|进度|查询)/;
 const DATE_TEXT = /(\d{4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}\s*[日号]?|\d{1,2}\s*[.\-/月]\s*\d{1,2}\s*[日号]?|[一二三四五六七八九十]{1,3}\s*月\s*[一二三四五六七八九十]{1,3}\s*[日号])/;
 
-/** 模型把购物请求判成 unsupported/clarify 时的兜底：从用户原话重建购物意图，避免整条流程被模型一句话吞掉。 */
+/** 模型没把购物请求认成 scenario.plan_purchase 时的兜底：从用户原话重建购物意图，避免整条流程被模型一句话吞掉。 */
 export function purchaseIntentFromMessage(message = '') {
   const text = String(message ?? '');
   if (!text || NON_PURCHASE.test(text) || !PURCHASE_ACTION.test(text)) return null;

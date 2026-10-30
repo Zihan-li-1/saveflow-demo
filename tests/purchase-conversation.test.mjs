@@ -55,7 +55,7 @@ test('banking HTTP routes birthday shopping to a business flow card without exec
 
 test('a model refusal on a shopping request still reaches the purchase flow', async () => {
   assert.deepEqual(purchaseIntentFromMessage('提醒我在九月一号买花'), { items: [{ category: 'flowers', quantity: 1 }], date_expression: '2026-09-01', date_meaning: 'order_on' });
-  for (const message of ['取消鲜花订阅', '看看花呗账单', '转 200 给张三']) assert.equal(purchaseIntentFromMessage(message), null);
+  for (const message of ['取消鲜花订阅', '看看花呗账单', '转 200 给张三', '提醒我给花店转账 200', '帮我查一下买花的订单']) assert.equal(purchaseIntentFromMessage(message), null);
   const env = { SAVEFLOW_ACCESS_CODE: 'purchase-test-access', CONTINUATION_TOKEN_SECRET: 'purchase-test-continuation' };
   const refusal = { schemaVersion: '1.0.0', action: 'unsupported', slots: {}, missingSlots: [], status: 'unsupported' };
   const request = new Request('http://localhost/api/banking-agent', { method: 'POST', headers: {
@@ -67,4 +67,23 @@ test('a model refusal on a shopping request still reaches the purchase flow', as
   assert.equal(payload.data.status, 'purchase_request');
   assert.equal(payload.data.data.slots.date_expression, '2026-09-01');
   assert.deepEqual(payload.data.data.slots.items, [{ category: 'flowers', quantity: 1 }]);
+});
+
+test('any wrong model action on a shopping request is corrected to the purchase flow', async () => {
+  const env = { SAVEFLOW_ACCESS_CODE: 'purchase-test-access', CONTINUATION_TOKEN_SECRET: 'purchase-test-continuation' };
+  const wrongActions = [
+    { schemaVersion: '1.0.0', action: 'unsupported', slots: {}, missingSlots: [], status: 'unsupported' },
+    { schemaVersion: '1.0.0', action: 'clarify', slots: {}, missingSlots: ['action'], status: 'needs_clarification' },
+  ];
+  for (const intent of wrongActions) {
+    const request = new Request('http://localhost/api/banking-agent', { method: 'POST', headers: {
+      'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'content-type': 'application/json', 'x-forwarded-for': 'purchase-any-wrong-action',
+    }, body: JSON.stringify({ consent: true, history: [], message: '提醒我在11月3号买花' }) });
+    const response = await handleBankingAgent(request, { env, now: () => Date.parse('2026-10-30T00:00:00Z'), parseIntent: async () => intent });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.data.status, 'purchase_request');
+    assert.equal(payload.data.data.slots.date_expression, '2026-11-03');
+    assert.equal(payload.data.data.slots.date_meaning, 'order_on');
+  }
 });
