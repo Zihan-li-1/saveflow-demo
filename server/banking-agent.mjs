@@ -11,7 +11,7 @@ import { runReadOnlyPlanner } from './read-only-planner.mjs';
 import { createPlanningRuntimeClient } from './planning-runtime.mjs';
 import { createAgentDiagnostics, diagnosticCategory } from './agent-diagnostics.mjs';
 import { routeConversation, validateChatHistory, validateConversationRoute } from './conversation-route.mjs';
-import { buildCapabilityCatalog, publicCapabilityCatalog, capabilityIntroduction } from './agent-capability-catalog.mjs';
+import { buildCapabilityCatalog, buildSkillOverview, publicCapabilityCatalog, capabilityIntroduction } from './agent-capability-catalog.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const RATE_LIMIT = 10;
@@ -183,6 +183,10 @@ export async function handleBankingAgent(
       if (['conversation_reply', 'clarify', 'unsupported'].includes(route.kind)) {
         const text = route.kind === 'conversation_reply' && route.topic === 'capabilities' ? capabilityIntroduction(catalog) : route.text;
         // No ConversationState adapter, task transition, or Core mutation is opened.
+        if (route.kind === 'conversation_reply' && route.topic === 'capabilities') {
+          try { return reply(200, 'OK', text, { status: 'capability_overview', capabilityOverview: buildSkillOverview(catalog) }); }
+          catch { /* Degrade to trusted text without inventing capabilities. */ }
+        }
         return reply(200, 'OK', text, { status: 'conversation_reply' });
       }
       if (route.kind === 'planning_intent' || route.kind === 'business_intent' && route.continuation === 'new') {

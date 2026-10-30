@@ -2,12 +2,13 @@ import type { Message } from "./use-saveflow";
 import { bankingContinuationToken, type BankingFlows } from "./banking-flow-state";
 import { validBankingConversation } from './banking-conversation-contract';
 import { PARSED_INTENT_ACTIONS } from '../agent/parsed-intent';
+import { validSkillOverview } from './banking-agent-client';
 
 export const bankingChatKey = "saveflow.banking-chat.v1";
 const retentionMs = 30 * 60 * 1000;
 const continuationMs = 5 * 60 * 1000;
 const planContinuationMs = 30 * 60 * 1000;
-const kinds = new Set(["conversation", "normal", "error", "banking_clarification", "banking_bill", "banking_preview", "banking_card", "banking_card_preview", "banking_read", "banking_plan", "banking_receipt", "banking_wealth", "banking_wealth_preview", "banking_wealth_inputs", "banking_savings_inputs", "banking_savings_plan", "banking_internal_transfer"]);
+const kinds = new Set(["conversation", "banking_skill_overview", "normal", "error", "banking_clarification", "banking_bill", "banking_preview", "banking_card", "banking_card_preview", "banking_read", "banking_plan", "banking_receipt", "banking_wealth", "banking_wealth_preview", "banking_wealth_inputs", "banking_savings_inputs", "banking_savings_plan", "banking_internal_transfer"]);
 export const continuationLifetime = (messages: Message[], token: string | null) => messages.some(message => message.banking?.status === "needs_plan_inputs" && message.banking.continuationToken === token) ? planContinuationMs : continuationMs;
 type ChatTurn = { role: 'user' | 'assistant'; content: string };
 function boundedChatHistory(value: unknown): ChatTurn[] {
@@ -16,7 +17,7 @@ function boundedChatHistory(value: unknown): ChatTurn[] {
 }
 type Snapshot = { chatHistory: ChatTurn[]; version: 1 | 2; savedAt: number; messages: Message[]; continuation: string | null; continuationExpiresAt: number; flows: BankingFlows; focusedFlowId: string | null; conversationToken?: string };
 const sessionToken = (token: unknown): token is string => typeof token === 'string' && /^cs1\.[A-Za-z0-9_-]{43}$/.test(token);
-const displayFields = new Set(['reply', 'kind', 'status', 'action', 'question', 'slot', 'source', 'choices', 'continuationToken', 'goal', 'recentSource',
+const displayFields = new Set(['reply', 'kind', 'status', 'capabilityOverview', 'action', 'question', 'slot', 'source', 'choices', 'continuationToken', 'goal', 'recentSource',
   'recent', 'requiredMonth', 'categories', 'operationId', 'preview', 'risk', 'receipt', 'data', 'evidence', 'disclosure', 'requestId', 'previewOnly',
   'plan', 'executionAllowed', 'previewCurrent', 'executed', 'outcomePending', 'error', 'coreStage', 'historySnapshot']);
 const pendingMessage = (message: Message) => message.banking?.outcomePending === true || ['executing', 'checking', 'unknown'].includes(message.banking?.coreStage ?? '');
@@ -48,6 +49,7 @@ export function restoreBankingChat(raw: string | null, now = Date.now()): Snapsh
         !Number.isFinite(value.continuationExpiresAt) || !Array.isArray(value.messages) || !value.messages.length || value.messages.length > 100 ||
         value.messages.some(m => !m || !Number.isSafeInteger(m.id) || !["agent", "user"].includes(m.role) || typeof m.text !== "string" || m.text.length > 4000 ||
           (m.kind !== undefined && !kinds.has(m.kind)) || (m.banking !== undefined && (!m.banking || typeof m.banking.status !== "string" ||
+            (m.banking.capabilityOverview !== undefined && !validSkillOverview(m.banking.capabilityOverview)) ||
             (m.banking.choices !== undefined && (!Array.isArray(m.banking.choices) || m.banking.choices.some(c => !c || typeof c.optionId !== "string" || typeof c.label !== "string"))))))) return null;
     if (now - value.savedAt >= retentionMs && !value.messages.some(pendingMessage)) return null;
     const oldSession = value.messages.findLast(m => validBankingConversation(m.banking?.conversation))?.banking?.conversation;

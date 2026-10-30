@@ -10,7 +10,7 @@ const { handleBankingAgent } = require('../server/banking-agent.mjs');
 const { createBankingCore } = require('../src/banking-core/core.mjs');
 const { createConversationStore } = require('../server/conversation-state.mjs');
 const { validateConversationRoute, conversationAgentSpec } = require('../server/conversation-route.mjs');
-const { buildCapabilityCatalog, publicCapabilityCatalog } = require('../server/agent-capability-catalog.mjs');
+const { buildCapabilityCatalog, buildSkillOverview, publicCapabilityCatalog } = require('../server/agent-capability-catalog.mjs');
 const { buildParsedIntent } = require('../src/agent/clarification/merge-intent.mjs');
 const { askBankingAgent } = require('../src/lib/banking-agent-client.ts');
 const { saveBankingChat, restoreBankingChat } = require('../src/lib/banking-chat-storage.ts');
@@ -64,11 +64,11 @@ const conversationalCases = [
 for (const [id, message, text, topic] of conversationalCases) test(`[场景 ${id}/20，模型传输桩] ${message}`, async () => {
   const f = fixture(); f.route(messageRoute(text, topic));
   const answer = await browser(f, { message, chatHistory: id === 6 ? [{ role: 'assistant', content: '可以按条件进行理财筛选。' }] : [] });
-  assert.equal(answer.status, 'conversation_reply'); assert.ok(answer.reply.text);
+  assert.equal(answer.status, id === 3 ? 'capability_overview' : 'conversation_reply'); assert.ok(answer.reply.text);
   assert.equal(f.calls.prepare + f.calls.decide + f.calls.execute + f.calls.parser.length, 0);
   assert.equal(f.calls.router[0].userMessage, message);
   if (id === 6) assert.match(f.calls.router[0].chatHistory[0].content, /理财筛选/);
-  if (id === 3) assert.match(answer.reply.text, /模拟/);
+  if (id === 3) { assert.match(answer.reply.text, /模拟/); assert.deepEqual(answer.capabilityOverview.groups.map(group => group.id), ['transfer', 'bills', 'wealth', 'cards', 'subscriptions', 'cross_scenario']); }
 });
 
 test('[场景 8/20] 转账经正式 ParsedIntent、Handler、Core 生成预览', async () => {
@@ -197,6 +197,10 @@ test('[场景 20/20] Catalog 按运行端口与配置降级，不能承诺真实
   assert.equal(catalog.find(item => item.action === 'purchase.budget_reservation').status, 'unavailable');
   const down = await buildCapabilityCatalog({ env: {} }); assert.ok(down.every(item => ['unavailable', 'planning_only'].includes(item.status)));
   const safe = JSON.stringify(publicCapabilityCatalog(catalog)); assert.ok(!safe.includes(env.SAVEFLOW_ACCESS_CODE)); assert.ok(!safe.includes(env.CONTINUATION_TOKEN_SECRET));
+  const overview = buildSkillOverview(catalog); assert.equal(overview.groups.length, 6);
+  assert.equal(overview.groups.find(group => group.id === 'subscriptions').examples.some(example => /取消/.test(example.prompt)), false);
+  assert.ok(overview.groups.every(group => group.examples.every(example => ['available_demo', 'planning_only'].includes(example.status))));
+  const unavailable = buildSkillOverview(down); assert.ok(unavailable.groups.every(group => group.examples.length === 0));
   f.route(messageRoute('可以操作所有产品。', 'capabilities'));
   const a = await browser(f, { message: '你能做什么？' }); assert.match(a.reply.text, /不能取消真实会员/); assert.match(a.reply.text, /不代表下单/);
 });
