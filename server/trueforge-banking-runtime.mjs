@@ -22,13 +22,13 @@ export function bankingAgentSpec(env) {
   };
 }
 
-export function createBankingRuntimeClient({ env = process.env, fetchImpl = fetch, sdk } = {}) {
+export function createBankingRuntimeClient({ env = process.env, fetchImpl = fetch, sdk, agentSpec } = {}) {
   let url;
   try { url = new URL(env.TRUEFORGE_BASE_URL); } catch { throw trueforgeError('TRUEFORGE_CONFIG_ERROR', 'Banking 理解服务未配置。', 503); }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
     throw trueforgeError('TRUEFORGE_CONFIG_ERROR', 'Banking 理解服务配置无效。', 503);
   }
-  const spec = bankingAgentSpec(env);
+  const spec = agentSpec ?? bankingAgentSpec(env);
   const sdkClient = sdk ?? new TrueForge({ baseUrl: url.origin, token: env.TRUEFORGE_TOKEN || undefined, fetch: fetchImpl, maxRetries: 0, timeoutInSeconds: 25 });
   function verify(session) {
     const s = session?.agent?.spec;

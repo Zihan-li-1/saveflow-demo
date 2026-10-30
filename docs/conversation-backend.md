@@ -1,6 +1,6 @@
 # ConversationState HTTP 与前端接入（P2-3 / P2-4）
 
-`handleBankingAgent()` 在鉴权、请求大小及来源检查后建立 ConversationState。`server/banking-conversation.mjs` 管理请求与任务关联，`banking-orchestrator.mjs` 仍运行原来的 TrueForge/ParsedIntent、Resolver、Skill、Core.prepare 链路。没有新的意图规划器，没有修改 Skill 公共接口。
+`handleBankingAgent()` 在鉴权、请求大小及来源检查后先做统一语义路由；普通聊天只读脱敏任务摘要并直接返回，不建立金融任务或推进 ConversationState。业务再由 `server/banking-conversation.mjs` 管理请求与任务关联，`banking-orchestrator.mjs` 仍运行原来的 ParsedIntent、Resolver、Skill、Core.prepare 链路。自动或显式只读规划另建 `planning.read_only` 任务，没有修改 Skill 公共接口。当前验收见 [统一自然对话交付记录](Unified-Conversation-Routing.md)。
 
 ## 请求和响应
 
@@ -13,7 +13,7 @@
 | taskId | continue/resume 时匹配原任务；显式 resume 必须提供。不是执行授权。 |
 | taskMode | auto（默认）、new、plan、continue、resume、sync。`plan` 仅进入只读规划循环。 |
 
-首次正常请求不带会话字段，返回 `data.conversation`：token、revision、expiresAt、currentTask、suspendedTasks、operationReferences。任务摘要仅含 taskId、action、status、expiresAt；操作摘要仅含 operationId、taskId、coreState。没有向浏览器返回权威槽位快照、已选实体、确认决定或执行权限。
+首次业务请求不带会话字段，返回 `data.conversation`：token、revision、expiresAt、currentTask、suspendedTasks、operationReferences。普通 `conversation_reply` 不返回这些金融元数据，客户端保留原状态。任务摘要仅含 taskId、action、status、expiresAt；操作摘要仅含 operationId、taskId、coreState。没有向浏览器返回权威槽位快照、已选实体、确认决定或执行权限。
 
 成功结果、澄清、已建立会话中的可恢复错误都返回该元数据。鉴权失败、无效/过期会话等不能建立可信关联的路径不回显可用会话令牌。前端同时严格校验元数据结构、任务/状态枚举、容量、未知字段和响应会话归属；业务账单金额及证据校验保留。
 

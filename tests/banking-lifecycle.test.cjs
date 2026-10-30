@@ -28,10 +28,10 @@ hook.useSaveflow = () => { flow = realHook(); return flow; };
 const Home = require('../src/app/page.tsx').default;
 const env = { SAVEFLOW_ACCESS_CODE: 'test-access-code-1234', CONTINUATION_TOKEN_SECRET: 'test-continuation-secret-1234' };
 const originalFetch = global.fetch;
-let intent, calls, intercept, requestSequence = 0;
+let intent, calls, intercept, naturalRoute, routedInputs, requestSequence = 0;
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const reply = { text: 'test response', style: 'concise', safetyNotices: [] };
-const composer = () => root.root.findAllByType('input').find(node => node.props.placeholder === '输入转账、账单或卡片请求…');
+const composer = () => root.root.findAllByType('input').find(node => node.props.placeholder === '自然提问，或描述你想办理的业务…');
 const loading = () => root.root.findAll(node => node.props.className === 'typing').length > 0;
 const preview = () => { const message = flow.messages.findLast(message => message.banking?.status === 'awaiting_confirmation'); assert.ok(message, JSON.stringify(flow.messages)); return message.banking; };
 const savingsObservation = facts => {
@@ -43,7 +43,7 @@ const savingsObservation = facts => {
   return { category, trend, evidence_refs: [`recent:${category}`, `history:${facts.history[0].month}:${category}`], reason: '近期与历史演示数据仅供参考', uncertain: true };
 };
 async function mount() {
-  calls = []; intercept = null;
+  calls = []; intercept = null; naturalRoute = null; routedInputs = [];
   const storage = new Map();
   global.sessionStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
   const { createBankingCore } = await import('../src/banking-core/core.mjs');
@@ -51,8 +51,9 @@ async function mount() {
   global.fetch = async (url, init) => {
     init.headers["x-forwarded-for"] = `lifecycle-${++requestSequence}`;
     const body = JSON.parse(init.body); calls.push(body.action || 'agent');
+    const routing = naturalRoute ? { conversationRuntimeClient: { async createSession() { return 'ui-router-fixture'; }, async cancel() {}, async runTurn(_id, wire) { routedInputs.push(JSON.parse(wire)); return JSON.stringify(naturalRoute); } } } : {};
     const run = () => url === '/api/banking-agent'
-      ? handleAgent(new Request(`http://localhost${url}`, init), { env, core, parseIntent: async () => intent, savingsAdvisor: async facts => ({ observations: [savingsObservation(facts)], category_budgets: Object.entries(facts.recent.category_expenses_minor).map(([category, suggested_minor]) => ({ category, suggested_minor, reason: '近期数据参考', evidence_refs: [`recent:${category}`] })), caveats: [], self_review: { passed: true, data_coverage: true, category_evidence: true, fixed_costs: true, budget_totals: true, uncertainty: true, failed_items: [] } }) })
+      ? handleAgent(new Request(`http://localhost${url}`, init), { env, core, ...routing, parseIntent: async () => intent, savingsAdvisor: async facts => ({ observations: [savingsObservation(facts)], category_budgets: Object.entries(facts.recent.category_expenses_minor).map(([category, suggested_minor]) => ({ category, suggested_minor, reason: '近期数据参考', evidence_refs: [`recent:${category}`] })), caveats: [], self_review: { passed: true, data_coverage: true, category_evidence: true, fixed_costs: true, budget_totals: true, uncertainty: true, failed_items: [] } }) })
       : handleBanking(new Request(`http://localhost${url}`, init), { env, core });
     return intercept ? intercept(body, run) : run();
   };
@@ -116,6 +117,86 @@ test('savings form resumes the goal and displays only a verified card', async ()
   assert.deepEqual(submitted.wealthInputs, { investable_amount_minor: 100000, max_risk_level: 'R2', liquidity_requirement: 'T+1' });
   assert.equal(flow.messages.findLast(message => message.banking?.status === 'wealth_result')?.banking?.data?.kind, 'recommendation');
   assert.equal((await core.repository.getAccounts())[0].availableBalanceFen, beforeScreening);
+});
+
+test('natural conversation preserves active preview, signed continuation, task navigation and plain rendering', async () => {
+  await mount();
+  intent = { schemaVersion: '1.0.0', action: 'transfer.create', slots: { payee_ref: '张三', source_account_ref: '活期账户', amount: { amount_minor: 50000, currency: 'CNY' } }, missingSlots: [], status: 'ready_for_resolution' };
+  await act(async () => { await flow.startDemo('从活期账户给张三转500元。'); });
+  const data = preview(); const token = flow.bankingContinuation; const tasks = structuredClone(flow.sessionTasks);
+  assert.ok(token); const before = calls.length;
+  naturalRoute = { schemaVersion: '1.0.0', kind: 'conversation_reply', topic: 'general', text: '确认让你核对收款人、金额和风险。' };
+  await act(async () => { await flow.startDemo('为什么需要确认？'); });
+  ready(); assert.equal(flow.activeTransferOperationId, data.operationId); assert.equal(flow.bankingContinuation, token);
+  assert.deepEqual(flow.sessionTasks, tasks); assert.equal(calls.length, before + 1);
+  assert.equal(flow.messages.at(-1).kind, 'conversation'); assert.equal(flow.messages.at(-1).banking, undefined);
+  assert.equal(root.root.findAll(node => node.props['aria-label'] === '只读多步骤分析').length, 0);
+  await act(async () => { await flow.startDemo('能再解释一下吗？'); });
+  assert.equal(routedInputs.at(-1).chatHistory[0].content, '为什么需要确认？');
+  await act(async () => { await flow.startDemo('确认转账'); });
+  assert.equal(flow.activeTransferOperationId, data.operationId); assert.equal(flow.bankingContinuation, token);
+  assert.equal(calls.includes('action.execute'), false);
+});
+
+test('chat history restores as language context while historical previews remain read-only', async () => {
+  await mount(); naturalRoute = { schemaVersion: '1.0.0', kind: 'conversation_reply', topic: 'general', text: '理财筛选是按照用户要求比较产品。' };
+  await act(async () => { await flow.startDemo('什么是理财筛选？'); });
+  await act(async () => { root.unmount(); root = create(React.createElement(Home)); });
+  await act(async () => { flow.setAccessCode(env.SAVEFLOW_ACCESS_CODE); flow.setConsent(true); });
+  await act(async () => { await flow.startDemo('再解释一下。'); });
+  assert.equal(routedInputs.at(-1).chatHistory[0].content, '什么是理财筛选？');
+  assert.equal(flow.activeTransferOperationId, null); assert.equal(flow.bankingContinuation, null);
+});
+
+test('natural resume response uses the selected server task and the original tab credential', async () => {
+  await mount();
+  intent = { schemaVersion: '1.0.0', action: 'transfer.create', slots: { payee_ref: '张三', source_account_ref: '活期账户', amount: { amount_minor: 50000, currency: 'CNY' } }, missingSlots: [], status: 'ready_for_resolution' };
+  await act(async () => { await flow.startDemo('从活期账户给张三转500元。'); });
+  const p = preview();
+  naturalRoute = { schemaVersion: '1.0.0', kind: 'task_control', control: { command: 'resume', target: 'previous' } };
+  await act(async () => { await flow.startDemo('继续之前那笔转账。'); await new Promise(resolve => setTimeout(resolve, 30)); });
+  const next = preview(); assert.notEqual(next.operationId, p.operationId); assert.equal(next.preview.exactEffects[0].amountFen, 50000);
+  assert.equal(next.conversation.currentTask.taskId, p.conversation.currentTask.taskId); assert.equal(calls.includes('action.execute'), false);
+});
+
+test('planning cards render success, partial, clarification and unsupported results with verified card details', async () => {
+  await mount();
+  const { createReadOnlyToolGateway } = await import('../server/read-only-tool-gateway.mjs');
+  const result = await createReadOnlyToolGateway({ repository: core.repository }).execute('card.get', {});
+  const { renderToStaticMarkup } = require('react-dom/server');
+  const { BankingPlanCard } = require('../src/app/BankingPlanCard.tsx');
+  for (const [status, label] of [['completed', '已完成'], ['partial', '部分完成'], ['needs_clarification', '需要补充'], ['unsupported', '暂不支持']]) {
+    const data = { status, plan: { status, taskId: 'task_11111111-1111-1111-1111-111111111111', goal: '分析账单与卡片',
+      question: status === 'needs_clarification' ? '请补充月份' : undefined,
+      steps: [{ stepId: 'step_11111111-1111-1111-1111-111111111111', tool: 'card.get', status: 'completed', depends_on: [], result }], audit: [] } };
+    const html = renderToStaticMarkup(React.createElement(BankingPlanCard, { data }));
+    assert.ok(html.includes(label)); assert.ok(html.includes('娱乐虚拟卡')); assert.ok(!html.includes('确认并执行'));
+    if (status === 'needs_clarification') assert.ok(html.includes('请补充月份'));
+  }
+});
+
+test('natural task modification forwards the original message only with the selected task signed credential', async () => {
+  await mount();
+  intent = { schemaVersion: '1.0.0', action: 'transfer.create', slots: { payee_ref: '张三', source_account_ref: '活期账户', amount: { amount_minor: 50000, currency: 'CNY' } }, missingSlots: [], status: 'ready_for_resolution' };
+  await act(async () => { await flow.startDemo('从活期账户给张三转500元。'); });
+  const before = preview(); intent = { ...intent, slots: { ...intent.slots, amount: { amount_minor: 10000, currency: 'CNY' } } };
+  naturalRoute = { schemaVersion: '1.0.0', kind: 'task_control', control: { command: 'modify', target: 'previous' } };
+  await act(async () => { await flow.startDemo('把之前那笔转账改成100元。'); await new Promise(resolve => setTimeout(resolve, 30)); });
+  const modified = preview(); assert.equal(modified.preview.exactEffects[0].amountFen, 10000);
+  assert.equal(modified.conversation.currentTask.taskId, before.conversation.currentTask.taskId); assert.equal(calls.includes('action.execute'), false);
+});
+
+test('an authoritative invalid-continuation error still retires preview controls after a chat preserved them', async () => {
+  await mount();
+  intent = { schemaVersion: '1.0.0', action: 'transfer.create', slots: { payee_ref: '张三', source_account_ref: '活期账户', amount: { amount_minor: 50000, currency: 'CNY' } }, missingSlots: [], status: 'ready_for_resolution' };
+  await act(async () => { await flow.startDemo('从活期账户给张三转500元。'); }); const p = preview();
+  naturalRoute = { schemaVersion: '1.0.0', kind: 'conversation_reply', topic: 'general', text: '请核对预览后使用页面确认按钮。' };
+  await act(async () => { await flow.startDemo('为什么确认？'); }); assert.equal(flow.activeTransferOperationId, p.operationId);
+  naturalRoute = { schemaVersion: '1.0.0', kind: 'business_intent', continuation: 'current' };
+  intercept = body => handleAgent(new Request('http://localhost/api/banking-agent', { method: 'POST', headers: { 'content-type': 'application/json', 'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'x-forwarded-for': `bad-continuation-${++requestSequence}` }, body: JSON.stringify({ ...body, continuationToken: 'forged' }) }), { env, core, routeConversation: async () => naturalRoute });
+  await act(async () => { await flow.startDemo('改成100元'); });
+  assert.equal(flow.activeTransferOperationId, null); assert.equal(flow.bankingContinuation, null);
+  assert.equal((await core.getOperation(p.operationId)).data.state, 'awaiting_confirmation'); assert.equal(calls.includes('action.execute'), false);
 });
 
 test('refresh resumes the separate Wealth screening without skipping its required inputs', async () => {

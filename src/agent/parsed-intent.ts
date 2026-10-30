@@ -5,6 +5,7 @@ export const PARSED_INTENT_ACTIONS = [
   "transfer.create",
   "bill.summary",
   "subscription.list",
+  "product.list",
   "card.get",
   "card.set_budget",
   "card.set_controls",
@@ -121,6 +122,13 @@ type ParsedIntentBody =
   | {
       schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
       action: "subscription.list";
+      slots: Record<string, never>;
+      missingSlots: [];
+      status: "ready_for_resolution";
+    }
+  | {
+      schemaVersion: typeof PARSED_INTENT_SCHEMA_VERSION;
+      action: "product.list";
       slots: Record<string, never>;
       missingSlots: [];
       status: "ready_for_resolution";

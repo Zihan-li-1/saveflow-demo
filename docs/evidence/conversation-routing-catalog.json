@@ -1,0 +1,507 @@
+{
+  "profile": "local_trueforge_with_in_memory_demo_core",
+  "catalog": [
+    {
+      "action": "transfer.create",
+      "description": "转账及本人账户互转",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": true,
+      "confirmation": true,
+      "execution": true,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "仅模拟数据；需要正式预览、页面确认和必要验证；不操作真实银行资金",
+        "只解析已有模拟收款人及本人账户称谓；不支持任意真实卡号或手机号转账",
+        "高风险转账需要可用的受控验证码渠道；不承诺真实短信或生物识别验证"
+      ]
+    },
+    {
+      "action": "bill.summary",
+      "description": "账单查询和支出分析",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "只读；不能代替用户授权或保证收益"
+      ]
+    },
+    {
+      "action": "subscription.list",
+      "description": "订阅查询和潜在闲置分析",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "只读；不能代替用户授权或保证收益"
+      ]
+    },
+    {
+      "action": "card.get",
+      "description": "卡片查询",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "只读；不能代替用户授权或保证收益"
+      ]
+    },
+    {
+      "action": "card.security_review",
+      "description": "卡片安全处理建议",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "只读；不能代替用户授权或保证收益"
+      ]
+    },
+    {
+      "action": "card.set_budget",
+      "description": "调整模拟卡片月预算",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": true,
+      "confirmation": true,
+      "execution": true,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "仅模拟数据；需要正式预览、页面确认和必要验证；不操作真实银行资金",
+        "月预算是应用内消费预算，不是银行硬限额，也不自动拦截消费"
+      ]
+    },
+    {
+      "action": "card.set_controls",
+      "description": "调整模拟卡片支付控制",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": true,
+      "confirmation": true,
+      "execution": true,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "仅模拟数据；需要正式预览、页面确认和必要验证；不操作真实银行资金"
+      ]
+    },
+    {
+      "action": "card.freeze",
+      "description": "冻结模拟卡片",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": true,
+      "confirmation": true,
+      "execution": true,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "仅模拟数据；需要正式预览、页面确认和必要验证；不操作真实银行资金"
+      ]
+    },
+    {
+      "action": "card.unfreeze",
+      "description": "解冻模拟卡片",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": true,
+      "confirmation": true,
+      "execution": true,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "仅模拟数据；需要正式预览、页面确认和必要验证；不操作真实银行资金"
+      ]
+    },
+    {
+      "action": "wealth.recommend",
+      "description": "按条件筛选模拟理财产品",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "只读；不能代替用户授权或保证收益"
+      ]
+    },
+    {
+      "action": "wealth.compare",
+      "description": "比较模拟理财产品",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "只读；不能代替用户授权或保证收益"
+      ]
+    },
+    {
+      "action": "wealth.assess_risk",
+      "description": "提示用户填写风险测评",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "只读；不能代替用户授权或保证收益"
+      ]
+    },
+    {
+      "action": "wealth.subscribe",
+      "description": "模拟理财申购",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": true,
+      "confirmation": true,
+      "execution": true,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "仅模拟数据；需要正式预览、页面确认和必要验证；不操作真实银行资金"
+      ]
+    },
+    {
+      "action": "wealth.redeem",
+      "description": "模拟理财赎回",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": true,
+      "confirmation": true,
+      "execution": true,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "仅模拟数据；需要正式预览、页面确认和必要验证；不操作真实银行资金"
+      ]
+    },
+    {
+      "action": "orchestrator.goal",
+      "description": "储蓄目标核算与建议",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "只读；不能代替用户授权或保证收益"
+      ]
+    },
+    {
+      "action": "scenario.create_rule",
+      "description": "创建模拟场景规则",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": true,
+      "confirmation": true,
+      "execution": true,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "仅模拟数据；需要正式预览、页面确认和必要验证；不操作真实银行资金"
+      ]
+    },
+    {
+      "action": "scenario.update_rule",
+      "description": "修改模拟场景规则",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": true,
+      "confirmation": true,
+      "execution": true,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "仅模拟数据；需要正式预览、页面确认和必要验证；不操作真实银行资金"
+      ]
+    },
+    {
+      "action": "scenario.disable_rule",
+      "description": "停用模拟场景规则",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": true,
+      "confirmation": true,
+      "execution": true,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "仅模拟数据；需要正式预览、页面确认和必要验证；不操作真实银行资金"
+      ]
+    },
+    {
+      "action": "scenario.review_event",
+      "description": "查看模拟场景事件",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ParsedIntent v1 Dispatcher / Banking Orchestrator",
+        "repositoryReady": true,
+        "corePortsReady": true,
+        "deployment": "local_demo",
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "模拟 Banking Repository",
+      "limitations": [
+        "只读；不能代替用户授权或保证收益"
+      ]
+    },
+    {
+      "action": "product.list",
+      "description": "浏览模拟理财产品",
+      "status": "planning_only",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "ReadOnlyToolGateway",
+        "planningTool": true
+      },
+      "mockOnly": true,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "模拟产品目录",
+      "limitations": [
+        "当前单项 Dispatcher 未实现；仅只读规划可调用"
+      ]
+    },
+    {
+      "action": "planning.read_only",
+      "description": "跨账单、订阅、卡片和产品的多步骤只读分析",
+      "status": "available_demo",
+      "evidence": {
+        "formalHandler": "runReadOnlyPlanner / ReadOnlyToolGateway",
+        "tools": [
+          "bill.summary",
+          "subscription.list",
+          "card.get",
+          "product.list",
+          "wealth.recommend",
+          "wealth.compare"
+        ],
+        "repositoryReady": true,
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "已核验的模拟 Repository / Skill 结果",
+      "limitations": [
+        "最多六轮；不能执行写操作；理财条件必须由用户明确提供"
+      ]
+    },
+    {
+      "action": "scenario.plan_purchase",
+      "description": "生成平台购物搜索链接",
+      "status": "available_demo",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "Banking Orchestrator purchase_request / purchase-links",
+        "repositoryReady": true,
+        "modelConfigured": true
+      },
+      "mockOnly": true,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "应用内品类与平台搜索链接",
+      "limitations": [
+        "只生成购物链接，不代表已经下单或预留预算；不创建真实订单"
+      ]
+    },
+    {
+      "action": "purchase.budget_reservation",
+      "description": "购物预算预留及提醒场景",
+      "status": "unavailable",
+      "evidence": {
+        "registered": true,
+        "formalHandler": "configuredPurchaseSkill / purchase API",
+        "persistenceConfigured": false,
+        "schedulerVerified": false
+      },
+      "mockOnly": true,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "应用内购物目录和预算记录",
+      "limitations": [
+        "持久化和预约工作进程需在购物接口另行核验；当前没有核验工作进程心跳",
+        "预算预留是应用内记账，不是真实资金冻结；链接不代表下单；不能创建真实订单"
+      ]
+    },
+    {
+      "action": "subscription.cancel",
+      "description": "取消真实第三方会员或订阅",
+      "status": "unavailable",
+      "evidence": {
+        "registered": false,
+        "formalHandler": "无取消 Handler 或第三方授权"
+      },
+      "mockOnly": false,
+      "preview": false,
+      "confirmation": false,
+      "execution": false,
+      "dataSource": "无第三方取消接入",
+      "limitations": [
+        "只能查询和分析订阅；请到对应平台自行取消"
+      ]
+    }
+  ]
+}

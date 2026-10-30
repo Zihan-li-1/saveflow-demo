@@ -7,7 +7,7 @@ export const PLANNING_TOOLS = Object.freeze([
 
 const toolSet = new Set(PLANNING_TOOLS);
 const kinds = new Set(['business_intent', 'plan_request', 'task_control', 'clarify', 'unsupported']);
-const forbidden = /(?:^|_)(?:confirmed|confirmation|operation|preview|risk|token|credential|toolcall|execution|entity_id|account_id|card_id|product_id|holding_id|payee_id)(?:$|_)/i;
+const forbidden = /(?:^|_)(?:confirmed|confirmation|operation|preview|token|credential|toolcall|execution|entity_id|account_id|card_id|product_id|holding_id|payee_id)(?:$|_)/i;
 
 export class AgentProposalV2Error extends Error {
   constructor(code, message = code) { super(message); this.name = 'AgentProposalV2Error'; this.code = code; }
@@ -107,7 +107,9 @@ export function validateAgentProposalV2(value) {
     return Object.freeze(structuredClone(value));
   }
   if (value.kind === 'task_control') {
-    exact(value.task_control, ['command']); if (!['finish', 'cancel'].includes(value.task_control.command)) throw new AgentProposalV2Error('PROPOSAL_SCHEMA_INVALID', '规划 task_control 只允许 finish 或 cancel。');
+    exact(value.task_control, ['command', 'analysis', 'evidence_tools']); if (!['finish', 'cancel'].includes(value.task_control.command)) throw new AgentProposalV2Error('PROPOSAL_SCHEMA_INVALID', '规划 task_control 只允许 finish 或 cancel。');
+    if (value.task_control.analysis !== undefined) boundedString(value.task_control.analysis, 'task_control.analysis', 2000);
+    if (value.task_control.evidence_tools !== undefined && (!Array.isArray(value.task_control.evidence_tools) || value.task_control.evidence_tools.length > 6 || value.task_control.evidence_tools.some(tool => !toolSet.has(tool)))) throw new AgentProposalV2Error('PROPOSAL_SCHEMA_INVALID', '分析依据必须引用只读工具。');
   } else if (value.kind === 'clarify') {
     exact(value.clarify, ['question']); boundedString(value.clarify.question, 'clarify.question', 1000);
   } else if (value.kind === 'unsupported') {

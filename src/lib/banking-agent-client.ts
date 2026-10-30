@@ -6,6 +6,7 @@ import type { ActionReceipt } from '../banking-core/contracts';
 import { validBankingConversation, type BankingConversation } from './banking-conversation-contract';
 
 export type BankingReply = { text: string; style: 'concise' | 'friendly' | 'professional'; safetyNotices: string[] };
+export type ReadOnlyPlan = { status: string; taskId: string; goal: string; analysis?: string; reason?: string; question?: string; evidenceSteps?: string[]; steps: Array<{ stepId: string; tool: string; status: string; depends_on: string[]; result?: { result: { ok: boolean; kind: string; action: string; data: Record<string, unknown>; evidence: Array<{ source: string; asOf: string; entityIds: string[] }> } } }>; audit: Array<Record<string, unknown>> };
 export type BankingChoice = { optionId: string; label: string };
 export type WealthScreeningInputs = { investable_amount_minor: number; max_risk_level: 'R1' | 'R2' | 'R3'; liquidity_requirement: 'T+0' | 'T+1' | 'AT_MATURITY' };
 export type SavingsPlanInputs = { saved_amount_minor: number } | { month: string; saved_amount_minor: number; income_minor: number; category_expenses_minor: Record<string, number> };
@@ -15,6 +16,8 @@ export type BankingAgentData = {
   reply?: BankingReply;
   kind?: 'clarification';
   status: string;
+  plan?: ReadOnlyPlan;
+  control?: { command: 'undo' | 'resume' | 'modify'; status: string; taskId?: string };
   action?: string;
   question?: string;
   slot?: string;
@@ -63,6 +66,7 @@ export type BankingAgentRequest = {
   planning?: boolean;
   planningConstraints?: Record<string, unknown>;
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  chatHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
   message?: string;
   continuationToken?: string;
   choice?: { optionId: string };
@@ -73,6 +77,46 @@ export type BankingAgentRequest = {
 export type BankingResponseDiagnostic = ResponseFailure & {
   event: 'banking_response_validation_failed'; stage: 'http' | 'envelope' | 'bill'; requestId: string;
 };
+
+const planningTools = new Set(['bill.summary', 'subscription.list', 'card.get', 'product.list', 'wealth.recommend', 'wealth.compare']);
+function validPlanningResult(tool: string, result: NonNullable<ReadOnlyPlan['steps'][number]['result']>['result']): boolean {
+  const kinds: Record<string, string> = { 'bill.summary': 'bill_result', 'subscription.list': 'subscription_result', 'card.get': 'card_result', 'product.list': 'product_result', 'wealth.recommend': 'wealth_recommendation', 'wealth.compare': 'wealth_comparison' };
+  const nonnegative = (v: unknown) => Number.isSafeInteger(v) && Number(v) >= 0;
+  if (result.kind !== kinds[tool] || Object.keys(result).some(key => !['ok', 'kind', 'action', 'data', 'evidence'].includes(key)) || result.evidence.length !== 1 ||
+      result.evidence.some(e => e.source !== (tool.startsWith('wealth.') ? 'financial_context.investment_products' : 'synthetic_demo_only') || !Number.isFinite(Date.parse(e.asOf)) || e.entityIds.some(id => typeof id !== 'string' || !id) || new Set(e.entityIds).size !== e.entityIds.length)) return false;
+  const data = result.data;
+  if (tool === 'bill.summary') return !billResponseFailure({ status: result.kind, action: result.action, data, evidence: result.evidence });
+  if (tool === 'card.get') return Array.isArray(data.cards) && data.cards.every(c => c && typeof c.name === 'string' && ['active', 'frozen'].includes(c.status) && nonnegative(c.monthlyBudgetFen) && nonnegative(c.monthlySpentFen) && typeof c.onlinePaymentsEnabled === 'boolean' && Array.isArray(c.blockedCategories) && c.blockedCategories.every((v: unknown) => typeof v === 'string'));
+  if (tool === 'subscription.list') {
+    const summary = data.summary as Record<string, unknown> | undefined;
+    return Array.isArray(data.subscriptions) && data.subscriptions.every(s => s && typeof s.id === 'string' && typeof s.name === 'string' && nonnegative(s.monthlyFeeFen) && ['active', 'cancelled'].includes(s.status)) && !!summary && ['activeCount', 'activeMonthlyFeeFen', 'potentiallyUnusedCount', 'potentiallyUnusedMonthlyFeeFen', 'potentialAnnualSavingsFen'].every(key => nonnegative(summary[key])) && summary.potentialAnnualSavingsFen === Number(summary.potentiallyUnusedMonthlyFeeFen) * 12;
+  }
+  return Array.isArray(data.products) && data.products.every(p => p && typeof p.name === 'string' && p.currency === 'CNY' && ['R1', 'R2', 'R3'].includes(p.riskLevel ?? p.risk_level) && nonnegative(p.expectedYield ?? p.expected_yield_bps) && nonnegative(p.minimumAmountFen ?? p.minimum_amount_minor) && nonnegative(p.durationDays ?? p.duration_days) && ['T+0', 'T+1', 'AT_MATURITY'].includes(p.liquidity));
+}
+function validReadOnlyPlan(plan: ReadOnlyPlan, session?: BankingConversation): boolean {
+  if (!plan || typeof plan !== 'object' || !/^task_[a-f0-9-]{36}$/.test(plan.taskId) ||
+      Object.keys(plan).some(key => !['status', 'taskId', 'goal', 'analysis', 'reason', 'question', 'evidenceSteps', 'steps', 'audit'].includes(key)) ||
+      typeof plan.goal !== 'string' || !plan.goal.trim() || plan.goal.length > 2000 || !['completed', 'partial', 'needs_clarification', 'unsupported', 'cancelled', 'business_intent'].includes(plan.status) ||
+      !Array.isArray(plan.steps) || plan.steps.length > 6 || !Array.isArray(plan.audit) || plan.audit.length > 6 ||
+      (session && (session.currentTask?.taskId !== plan.taskId || session.currentTask.action !== 'planning.read_only'))) return false;
+  const prior = new Set<string>();
+  for (const step of plan.steps) {
+    const result = step.result?.result;
+    if (!step || Object.keys(step).some(key => !['stepId', 'tool', 'status', 'depends_on', 'result', 'error'].includes(key)) || !/^step_[a-f0-9-]{36}$/.test(step.stepId) || prior.has(step.stepId) || !planningTools.has(step.tool) ||
+        !['completed', 'failed', 'rejected'].includes(step.status) || !Array.isArray(step.depends_on) || step.depends_on.some(id => !prior.has(id)) ||
+        (step.status === 'completed' && (!result || result.ok !== true || typeof result.kind !== 'string' || result.action !== step.tool ||
+          !result.data || typeof result.data !== 'object' || Array.isArray(result.data) || !Array.isArray(result.evidence) ||
+          result.evidence.some(entry => !entry || typeof entry.source !== 'string' || typeof entry.asOf !== 'string' || !Array.isArray(entry.entityIds))))) return false;
+    if (step.status === 'completed' && !validPlanningResult(step.tool, result!)) return false;
+    prior.add(step.stepId);
+  }
+  if (plan.status === 'completed' && (!plan.steps.length || plan.steps.some(step => step.status !== 'completed') || !plan.analysis?.trim() || !plan.evidenceSteps?.length)) return false;
+  return (!plan.evidenceSteps || Array.isArray(plan.evidenceSteps) && plan.evidenceSteps.every(id => prior.has(id))) &&
+    (plan.analysis === undefined || typeof plan.analysis === 'string' && plan.analysis.length <= 2000) &&
+    (plan.reason === undefined || typeof plan.reason === 'string' && plan.reason.length <= 2000) &&
+    (plan.question === undefined || typeof plan.question === 'string' && plan.question.length <= 1000) &&
+    (plan.status !== 'needs_clarification' || typeof plan.question === 'string' && !!plan.question.trim());
+}
 
 /** Clarifications without selectable options stay as plain chat prompts. */
 export function hasBankingChoices(data?: BankingAgentData): boolean {
@@ -89,7 +133,7 @@ export async function askBankingAgent(
   try {
     response = await fetch('/api/banking-agent', {
       method: 'POST',
-      signal: AbortSignal.any([signal, AbortSignal.timeout(30000)]),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
       headers: { 'Content-Type': 'application/json', 'X-Saveflow-Access': accessCode },
       body: JSON.stringify({ history: [], consent: true, ...body }),
     });
@@ -111,9 +155,9 @@ export async function askBankingAgent(
   if (response.status === 401) throw new ApiError('UNAUTHORIZED', '访问验证失败，请检查演示访问码后重试。');
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: '$' }, 'envelope');
   if (['ACCESS_NOT_CONFIGURED', 'CONTINUATION_CONFIG_ERROR', 'SERVICE_UNAVAILABLE'].includes(payload?.code || '')) throw new ApiError('SERVICE_UNAVAILABLE', '服务暂时不可用，请联系演示维护者。');
-  const validReply = (reply: BankingReply | undefined): reply is BankingReply => !!reply && typeof reply.text === 'string' && ['concise', 'friendly', 'professional'].includes(reply.style) && Array.isArray(reply.safetyNotices) && reply.safetyNotices.every(n => typeof n === 'string');
+  const validReply = (reply: BankingReply | undefined, allowEmpty = false): reply is BankingReply => !!reply && typeof reply.text === 'string' && (allowEmpty || !!reply.text.trim()) && reply.text.length <= 4000 && ['concise', 'friendly', 'professional'].includes(reply.style) && Array.isArray(reply.safetyNotices) && reply.safetyNotices.length <= 10 && reply.safetyNotices.every(n => typeof n === 'string' && n.length <= 1000);
   if ((payload.data?.conversation !== undefined && !validBankingConversation(payload.data.conversation)) ||
-      (response.ok && body.conversationToken !== undefined && !payload.data?.conversation)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.conversation' }, 'envelope');
+      (response.ok && body.conversationToken !== undefined && payload.data?.status !== 'conversation_reply' && !payload.data?.conversation)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.conversation' }, 'envelope');
   const session = payload.data?.conversation;
   if (session && ((body.conversationToken !== undefined && session.token !== body.conversationToken) ||
       (response.ok && body.conversationRevision !== undefined && session.revision < body.conversationRevision) ||
@@ -137,11 +181,27 @@ export async function askBankingAgent(
   }
   if (!payload.data || !['OK', 'NEEDS_CLARIFICATION', 'NEEDS_PLAN_INPUTS', 'UNSUPPORTED'].includes(payload.code || '')) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data' }, 'envelope');
   const reply = payload.reply;
-  if (!validReply(reply)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'reply' }, 'envelope');
+  if (!validReply(reply, payload.data.status === 'purchase_request')) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'reply' }, 'envelope');
   const data = payload.data;
+  if (data.plan && (payload.code !== 'OK' || !data.conversation || data.status !== data.plan.status || !validReadOnlyPlan(data.plan, data.conversation))) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.plan' }, 'envelope');
   if (body.taskMode === 'sync' && data.status !== 'conversation_state') return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.status' }, 'envelope');
   if (typeof data !== 'object' || Array.isArray(data) || typeof payload.requestId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(payload.requestId) ||
       (data.data !== undefined && (!data.data || typeof data.data !== 'object' || Array.isArray(data.data)))) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data' }, 'envelope');
+  if (data.status === 'conversation_reply') {
+    if (payload.code !== 'OK' || Object.keys(payload).some(key => !['code', 'message', 'requestId', 'reply', 'data'].includes(key)) || Object.keys(data).some(key => key !== 'status') ||
+        Object.keys(reply).some(key => !['text', 'style', 'safetyNotices'].includes(key)) || reply.text.length > 2000 ||
+        /(?:operationId|previewHash|continuationToken|op_|tfpreview:)/i.test(reply.text)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data' }, 'envelope');
+    return { status: 'conversation_reply', reply, requestId: payload.requestId };
+  }
+  if (data.status === 'task_control') {
+    const c = data.control;
+    const tasks = [data.conversation?.currentTask, ...(data.conversation?.suspendedTasks ?? [])];
+    if (payload.code !== 'OK' || !data.conversation || !c || Object.keys(data).some(key => !['status', 'control', 'conversation'].includes(key)) ||
+        Object.keys(c).some(key => !['command', 'status', 'taskId'].includes(key)) || !['undo', 'resume', 'modify'].includes(c.command) ||
+        !['resume_required', 'ambiguous', 'not_found', 'cancelled', 'needs_clarification', 'blocked', 'already_succeeded', 'already_ended'].includes(c.status) ||
+        (c.status === 'resume_required' ? c.command === 'undo' || !tasks.some(task => !!task && task.taskId === c.taskId && ['ready', 'awaiting_input', 'awaiting_confirmation', 'suspended'].includes(task.status)) : c.taskId !== undefined)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.control' }, 'envelope');
+    return { ...data, reply, requestId: payload.requestId };
+  }
   if (data.status === 'bill_result') {
     const failure = billResponseFailure(data);
     if (failure) return invalid(failure, 'bill');
@@ -217,6 +277,7 @@ export async function askBankingAgent(
   const scenarioAction = ['scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule'].includes(data.action || '');
   const enhancedSubscriptionValid = !subscriptionSummary && !subscriptionMethodology || (!!subscriptionSummary && !!subscriptionMethodology && nonnegative(subscriptionSummary.activeCount) && nonnegative(subscriptionSummary.activeMonthlyFeeFen) && nonnegative(subscriptionSummary.potentiallyUnusedCount) && nonnegative(subscriptionSummary.potentiallyUnusedMonthlyFeeFen) && nonnegative(subscriptionSummary.potentialAnnualSavingsFen) && subscriptionSummary.potentialAnnualSavingsFen === Number(subscriptionSummary.potentiallyUnusedMonthlyFeeFen) * 12 && subscriptionMethodology.usesRepositoryFlag === true && subscriptionMethodology.usesLastUsedDate === true && subscriptionMethodology.highConfidenceInactivityDays === 90 && subscriptionMethodology.historicalSubscriptionState === false && subscriptionMethodology.savingsEstimateMonths === 12 && typeof subscriptionMethodology.limitation === 'string');
   const valid = typeof payload.requestId === 'string' && trialMetadataValid && (
+    (payload.code === 'OK' && !!data.plan && Object.keys(data).every(key => ['status', 'plan', 'conversation'].includes(key))) ||
     (payload.code === 'OK' && data.status === 'conversation_state' && !!data.conversation) ||
     (payload.code === 'UNSUPPORTED' && data.status === 'unsupported') ||
     (payload.code === 'OK' && data.status === 'cancelled') ||

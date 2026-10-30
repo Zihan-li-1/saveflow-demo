@@ -49,6 +49,9 @@ export async function dispatchParsedIntent(
 
   try {
     switch (intent.action) {
+      case "product.list":
+        // Product browsing is currently provided by the read-only planning gateway.
+        return { ok: false, kind: "unsupported" };
       case "scenario.plan_purchase":
         return { ok: true, kind: "purchase_request", action: intent.action, data: { slots: intent.slots, synthetic_demo_only: true } };
       case "transfer.create":
