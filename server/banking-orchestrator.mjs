@@ -367,7 +367,7 @@ export async function runBankingConversation(body, {
   // 只要原话是购物请求，就按原话重建购物意图，绝不能因为模型一句话让购物流程消失。
   // 必须在 conversation/acceptIntent 之前改，否则状态机会按错误动作留下挂起任务。
   if (!continuing && !expectedAction && parsed.action !== 'scenario.plan_purchase') {
-    const recovered = purchaseIntentFromMessage(body.message);
+    const recovered = purchaseIntentFromMessage(body.message, understandingContext({ now, timezone }).currentDate);
     if (recovered) parsed = { schemaVersion: parsed.schemaVersion ?? '1.0.0', action: 'scenario.plan_purchase', slots: recovered, missingSlots: [], status: 'ready_for_resolution' };
   }
   if (conversation) {
@@ -544,4 +544,5 @@ export async function runBankingConversation(body, {
     throw error;
   }
 }
+
 
