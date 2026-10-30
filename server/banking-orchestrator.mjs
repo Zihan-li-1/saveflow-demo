@@ -15,7 +15,7 @@ import { savingsFailureDiagnostic } from './savings-advice-contract.mjs';
 import { understandingContext } from './understanding-context.mjs';
 import { collectSavingsData } from './savings-data.mjs';
 import { buildFinancialAnalysisContext } from './financial-analysis-context.mjs';
-import { purchaseNeedsReservation, purchaseMissingQuestions, normalizePurchaseSlots } from '../src/lib/purchase-flow.mjs';
+import { purchaseNeedsReservation, purchaseMissingQuestions, normalizePurchaseSlots, purchaseIntentFromMessage } from '../src/lib/purchase-flow.mjs';
 
 const scenarioStores = new Map();
 const transferTypeChoices = [
@@ -370,6 +370,11 @@ export async function runBankingConversation(body, {
   replyContext = { slots: parsed.slots };
   if (expectedAction && parsed.action !== expectedAction) throw Object.assign(new Error('工具动作不一致'), { code: 'CONTINUATION_ACTION_MISMATCH', status: 400 });
   if (!continuing && parsed.choice) throw inputError('INVALID_CHOICE', '当前请求没有可选择的候选项', 400);
+  // 模型可能把「买花 / 买蛋糕 + 提醒」判成 unsupported 或 clarify；购物流程不能因为模型一句话就消失，按原话重建一次购物意图。
+  if (parsed.action === 'unsupported' || parsed.action === 'clarify') {
+    const recovered = purchaseIntentFromMessage(body.message);
+    if (recovered) parsed = { schemaVersion: parsed.schemaVersion ?? '1.0.0', action: 'scenario.plan_purchase', slots: recovered, missingSlots: [], status: 'ready_for_resolution' };
+  }
   if (parsed.action === 'scenario.plan_purchase') {
     const currentDate = understandingContext({ now, timezone }).currentDate;
     const purchaseSlots = normalizePurchaseSlots(parsed.slots ?? {}, currentDate);

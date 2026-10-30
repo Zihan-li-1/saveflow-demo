@@ -4,7 +4,7 @@ import { validateParsedIntent } from '../src/agent/validate-parsed-intent.mjs';
 import { handleBankingAgent } from '../server/banking-agent.mjs';
 import { bankingIntentSystemPrompt } from '../server/banking-intent-parser.mjs';
 import { bankingAgentSpec } from '../server/trueforge-banking-runtime.mjs';
-import { normalizePurchaseSlots, purchaseDateFields } from '../src/lib/purchase-flow.mjs';
+import { normalizePurchaseSlots, purchaseDateFields, purchaseIntentFromMessage } from '../src/lib/purchase-flow.mjs';
 
 test('purchase keeps a known month/day without inventing a time, and defaults the year to the current one', () => {
   for (const expression of ['9.1号', '九月一号', '9月1日', '9/1']) {
@@ -51,4 +51,20 @@ test('banking HTTP routes birthday shopping to a business flow card without exec
   assert.equal(response.status, 200);
   const payload = await response.json(); assert.equal(payload.data.status, 'purchase_request');
   assert.deepEqual(payload.data.data.slots, intent.slots);
+});
+
+test('a model refusal on a shopping request still reaches the purchase flow', async () => {
+  assert.deepEqual(purchaseIntentFromMessage('提醒我在九月一号买花'), { items: [{ category: 'flowers', quantity: 1 }], date_expression: '2026-09-01', date_meaning: 'order_on' });
+  for (const message of ['取消鲜花订阅', '看看花呗账单', '转 200 给张三']) assert.equal(purchaseIntentFromMessage(message), null);
+  const env = { SAVEFLOW_ACCESS_CODE: 'purchase-test-access', CONTINUATION_TOKEN_SECRET: 'purchase-test-continuation' };
+  const refusal = { schemaVersion: '1.0.0', action: 'unsupported', slots: {}, missingSlots: [], status: 'unsupported' };
+  const request = new Request('http://localhost/api/banking-agent', { method: 'POST', headers: {
+    'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'content-type': 'application/json', 'x-forwarded-for': 'purchase-guard-test',
+  }, body: JSON.stringify({ consent: true, history: [], message: '提醒我在九月一号买花' }) });
+  const response = await handleBankingAgent(request, { env, now: () => Date.parse('2026-10-30T00:00:00Z'), parseIntent: async () => refusal });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.data.status, 'purchase_request');
+  assert.equal(payload.data.data.slots.date_expression, '2026-09-01');
+  assert.deepEqual(payload.data.data.slots.items, [{ category: 'flowers', quantity: 1 }]);
 });
