@@ -99,6 +99,15 @@ test('[场景 10/20] 转账预览期间解释确认原因，任务版本和预�
   assert.deepEqual(f.host.store.read(p.data.conversation.token), before);
   assert.equal(f.calls.prepare, 1); assert.equal(f.calls.decide + f.calls.execute, 0);
 });
+test('a purchase-like message with an active transfer credential stays in the outer route', async () => {
+  const f = fixture(); const p = await preview(f); const before = f.host.store.read(p.data.conversation.token);
+  f.route(messageRoute('当前转账尚待确认，请先处理原任务。'));
+  const a = await browser(f, { ...bound(p), message: '提醒我在11.3号买花' });
+  assert.equal(a.status, 'conversation_reply');
+  assert.equal(f.calls.router.length, 2);
+  assert.deepEqual(f.host.store.read(p.data.conversation.token), before);
+  assert.equal(f.calls.parser.length, 1);
+});
 test('[场景 11/20] 不要转了：可信任务取消只拒绝原 Core 预览', async () => {
   const f = fixture(); const p = await preview(f); f.route(control('undo'));
   const a = await browser(f, { ...session(p), message: '不要转了。' });
@@ -261,3 +270,4 @@ test('merged purchase past-date card accepts its intentional empty bubble while 
     await assert.rejects(askBankingAgent({ message: '你好' }, env.SAVEFLOW_ACCESS_CODE, new AbortController().signal), { code: 'BANKING_AGENT_RESPONSE_ERROR' });
   } finally { global.fetch = original; }
 });
+
