@@ -26,6 +26,26 @@ export function normalizePurchaseSlots(slots, currentDate) {
   return { ...slots, date_expression: `${date}${start ? ` ${start}${end ? `-${end}` : ''}` : ''}`, budget_month: date.slice(0, 7) };
 }
 
+const PURCHASE_ACTION = /(买|购买|订购|订|准备|预留|提醒)/;
+const NON_PURCHASE = /(取消|退订|订阅|规则|比例|退款|退货|花呗|花销)/;
+const DATE_TEXT = /(\d{4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}\s*[日号]?|\d{1,2}\s*[.\-/月]\s*\d{1,2}\s*[日号]?|[一二三四五六七八九十]{1,3}\s*月\s*[一二三四五六七八九十]{1,3}\s*[日号])/;
+
+/** 模型把购物请求判成 unsupported/clarify 时的兜底：从用户原话重建购物意图，避免整条流程被模型一句话吞掉。 */
+export function purchaseIntentFromMessage(message = '') {
+  const text = String(message ?? '');
+  if (!text || NON_PURCHASE.test(text) || !PURCHASE_ACTION.test(text)) return null;
+  const items = [];
+  if (/(鲜花|花束|玫瑰|郁金香|向日葵|康乃馨|百合|花)/.test(text)) items.push({ category: 'flowers', quantity: 1 });
+  if (/蛋糕/.test(text)) items.push({ category: 'cake', quantity: 1 });
+  if (!items.length) return null;
+  const slots = { items };
+  const fields = purchaseDateFields(DATE_TEXT.exec(text)?.[1] ?? '');
+  if (fields.date) slots.date_expression = `${fields.date}${fields.start ? ` ${fields.start}${fields.end ? `-${fields.end}` : ''}` : ''}`;
+  if (/送达|送到/.test(text)) slots.date_meaning = 'deliver_on';
+  else if (/提醒|下单/.test(text)) slots.date_meaning = 'order_on';
+  return slots;
+}
+
 /** 只有用户提到未来日期时间才进入预留预算与提醒流程；没提时间一律按现在就买。 */
 export function purchaseNeedsReservation(slots = {}) {
   return typeof slots.date_expression === 'string' && slots.date_expression.trim() !== '';
