@@ -1,0 +1,41 @@
+{
+  "baseline_commit": "0328738",
+  "skills": ["bill", "card", "wealth", "scenario", "transfer"],
+  "new_tests": {
+    "command": "node --test --experimental-test-isolation=none tests/agent-framework.test.mjs tests/agent-framework-postgres.test.mjs",
+    "passed": 32, "failed": 0, "skipped": 1,
+    "skip_reason": "BANKING_TEST_DATABASE_URL is not configured"
+  },
+  "existing_tests": {
+    "command": "npm.cmd test",
+    "passed": 653, "failed": 13, "skipped": 14,
+    "baseline": { "passed": 653, "failed": 13, "skipped": 14 },
+    "failure_names_match_baseline": true,
+    "failure_groups": [
+      "banking-core repository product count/list assertions",
+      "banking-lifecycle missing react-test-renderer",
+      "banking-runtime wealth comparison integration",
+      "banking-wealth-client integration",
+      "e-agent product comparison integration",
+      "purchase-ui missing react-test-renderer",
+      "transfer-preview-otp missing react-test-renderer",
+      "trueforge-skills product count assertion",
+      "wealth-agent-integration query, subscription and redemption (3)",
+      "wealth-bill-recommend product list assertions (2)"
+    ]
+  },
+  "next_http_smoke": {
+    "command": "node scripts/verify-agent-framework.mjs",
+    "passed": 8, "failed": 0, "exit_code": 0, "synthetic_only": true,
+    "checks": ["health_ready", "five_skills_schema", "single_read", "duplicate", "input_resume", "confirmed_proposal_only", "cancel", "two_skill_sequence"]
+  },
+  "typecheck": { "command": "node node_modules/typescript/bin/tsc --noEmit --incremental false", "exit_code": 0 },
+  "lint": { "scope": "new framework, routes, tests and smoke script", "exit_code": 0 },
+  "diff_check": { "command": "git diff --check", "exit_code": 0 },
+  "limitations": [
+    "Original test suite still has 13 reproducible baseline failures",
+    "PostgreSQL integration is implemented but not verified against a running database",
+    "Real bank, LLM and commerce services were not exercised",
+    "Financial action outputs are proposals, not execution receipts"
+  ]
+}
