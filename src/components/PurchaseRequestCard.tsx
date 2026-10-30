@@ -46,7 +46,7 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
   const [balance, setBalance] = useState(''), [obligations, setObligations] = useState('');
   const inFlight = useRef(false);
   const call = <T,>(action: string, input: unknown) => purchaseRequest<T>(action, input, accessCode, consent);
-  const today = localDate(Date.now());
+  const [today] = useState(() => localDate(Date.now()));
   const datePast = Boolean(dateText) && dateText < today;
   const ready = cats.length > 0 && dateText && startTime && endTime && meaning && Number(amount) > 0 && card && !datePast;
 
