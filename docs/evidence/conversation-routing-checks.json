@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-29",
+  "timezone": "Asia/Shanghai",
+  "profile": "local_worktree_with_existing_planning_changes",
+  "commands": {
+    "npm test": {
+      "exitCode": 0,
+      "tests": 659,
+      "pass": 645,
+      "fail": 0,
+      "skipped": 14,
+      "skippedBreakdown": {
+        "PostgreSQL_not_configured": 12,
+        "dedicated_live_tests_not_enabled": 2
+      }
+    },
+    "npm run typecheck": {
+      "exitCode": 0
+    },
+    "npm run build": {
+      "exitCode": 0
+    },
+    "npm run lint": {
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 3
+    }
+  },
+  "live": {
+    "mode": "real_trueforge",
+    "cases": 20,
+    "passed": 20,
+    "failed": 0,
+    "unverified": 0,
+    "coreCalls": {
+      "prepares": 5,
+      "decisions": 1,
+      "executions": 0
+    },
+    "report": "conversation-routing-live.json",
+    "durationScope": "Each scenario includes setup; not a load test",
+    "minDurationMs": 1,
+    "maxDurationMs": 6866
+  },
+  "unchangedBoundaries": [
+    "Banking Core",
+    "ParsedIntent v1 schemaVersion",
+    "TrueForge provider",
+    "UI confirmation and necessary verification",
+    "No new write permissions"
+  ],
+  "notVerified": [
+    "PostgreSQL cross-instance integration",
+    "Production deployment",
+    "Load and long-running concurrency performance"
+  ]
+}

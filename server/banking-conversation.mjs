@@ -27,6 +27,19 @@ function hostStore(core, env, now) {
   return host;
 }
 
+/** Read-only routing hints. Never expose task IDs, slots, entities or credentials. */
+export function bankingRouteContext(body, { core, env, now, conversationHost }) {
+  let token = body.conversationToken;
+  try {
+    if (!token && body.continuationToken) token = verifyContinuationToken(body.continuationToken, env.CONTINUATION_TOKEN_SECRET, now()).conversation?.token;
+    if (!token) return undefined;
+    const host = conversationHost ?? hostStore(core, env, now);
+    const state = host.store.read(token);
+    const summary = task => task ? { action: task.action, status: task.status } : null;
+    return { currentTask: summary(state.currentTask), suspendedTasks: state.suspendedTasks.map(summary) };
+  } catch { return undefined; } // Hints cannot make an invalid credential valid.
+}
+
 /** HTTP adapter only. No task IDs, model text or browser snapshots grant Core execution. */
 export function openBankingConversation(body, { core, env, now, parseIntent, conversationHost }) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw error('INVALID_REQUEST', '请求体必须为对象。', { status: 400 });
@@ -242,6 +255,12 @@ export function openBankingConversation(body, { core, env, now, parseIntent, con
     },
     async controlTask(control) {
       return controlTask(control);
+    },
+    selectControlTarget(control) {
+      const normalized = validateTaskControlProposal({ kind: 'task_control', control }).control;
+      const candidates = [state.currentTask, ...state.suspendedTasks].filter(task => active(task) || task?.status === 'suspended');
+      const selected = normalized.target === 'current' ? candidates.filter(task => task.taskId === state.currentTask?.taskId) : candidates;
+      return selected.length === 1 ? { status: 'resume_required', taskId: selected[0].taskId } : { status: selected.length ? 'ambiguous' : 'not_found' };
     },
     async taskControl(proposal) {
       return handleTaskControl(proposal, {

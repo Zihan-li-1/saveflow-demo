@@ -6,10 +6,12 @@ import { runBankingConversation, statusFor } from './banking-orchestrator.mjs';
 import { parseTrueforgeBankingIntent } from './trueforge-banking-runtime.mjs';
 import { bankingReply, validateReplyStyle } from './banking-reply.mjs';
 import { agentErrorPolicy } from '../src/lib/agent-error-policy.mjs';
-import { openBankingConversation } from './banking-conversation.mjs';
+import { openBankingConversation, bankingRouteContext } from './banking-conversation.mjs';
 import { runReadOnlyPlanner } from './read-only-planner.mjs';
 import { createPlanningRuntimeClient } from './planning-runtime.mjs';
 import { createAgentDiagnostics, diagnosticCategory } from './agent-diagnostics.mjs';
+import { routeConversation, validateChatHistory, validateConversationRoute } from './conversation-route.mjs';
+import { buildCapabilityCatalog, publicCapabilityCatalog, capabilityIntroduction } from './agent-capability-catalog.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const RATE_LIMIT = 10;
@@ -96,7 +98,7 @@ export async function handleBankingAgent(
   let style = 'concise';
   let conversation;
   const reply = (status, code, message, data, replyContext) => {
-    diagnostics.emit('agent_response_sent', { httpStatus: status, code, status: data?.status || 'unknown', responseSource: data?.status === 'error' ? 'error' : 'business' });
+    diagnostics.emit('agent_response_sent', { httpStatus: status, code, status: data?.status || 'unknown', responseSource: data?.status === 'error' ? 'error' : data?.status === 'conversation_reply' ? 'conversation' : 'business' });
     const metadata = conversation?.metadata();
     const envelope = responseEnvelope(requestId, code, message, metadata ? { ...(data ?? { status: 'error' }), conversation: metadata } : data, style, replyContext);
     const response = Response.json(
@@ -129,8 +131,25 @@ export async function handleBankingAgent(
     if (configStatus.continuationSecret !== 'configured') return authFailure(`CONTINUATION_CONFIG_${configStatus.continuationSecret.toUpperCase()}`, 503, 'CONTINUATION_CONFIG_ERROR', '服务暂时不可用，请联系演示维护者。');
 
     const body = await readBody(request);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw Object.assign(new Error('请求体必须为对象'), { code: 'INVALID_REQUEST', status: 400 });
+    const invalidFields = Object.keys(body).some(key => !['message', 'history', 'chatHistory', 'consent', 'continuationToken', 'choice', 'replyStyle', 'planInputs', 'wealthInputs', 'planning', 'planningConstraints', 'conversationToken', 'conversationRevision', 'taskId', 'taskMode'].includes(key));
+    const chatHistory = validateChatHistory(body.chatHistory);
+    delete body.chatHistory;
+    if (body.consent !== undefined && body.consent !== true) throw Object.assign(new Error('consent 必须明确为 true'), { code: 'INVALID_REQUEST', status: 400 });
+    if (body.message !== undefined && (typeof body.message !== 'string' || !body.message.trim() || body.message.length > 2000)) throw Object.assign(new Error('message 必须是 1-2000 字符'), { code: 'INVALID_REQUEST', status: 400 });
     if (body?.planning !== undefined && typeof body.planning !== 'boolean') throw Object.assign(new Error('planning 必须是布尔值'), { code: 'INVALID_REQUEST', status: 400 });
-    if (body?.planningConstraints !== undefined && (!body.planningConstraints || typeof body.planningConstraints !== 'object' || Array.isArray(body.planningConstraints))) throw Object.assign(new Error('planningConstraints 必须是对象'), { code: 'INVALID_REQUEST', status: 400 });
+    if (body?.planningConstraints !== undefined) {
+      const c = body.planningConstraints;
+      const valid = c && typeof c === 'object' && !Array.isArray(c) && Object.keys(c).every(key => ['max_risk_level', 'horizon_days', 'liquidity_requirement', 'amount', 'no_modifications', 'notes'].includes(key)) &&
+        (c.max_risk_level === undefined || ['R1', 'R2', 'R3'].includes(c.max_risk_level)) &&
+        (c.horizon_days === undefined || Number.isSafeInteger(c.horizon_days) && c.horizon_days >= 0 && c.horizon_days <= 3650) &&
+        (c.liquidity_requirement === undefined || ['T+0', 'T+1', 'AT_MATURITY'].includes(c.liquidity_requirement)) &&
+        (c.no_modifications === undefined || c.no_modifications === true) &&
+        (c.notes === undefined || typeof c.notes === 'string' && c.notes.length <= 500) &&
+        (c.amount === undefined || c.amount && typeof c.amount === 'object' && !Array.isArray(c.amount) && Object.keys(c.amount).every(key => ['amount_minor', 'currency'].includes(key)) && Number.isSafeInteger(c.amount.amount_minor) && c.amount.amount_minor > 0 && c.amount.currency === 'CNY');
+      if (!valid) throw Object.assign(new Error('planningConstraints 不符合只读约束契约'), { code: 'INVALID_REQUEST', status: 400 });
+    }
+    if ((body?.planning === true || body?.taskMode === 'plan') && (body?.continuationToken || body?.taskId || body?.choice || body?.planInputs || body?.wealthInputs)) throw Object.assign(new Error('只读规划必须作为独立任务发起'), { code: 'INVALID_REQUEST', status: 400 });
     diagnostics.emit('agent_request_received', { mode: 'banking', hasContinuation: typeof body?.continuationToken === 'string' });
     style = validateReplyStyle(body?.replyStyle);
     const implementation = env.SAVEFLOW_BANKING_RUNTIME || 'trueforge';
@@ -142,18 +161,60 @@ export async function handleBankingAgent(
     const parseIntent = options.parseIntent ?? (implementation === 'legacy-qwen' ? ((message, context) => defaultParseBankingIntent(message, { ...context, onDiagnostic: diagnostics.emit })) :
       (message, context) => parseTrueforgeBankingIntent(message, { ...context, signal: request.signal, client: options.trueforgeRuntimeClient, onDiagnostic: diagnostics.emit }));
     // Conversation binding rejects retired/unbound tokens before any understanding.
-    const core = options.core ?? await getConfiguredBankingCore(env);
+    let core, coreError;
+    try { core = options.core ?? await getConfiguredBankingCore(env); } catch (error) { coreError = error; }
+    if (invalidFields) {
+      if (core) {
+        // Preserve authenticated recovery metadata on rejected business fields.
+        conversation = openBankingConversation(body, { core, env, now, parseIntent, conversationHost: options.conversationHost });
+        await conversation.begin();
+      }
+      throw Object.assign(new Error('请求包含无效字段'), { code: 'INVALID_REQUEST', status: 400 });
+    }
+    // An injected business parser is an explicit business-only host used by the
+    // existing harness. Production and route tests use the semantic outer boundary.
+    let route;
+    const naturalTurn = typeof body.message === 'string' && !body.choice && !body.planInputs && !body.wealthInputs && !['sync', 'resume', 'continue', 'plan'].includes(body.taskMode) && body.planning !== true;
+    if (naturalTurn && (options.routeConversation || options.conversationRuntimeClient || implementation === 'trueforge' && !options.parseIntent && !options.trueforgeRuntimeClient)) {
+      if (/^(?:确认|确认转账|确认执行|执行|同意|确认保存|保存规则)[。！!]?\s*$/.test(body.message.trim())) throw Object.assign(new Error('聊天文字不能确认执行，请使用页面确认按钮。'), { code: 'CONFIRMATION_REQUIRED', userMessage: '聊天文字不能确认执行，请使用页面确认按钮。', status: 403 });
+      const catalog = await buildCapabilityCatalog({ core, repository: options.repository ?? core?.repository, env });
+      const taskContext = core ? bankingRouteContext(body, { core, env, now, conversationHost: options.conversationHost }) : undefined;
+      route = validateConversationRoute(await (options.routeConversation ?? routeConversation)(body.message, { env, fetchImpl, client: options.conversationRuntimeClient, signal: request.signal, chatHistory, catalog: publicCapabilityCatalog(catalog), hasContinuation: !!body.continuationToken, taskContext, replyStyle: style }));
+      if (['conversation_reply', 'clarify', 'unsupported'].includes(route.kind)) {
+        const text = route.kind === 'conversation_reply' && route.topic === 'capabilities' ? capabilityIntroduction(catalog) : route.text;
+        // No ConversationState adapter, task transition, or Core mutation is opened.
+        return reply(200, 'OK', text, { status: 'conversation_reply' });
+      }
+      if (route.kind === 'planning_intent' || route.kind === 'business_intent' && route.continuation === 'new') {
+        delete body.continuationToken; delete body.taskId;
+        body.taskMode = route.kind === 'planning_intent' ? 'plan' : 'new';
+      }
+      // Chat context never donates slots, even to an authenticated continuation.
+      body.history = [];
+    }
+    if (coreError) throw coreError;
     const repository = options.repository ?? core.repository;
     conversation = openBankingConversation(body, { core, env, now, parseIntent, conversationHost: options.conversationHost });
     const replay = await conversation.begin();
     if (replay) return replay;
     if (conversation.syncOnly) return reply(200, 'OK', '已核验服务端会话，历史预览不会自动执行。', { status: 'conversation_state' });
+    if (route?.kind === 'task_control') {
+      if (route.control.command !== 'undo') {
+        const target = conversation.selectControlTarget(route.control);
+        return reply(200, 'OK', target.taskId ? '请使用已验证的原任务凭据继续业务。' : target.status === 'ambiguous' ? '存在多笔待继续业务，请在待继续业务中明确选择。' : '没有找到可继续的任务，请重新开始业务。', { status: 'task_control', control: { ...target, command: route.control.command } });
+      }
+      const result = await conversation.taskControl({ kind: 'task_control', control: route.control });
+      return reply(200, 'OK', result.status === 'cancelled' ? '原业务已取消，未执行资金操作。' : result.status === 'needs_clarification' ? '存在多笔业务，请明确选择要取消的任务。' : '原任务暂不能取消，请查询原业务状态。', { status: 'task_control', control: { status: result.status, command: 'undo' } });
+    }
     if (body.planning === true || body.taskMode === 'plan') {
       const planningTask = await conversation.startPlanning(body.message, body.planningConstraints ?? {});
-      const planningClient = options.planningRuntimeClient ?? createPlanningRuntimeClient({ env, fetchImpl });
-      const plan = await runReadOnlyPlanner({ message: body.message, history: body.history ?? [], constraints: body.planningConstraints ?? {}, repository, runtimeClient: planningClient, env, now, timezone: options.timezone ?? 'Asia/Shanghai', signal: request.signal, requestId, taskId: planningTask?.taskId, conversation: conversation.metadata() });
-      if (['completed', 'cancelled', 'unsupported', 'business_intent'].includes(plan.status)) await conversation.endPlanning(plan.status === 'cancelled' ? 'cancelled' : 'completed');
-      return reply(200, 'OK', plan.status === 'needs_clarification' ? plan.question : '只读规划已完成', { status: plan.status, plan });
+      let plan;
+      try {
+        const planningClient = options.planningRuntimeClient ?? createPlanningRuntimeClient({ env, fetchImpl });
+        plan = await runReadOnlyPlanner({ message: body.message, history: [], constraints: body.planningConstraints ?? {}, repository, runtimeClient: planningClient, env, now, timezone: options.timezone ?? 'Asia/Shanghai', signal: request.signal, requestId, taskId: planningTask?.taskId, conversation: conversation.metadata() });
+      } catch (error) { await conversation.endPlanning('cancelled'); throw error; }
+      await conversation.endPlanning(['cancelled', 'partial', 'needs_clarification'].includes(plan.status) ? 'cancelled' : 'completed');
+      return reply(200, 'OK', plan.status === 'business_intent' ? '这是单项业务请求，请直接描述要查询或办理的业务。' : plan.status === 'needs_clarification' ? plan.question : plan.analysis || plan.reason || '只读规划已完成', { status: plan.status, plan });
     }
     const scenarioScope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
     const result = await conversation.finish(await runBankingConversation(conversation.body, { core: { ...core, prepare: request => conversation.prepare(request) }, repository, env, now, timezone: options.timezone ?? 'Asia/Shanghai', parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope, savingsAdvisor: options.savingsAdvisor, conversation, resumeOnly: conversation.resumeOnly, onDiagnostic: diagnostics.emit }));

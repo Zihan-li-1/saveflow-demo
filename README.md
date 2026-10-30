@@ -29,8 +29,8 @@ npm run lint
 npm run build
 ```
 
-Banking 页面统一使用 `/api/banking-agent`：默认 TrueForge 无工具理解 → 服务端校验 → 现有 Skill/Core 查询或预览。迁移期仅可由服务端 `SAVEFLOW_BANKING_RUNTIME=legacy-qwen` 整体切换，不按句式分流或静默回退。独立 `/api/agent` 储蓄助手保持原行为。
+Banking 页面统一使用 `/api/banking-agent`：默认 TrueForge 无工具语义路由，自动选择自然聊天、现有 ParsedIntent v1 业务链路、多步骤只读规划或可信任务控制。用户使用同一个输入框，普通聊天保留待确认预览。迁移期 `legacy-qwen` 仍是服务端显式选择的旧业务入口，不提供本次新增语义路由。独立 `/api/agent` 储蓄助手保持原行为。
 
-自然语言回复与结构化卡片分离，提供简洁/亲切/专业风格；风格不改变风险、确认和安全提示。本次只支持单动作，多动作需要拆开；未完成真实 TrueForge 部署验收。配置、合同及限制见 [Banking Agent API](docs/Banking-Agent-API.md)，验证范围见 [联调记录](docs/Banking-Agent-Integration.md)。
+自然语言回复与结构化卡片分离，提供简洁/亲切/专业风格；风格不改变风险、确认和安全提示。多个只读步骤的目标自动进入受限规划；写操作仍逐项预览、确认和验证。实现、能力目录、20 项场景及真实模型未验证范围见 [统一自然对话交付记录](docs/Unified-Conversation-Routing.md)。配置与合同见 [Banking Agent API](docs/Banking-Agent-API.md)。
 
-验收脚本使用模拟资金与供应商桩，不调用真实模型或银行。
+默认 npm test 使用模拟资金及模型传输桩，部分外部环境专项按配置跳过。`verify:conversation-routing:live` 显式调用真实 TrueForge，仍使用隔离的内存模拟 Core，不调用真实银行或执行资金操作。

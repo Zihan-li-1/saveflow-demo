@@ -28,7 +28,7 @@ export function agentErrorPolicy(code, { hasRecovery = false, hasChoices = hasRe
     ['invalid_input', 'missing_information', 'invalid_choice'].includes(category) ? 'edit_input' :
     category === 'restricted' ? 'contact_support' : 'new_request';
   return { category, retryable: category === 'transient' && !uncertain, nextAction,
-    context: category === 'session_expired' || category === 'restricted' || (category === 'business_conflict' && !hasRecovery) ? 'clear' : 'preserve' };
+    context: category === 'session_expired' || category === 'restricted' && code !== 'CONFIRMATION_REQUIRED' || (category === 'business_conflict' && !hasRecovery) ? 'clear' : 'preserve' };
 }
 
 export function validAgentErrorPolicy(error, hasRecovery = false, hasChoices = hasRecovery) {

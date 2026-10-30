@@ -1,6 +1,6 @@
 # AgentProposalV2 只读规划
 
-第一阶段规划入口使用现有 `POST /api/banking-agent`，请求增加 `planning: true`（或 `taskMode: "plan"`）。普通请求继续使用 ParsedIntent v1，不强制经过规划循环。规划请求会先在 `ConversationState` 中创建 `planning.read_only` 任务，规划结果的 `taskId` 与该服务端任务绑定；任务结束后才会结束会话任务。
+规划入口使用现有 `POST /api/banking-agent`，支持统一自然语言路由自动选择，也兼容显式 `planning: true`（或 `taskMode: "plan"`）。页面不再显示规划模式选择器。普通解释直接回答，单项业务继续 ParsedIntent v1，不强制经过规划循环。规划请求先在 ConversationState 中创建 `planning.read_only` 任务，结果 taskId 与服务端任务绑定。外层任务控制使用独立 control 契约，与本文件的 finish/cancel 分离。最新验收见 [统一自然对话交付记录](Unified-Conversation-Routing.md)。
 
 ## 契约
 
@@ -29,16 +29,16 @@ POST /api/banking-agent planning=true
   -> 有界计划结果
 ```
 
-工具网关不使用固定用户的 MCP 试点凭据，也不调用 `Core.decide` 或 `Core.execute`。`bill.summary` 和 `subscription.list` 复用正式只读 Handler；卡片和产品读取正式 Repository；理财建议与比较复用现有 Wealth Skill，并删除面向模型的实体 ID。完整证据保留在服务端步骤记录中。
+工具网关不使用固定用户的 MCP 试点凭据，也不调用 `Core.decide` 或 `Core.execute`。`bill.summary` 和 `subscription.list` 复用正式只读 Handler；卡片和产品读取正式 Repository；理财建议与比较复用现有 Wealth Skill，并删除面向模型的实体 ID。`wealth.recommend` 仅在请求明确提供结构化风险、期限与流动性约束且工具参数逐项一致时执行，否则停止并返回部分结果；页面当前尚无这组结构化输入。完整证据保留在服务端步骤记录中。
 
 循环最多 6 步，重复的工具和参数会停止循环并返回 `partial`。单个工具失败返回可审计的失败步骤，不伪造成功，也不会无限重试。规划结果不能成为写操作授权；现有转账预览、确认、执行和恢复链路保持原入口。
 
 ## 事件记录
 
-每个规划结果包含 `taskId`、`steps` 和 `audit`。步骤记录工具名、服务端生成的 `stepId`、依赖步骤、状态、已验证工具结果和证据；审计记录每轮 proposal 的 kind、工具、接受/拒绝状态和停止原因。运行时日志不得写入访问码、签名令牌、TrueForge Session ID 或完整模型凭据。
+每个规划结果包含 `taskId`、`steps` 和 `audit`。步骤记录工具名、服务端生成的 `stepId`、依赖步骤、状态、已验证工具结果和证据；审计记录每轮 proposal 的 kind、工具、依据、接受/拒绝状态和停止原因。完成分析时模型需提供 `analysis` 与 `evidence_tools`；服务端只接受已成功完成工具的引用并映射到服务端步骤 ID。页面把模型说明和正式工具数据卡片分开，金额与实体来自后者。运行时日志不得写入访问码、签名令牌、TrueForge Session ID 或完整模型凭据。
 
 ## 验证范围
 
-`tests/read-only-planner.test.mjs` 覆盖：越权工具和实体 ID 拒绝、正式 Repository 账单结果与证据、第二次工具选择依赖第一次真实结果、重复调用停止和写工具阻断。当前工作区若未配置真实 TrueForge 环境，专项测试使用传输层桩；真实模型证据应在配置 `TRUEFORGE_BASE_URL`、`TRUEFORGE_MODEL`、访问码和续接密钥后单独保存，不能把桩结果当成真实模型结果。
+`tests/read-only-planner.test.mjs` 覆盖：越权工具和实体 ID 拒绝、正式 Repository 账单结果与证据、第二次工具选择依赖第一次真实结果、单项账单、缺数据、工具失败、重复调用停止和写工具阻断。专项测试使用传输层桩，明确不是模型实测。`node scripts/verify-planning-live.mjs` 只在配置真实 TrueForge 环境后调用实际 Banking API 和模型，并将逐轮观察与选择写入 `docs/evidence/planning-live-*.json`；缺少配置时退出且不生成证据。
 
 下一阶段可把只读规划结果交给“计划 → 独立预览 → 用户确认”流程：规划器只提交经过验证的业务意图，服务端为每个写步骤重新解析实体并生成独立预览，用户确认后才进入既有 `Core.decide`/`Core.execute`。本阶段不开放该扩展。

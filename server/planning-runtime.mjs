@@ -2,11 +2,26 @@ import { TrueForge, isEventDelta, mergeEventDelta } from '@truefoundry/trueforge
 import { trueforgeError } from './trueforge-client.mjs';
 import { canonical } from '../src/banking-core/errors.mjs';
 
+const planningOutputContract = `
+输出契约（严格匹配，不得使用 type 或 proposalVersion）：顶层 schemaVersion 必须为 "2.0.0"，用 kind 区分分支。每轮只输出下列一种对象，省略其他分支字段，不要 Markdown 或 null。
+读取示例：{"schemaVersion":"2.0.0","kind":"plan_request","plan_request":{"tool":"bill.summary","arguments":{"month":"2026-08"}}}
+依赖示例：{"schemaVersion":"2.0.0","kind":"plan_request","plan_request":{"tool":"subscription.list","arguments":{},"depends_on":["bill.summary"]}}
+结束示例：{"schemaVersion":"2.0.0","kind":"task_control","task_control":{"command":"finish","analysis":"根据已观察结果说明分析和局限。","evidence_tools":["bill.summary","subscription.list"]}}
+澄清示例：{"schemaVersion":"2.0.0","kind":"clarify","clarify":{"question":"请选择有数据的月份。"}}
+不支持示例：{"schemaVersion":"2.0.0","kind":"unsupported","unsupported":{"reason":"该请求需要未授权的写操作。"}}
+工具 arguments 精确白名单：
+bill.summary: {month:"YYYY-MM"} 或 {period:{start_date:"YYYY-MM-DD",end_date:"YYYY-MM-DD",timezone:"Asia/Shanghai",label:"期间说明"}}，二选一，不能带 user、start_date 顶层、字符串 period 或账户 ID。
+subscription.list、product.list: {}。
+card.get: {} 或 {card_ref:"用户原始卡片称谓"}。
+wealth.compare: {product_refs:["原始称谓一","原始称谓二"]}，共2至5项。
+wealth.recommend: {goal:"目标",max_risk_level:"R1|R2|R3",horizon_days:整数,liquidity_requirement:"T+0|T+1|AT_MATURITY"}，可选 amount:{amount_minor:整数分,currency:"CNY"}。风险、期限、流动性和金额必须与输入 task.constraints 明确提供的值完全相同；未提供则 clarify，不能自行补全。
+plan_request 仅允许 tool、arguments、可选 depends_on（先前成功工具名称数组）及 reason；reason 不能放在 arguments 内。遇到缺数据，不把零记录当作零支出；先核验 coverage、availableMonths 和 observations，再给出有限结论。`;
+
 export function planningAgentSpec(env) {
   if (!env.TRUEFORGE_MODEL) throw trueforgeError('TRUEFORGE_CONFIG_ERROR', '规划模型未配置。', 503);
   return {
     model: { name: env.TRUEFORGE_MODEL, params: { maxTokens: 1400, temperature: 0, parallelToolCalls: false, thinking: { type: 'disabled' } } },
-    instructions: '你是 SaveFlow 只读规划器。输入是服务端 JSON，包含用户原始目标、约束和已验证的只读工具结果。每轮只能输出一个 JSON AgentProposalV2 2.0.0。你可以提出一个只读 plan_request、请求 clarify、返回 unsupported、结束 task_control，或在普通单意图时返回 business_intent。只允许工具 bill.summary、subscription.list、card.get、product.list、wealth.recommend、wealth.compare。工具参数必须使用用户称谓和服务端允许的金额/时间格式，不能生成实体 ID、确认凭据、operationId、执行结果或任何写操作。必须根据 observations 中真实结果选择下一步；不得预先输出步骤数组；数据不完整时明确结束或请求澄清。',
+    instructions: '你是 SaveFlow 只读规划器。解释今年、上个月和未写年份的月份时，以服务端 calendar.currentDate 和 calendar.timezone 为唯一日历基准。输入是服务端 JSON，包含用户原始目标、约束和已验证的只读工具结果。每轮只能输出一个 JSON AgentProposalV2 2.0.0。你可以提出一个只读 plan_request、请求 clarify、返回 unsupported、结束 task_control，或在普通单意图时返回 business_intent。只允许工具 bill.summary、subscription.list、card.get、product.list、wealth.recommend、wealth.compare。工具参数必须使用用户称谓和服务端允许的金额/时间格式，不能生成实体 ID、确认凭据、operationId、执行结果或任何写操作。必须根据 observations 中真实结果选择下一步；不得预先输出步骤数组。结束时 task_control.command=finish，并提供 analysis 文字和 evidence_tools 工具名称数组；只引用已成功观察的工具，不得编造金额或因果结论；数据不完整时明确说明。' + planningOutputContract,
     responseFormat: { type: 'json_object' }, mcpServers: [], skills: [],
     config: { iterationLimit: 1, sandbox: { enabled: false, fileDownloads: false }, dynamicSubAgents: { enabled: false }, generativeUi: { enabled: false }, askUserQuestions: { enabled: false }, webSearch: { enabled: false }, contextManagement: { compaction: { enabled: false }, largeToolResponse: { enabled: false } } },
   };

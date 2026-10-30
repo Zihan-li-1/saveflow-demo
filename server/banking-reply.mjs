@@ -19,6 +19,7 @@ function knownSummary(action, slots) {
 // Pure presentation: no intent parsing, model calls, tool selection or mutation.
 // Structured data and safety notices never pass through style transforms.
 export function bankingReply({ code, message, data, replyContext = {} }, style = 'concise') {
+  if (data?.status === 'conversation_reply') return { text: message, style, safetyNotices: [] };
   let text = message;
   const safetyNotices = [];
   const c = data?.recovery ?? data;

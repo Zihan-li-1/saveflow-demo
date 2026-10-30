@@ -20,7 +20,6 @@ export function BankingReadCard({ data, active = false, busy = false, onConfirm,
   const wealthProducts = data?.data?.products as Array<{ product_ref: string; name: string; risk_level: string; expected_yield_bps: number; minimum_amount_minor: number; liquidity: string; duration_days: number }> | undefined;
   const steps = data?.data?.steps as Array<{ action: string; reason: string }> | undefined;
   const rule = data?.data?.rule as { id?: string; status?: string; trigger?: { type?: string; value?: string }; proposed_steps?: Array<{ action: string }> } | undefined;
-  const evidence = data?.evidence?.[0];
   const isWealth = ["wealth_recommendation", "wealth_comparison"].includes(data?.status || "");
   const title = data?.status === "goal_plan" ? "综合财务规划" : data?.status === "risk_assessment_required" ? "风险测评要求" : data?.status?.startsWith("scenario_") ? "跨场景规则" : subscriptions ? "订阅项目" : isWealth ? data?.status === "wealth_comparison" ? "理财产品对比" : "理财条件筛选" : "理财产品";
   return <section className="financial-read-card" aria-label={title}>
@@ -46,7 +45,7 @@ export function BankingReadCard({ data, active = false, busy = false, onConfirm,
       </div>
       <ProductTerms />
     </article>)}
-    {isWealth && wealthProducts?.map(p => <article key={p.product_ref}>
+    {isWealth && wealthProducts?.map(p => <article key={p.product_ref || p.name}>
       <h3>{p.name}</h3><div className="financial-data-grid">
         <p><span>可能的波动</span><strong>{riskText(p.risk_level)}</strong></p><p><span>示例年化收益率</span><strong>{(p.expected_yield_bps / 100).toFixed(2)}%</strong></p>
         <p><span>最低金额</span><strong>{money(p.minimum_amount_minor)}</strong></p><p><span>最快何时可取</span><strong>{liquidityText(p.liquidity)}</strong></p><p><span>建议持有时间</span><strong>{durationText(p.duration_days)}</strong></p>
