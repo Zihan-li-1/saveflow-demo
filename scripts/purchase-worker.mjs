@@ -2,6 +2,7 @@ import postgres from 'postgres';
 import { createPurchaseStore } from '../src/skills/scenario/purchase-store.mjs';
 import { runDuePurchases } from '../src/skills/scenario/purchase-skill.mjs';
 import { setTimeout } from 'node:timers/promises';
+try { process.loadEnvFile('.env.local'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 if (!process.env.DATABASE_URL || process.env.PURCHASE_WORKER_ENABLED !== 'true') throw new Error('Configure DATABASE_URL and PURCHASE_WORKER_ENABLED=true');
 const sql = postgres(process.env.DATABASE_URL, { max: 2, connect_timeout: 5, idle_timeout: 20 });
 const store = createPurchaseStore(sql);
