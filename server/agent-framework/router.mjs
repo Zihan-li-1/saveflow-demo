@@ -1,18 +1,22 @@
-// Deterministic router. Never infers financial values or executes tools.
+import { IntentUnderstanding } from '../intent-routing/service.mjs';
+
+// Explicit structured requests remain deterministic. Natural language uses the isolated semantic pipeline.
 export class IntentRouter {
-  route(request) {
+  constructor({ registry, model, now, timezone, traceOptions } = {}) {
+    this.registry = registry;
+    this.understanding = registry ? new IntentUnderstanding({ registry, model, now, timezone, traceOptions }) : null;
+  }
+  async route(request, context = {}) {
     let selected = request.skill_name;
-    const extracted = structuredClone(request.arguments);
-    if (!selected && typeof extracted.action === 'string') selected = extracted.action.split('.')[0] === 'subscription' ? 'bill' : extracted.action.split('.')[0];
-    if (!selected && !request.steps) {
-      const rules = [ ['bill', /账单/, 'bill.summary'], ['card', /查询.*卡|查看.*卡/, 'card.get'], ['wealth', /比较.*理财|理财.*比较/, 'wealth.compare'] ];
-      const matches = rules.filter(([, pattern]) => pattern.test(request.query));
-      if (matches.length === 1) { selected = matches[0][0]; extracted.action = matches[0][2]; }
-      const month = request.query.match(/\b\d{4}-(?:0[1-9]|1[0-2])\b/);
-      if (selected === 'bill' && month && extracted.month === undefined) extracted.month = month[0];
+    if (!selected && request.arguments?.action) {
+      selected = this.registry?.list().find(def => def.capabilities?.some(cap => cap.action === request.arguments.action))?.name;
+      // Unknown explicit actions remain subject to the host registry validation.
+      if (!selected) selected = request.arguments.action.split('.')[0];
     }
-    return { intent: selected ?? (request.steps ? 'explicit_sequence' : 'unknown'), confidence: selected || request.steps ? 1 : 0,
-      selected_skills: request.steps?.map(step => step.skill_name) ?? (selected ? [selected] : []), extracted_arguments: extracted,
-      missing_fields: selected || request.steps ? [] : ['skill_name'], requires_confirmation: false };
+    if (selected || request.steps) return { intent: selected ?? 'explicit_sequence', confidence: 1, selected_skills: request.steps?.map(step => step.skill_name) ?? [selected], extracted_arguments: structuredClone(request.arguments), missing_fields: [], requires_confirmation: false };
+    if (!this.understanding) return { intent: 'unknown', confidence: 0, selected_skills: [], extracted_arguments: {}, missing_fields: ['skill_name'], requires_confirmation: false };
+    const result = await this.understanding.route(request.query, context);
+    return { ...result, intent: result.intent_analysis?.normalized_intent ?? 'unknown', confidence: result.decision === 'MATCHED' ? 1 : 0,
+      extracted_arguments: result.execution_plan.steps[0]?.arguments ?? {}, requires_confirmation: result.execution_plan.steps.some(step => this.registry.get(step.skill_name).operation(step.arguments) !== 'READ_ONLY') };
   }
 }

@@ -85,10 +85,10 @@ test('unknown language remains collecting; explicit selection resumes', async ()
   assert.equal(run.state, 'SUCCEEDED');
 });
 
-test('rule router extracts only explicit month', async () => {
+test('natural-language requests do not silently fall back to keyword execution', async () => {
   const { orchestrator } = setup();
   const run = await create(orchestrator, { session_id: 'session_test', query: '查看2026-09账单' });
-  assert.equal(run.state, 'SUCCEEDED'); assert.equal(run.plan.steps[0].arguments.month, '2026-09');
+  assert.equal(run.state, 'COLLECTING_INPUT'); assert.equal(run.result.routing.decision, 'CLARIFICATION_REQUIRED');
 });
 
 test('state machine rejects illegal transitions and every terminal state', () => {

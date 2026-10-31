@@ -9,7 +9,7 @@ const terminal = state => ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(state);
 const blankStep = step => ({ ...step, status: 'pending', result: null, error: null });
 const safeError = error => error instanceof AgentError ? error.toJSON() : { code: 'INTERNAL_ERROR', message: 'INTERNAL_ERROR' };
 export class AgentOrchestrator {
-  constructor({ registry, repository, router = new IntentRouter(), machine = new AgentStateMachine(), aggregator = new ResultAggregator(), timeoutMs = 5000, maxRetries = 1 }) {
+  constructor({ registry, repository, router = new IntentRouter({ registry }), machine = new AgentStateMachine(), aggregator = new ResultAggregator(), timeoutMs = 5000, maxRetries = 1 }) {
     if (!Number.isInteger(maxRetries) || maxRetries < 0 || maxRetries > 3 || !Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 120000) fail('INVALID_REQUEST');
     Object.assign(this, { registry, repository, router, machine, aggregator, timeoutMs, maxRetries });
   }
@@ -48,16 +48,26 @@ export class AgentOrchestrator {
     return { request_id: run.request_id, run_id: run.run_id, step_id: step.step_id, idempotency_key: digest({ run: run.run_id, step: step.step_id, args: argumentsValue }), arguments: argumentsValue };
   }
   async plan(run) {
-    const routed = await this.router.route(structuredClone(run.request));
+    const routed = await this.router.route(structuredClone(run.request), { run });
     run.intent = typeof routed.intent === 'string' ? routed.intent : 'unknown';
+    if (routed.decision) {
+      run.routing = routed;
+      if (routed.decision !== 'MATCHED') {
+        run.missing_fields = routed.missing_fields.map(item => item.task_id ? `${item.task_id}.${item.field}` : item.field);
+        run.result = { routing: { decision: routed.decision, missing_information: routed.missing_fields, unsupported_parts: routed.unsupported_parts, execution_plan: routed.execution_plan, failure_stage: routed.failure_stage, reason_code: routed.reason_code ?? null } };
+        if (run.state !== 'COLLECTING_INPUT') await this.transition(run, 'COLLECTING_INPUT');
+        return;
+      }
+      run.result = null;
+    }
     if (!Number.isFinite(routed.confidence) || routed.confidence < 0.8 || !Array.isArray(routed.selected_skills) || !routed.selected_skills.length) {
       run.missing_fields = ['skill_name'];
       if (run.state !== 'COLLECTING_INPUT') await this.transition(run, 'COLLECTING_INPUT');
       return;
     }
     if (run.state !== 'PLANNING') await this.transition(run, 'PLANNING');
-    const inputs = run.request.steps ?? [{ step_id: 'step_1', skill_name: routed.selected_skills[0], arguments: routed.extracted_arguments, dependencies: [], mappings: [] }];
-    if (!Array.isArray(inputs) || !inputs.length || inputs.length > 10 || (!run.request.steps && routed.selected_skills.length !== 1)) fail('INVALID_REQUEST');
+    const inputs = run.request.steps ?? routed.execution_plan?.steps ?? [{ step_id: 'step_1', skill_name: routed.selected_skills[0], arguments: routed.extracted_arguments, dependencies: [], mappings: [] }];
+    if (!Array.isArray(inputs) || !inputs.length || inputs.length > 10 || (!run.request.steps && !routed.execution_plan && routed.selected_skills.length !== 1)) fail('INVALID_REQUEST');
     const previous = run.plan;
     const steps = inputs.map(input => { const parsed = StepInput.safeParse(input); if (!parsed.success) fail('INVALID_REQUEST'); return blankStep(parsed.data); });
     const seen = new Set(); const missing = [];
@@ -96,12 +106,14 @@ export class AgentOrchestrator {
     else await this.execute(run);
   }
   async input(owner, runId, input, requestId = randomUUID()) {
-    if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !['arguments', 'skill_name', 'step_id'].includes(key)) || containsSecrets(input)) fail('INVALID_REQUEST');
+    if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !['arguments', 'skill_name', 'step_id', 'message'].includes(key)) || containsSecrets(input)) fail('INVALID_REQUEST');
+    if (input.message !== undefined && (typeof input.message !== 'string' || !input.message.trim() || input.message.length > 4000)) fail('INVALID_REQUEST');
     if (input.arguments !== undefined && (!input.arguments || typeof input.arguments !== 'object' || Array.isArray(input.arguments))) fail('INVALID_REQUEST');
     const run = await this.claim(owner, runId, 'COLLECTING_INPUT');
     return this.guarded(run, async () => {
       run.request_id = requestId;
       const candidate = structuredClone(run.request);
+      if (input.message) candidate.query = input.message;
       if (candidate.steps) {
         const step = candidate.steps.find(item => item.step_id === input.step_id);
         if (!step || run.plan?.steps.find(item => item.step_id === input.step_id)?.status === 'succeeded') fail('INVALID_REQUEST');

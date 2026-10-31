@@ -1,0 +1,33 @@
+{
+  "source": "HEAD deterministic Router, actually executed",
+  "cases": [
+    {
+      "case_id": "A",
+      "query": "帮我生成500元以内耳机的购物平台搜索链接",
+      "result": {
+        "intent": "unknown",
+        "confidence": 0,
+        "selected_skills": [],
+        "extracted_arguments": {},
+        "missing_fields": [
+          "skill_name"
+        ],
+        "requires_confirmation": false
+      }
+    },
+    {
+      "case_id": "B",
+      "query": "创建一条模拟规则：娱乐卡本月消费达到预算的80%时提醒我",
+      "result": {
+        "intent": "unknown",
+        "confidence": 0,
+        "selected_skills": [],
+        "extracted_arguments": {},
+        "missing_fields": [
+          "skill_name"
+        ],
+        "requires_confirmation": false
+      }
+    }
+  ]
+}

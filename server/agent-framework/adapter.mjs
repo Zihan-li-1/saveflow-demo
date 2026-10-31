@@ -1,13 +1,15 @@
 import { z } from 'zod';
 import { SkillRequest, SkillResult } from './models.mjs';
 import { redact, containsSecrets } from './safety.mjs';
+import { enrichDefinition } from '../intent-routing/capabilities.mjs';
+import { examplesFor } from '../intent-routing/examples.mjs';
 
 export class SkillAdapter {
   constructor({ name, description, schema, invoke, health, operation = () => 'READ_ONLY', version = '1.0.0', validate }) {
     Object.assign(this, { name, description, schema, invoke, health, operation, version, businessValidate: validate });
     this.operation_type = 'READ_ONLY';
   }
-  definition() { return { name: this.name, version: this.version, description: this.description, input_schema: z.toJSONSchema(this.schema), output_schema: z.toJSONSchema(SkillResult), operation_type: this.operation_type }; }
+  definition() { return enrichDefinition({ name: this.name, version: this.version, description: this.description, input_schema: z.toJSONSchema(this.schema), output_schema: z.toJSONSchema(SkillResult), operation_type: this.operation_type }, examplesFor(this.name)); }
   validate(request) {
     if (!SkillRequest.safeParse(request).success || containsSecrets(request.arguments)) return { valid: false, missing_fields: [], error: { code: 'INVALID_REQUEST' } };
     if (!request.arguments.action && this.schema.type === 'union') return { valid: false, missing_fields: ['action'], error: { code: 'MISSING_REQUIRED_FIELD' } };

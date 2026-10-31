@@ -5,6 +5,7 @@ import { validateParsedIntent } from '../src/agent/validate-parsed-intent.mjs';
 import { trueforgeError } from './trueforge-client.mjs';
 import { withTrueforgeDeadline } from './trueforge-tool-result.mjs';
 import { understandingContext } from './understanding-context.mjs';
+import { recoverSemanticIntent, semanticRoutingError } from './intent-routing/legacy-bridge.mjs';
 
 // Understanding is deliberately capability-free. Only the server dispatcher
 // may turn a validated proposal into one existing Skill/Core operation.
@@ -26,7 +27,7 @@ export function createBankingRuntimeClient(options = {}) {
   return createCapabilityFreeRuntimeClient({ ...options, spec: options.agentSpec ?? bankingAgentSpec(options.env ?? process.env) });
 }
 
-export async function parseTrueforgeBankingIntent(message, { env = process.env, fetchImpl = fetch, history = [], context, now = Date.now, timezone = 'Asia/Shanghai', financialContext, signal, client, timeoutMs = 25000, requestId, onDiagnostic = () => {} } = {}) {
+export async function parseTrueforgeBankingIntent(message, { env = process.env, fetchImpl = fetch, history = [], context, now = Date.now, timezone = 'Asia/Shanghai', financialContext, signal, client, timeoutMs = 25000, requestId, onDiagnostic = () => {}, routingRegistry, semanticModel } = {}) {
   const startedAt = Date.now();
   const report = (event, fields = {}) => { try { onDiagnostic({ event, requestId, ...fields }); } catch { /* diagnostics are observational */ } };
   report('agent_model_request', { provider: 'trueforge', model: env.TRUEFORGE_MODEL || 'unknown', historyCount: Array.isArray(history) ? history.length : 0, hasContext: !!context });
@@ -36,17 +37,29 @@ export async function parseTrueforgeBankingIntent(message, { env = process.env, 
       const output = await client.runTurn(sessionId, JSON.stringify({ userMessage: message, history, calendar: understandingContext({ now, timezone, financialContext }), ...(context ? { context } : {}) }), turnSignal);
       if (typeof output !== 'string' || output.length > 16000) throw trueforgeError('TRUEFORGE_FORMAT_ERROR', '理解服务返回格式异常。');
       try {
-        const intent = validateParsedIntent(JSON.parse(output));
+        let intent = validateParsedIntent(JSON.parse(output));
+        if (routingRegistry && ['unsupported', 'clarify'].includes(intent.action)) {
+          const recovery = await recoverSemanticIntent(message, { registry: routingRegistry, model: semanticModel, context, now, timezone, signal, env });
+          if (!recovery.intent) throw semanticRoutingError(recovery.result);
+          intent = recovery.intent;
+        }
         validateIntentGrounding(intent, message, context);
         report('agent_intent_validation', { jsonParsed: true, schemaValid: true, action: intent.action });
         report('agent_model_response', { provider: 'trueforge', completed: true, success: true, durationMs: Date.now() - startedAt });
         return intent;
       } catch (error) {
+        if (error.code === 'SEMANTIC_ROUTING_REVIEW') throw error;
         report('agent_intent_validation', { jsonParsed: true, schemaValid: false, failureCategory: 'schema_or_grounding' });
+        if (routingRegistry) {
+          const recovery = await recoverSemanticIntent(message, { registry: routingRegistry, model: semanticModel, context, now, timezone, signal, env });
+          if (recovery.intent) { validateIntentGrounding(recovery.intent, message, context); return recovery.intent; }
+          throw semanticRoutingError(recovery.result);
+        }
         throw trueforgeError('TRUEFORGE_FORMAT_ERROR', '请求理解结果未通过服务端校验，未执行操作。');
       }
     });
   } catch (error) {
+    if (error.code === 'SEMANTIC_ROUTING_REVIEW') throw error;
     report('agent_model_response', { provider: 'trueforge', completed: false, success: false, durationMs: Date.now() - startedAt, errorCategory: error?.code?.startsWith('TRUEFORGE_') ? error.code : 'unknown' });
     if (typeof error?.code === 'string' && error.code.startsWith('TRUEFORGE_') && error.userMessage) throw error;
     throw trueforgeError('TRUEFORGE_UNAVAILABLE', 'Banking 理解服务暂时不可用，请稍后重试。');

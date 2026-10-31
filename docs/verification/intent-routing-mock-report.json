@@ -1,0 +1,152 @@
+{
+  "mode": "explicit_model_response_mock",
+  "live_accuracy_verified": false,
+  "total": 2,
+  "passed": 2,
+  "results": [
+    {
+      "case_id": "A",
+      "passed": true,
+      "query": "帮我生成500元以内耳机的购物平台搜索链接",
+      "intent_analysis": {
+        "user_goal": "生成预算范围内的耳机购物搜索链接",
+        "normalized_intent": "用户目标",
+        "tasks": [
+          {
+            "task_id": "search",
+            "goal": "生成耳机购物搜索链接",
+            "required_capability": "headphone_shopping_search_links",
+            "depends_on": []
+          }
+        ],
+        "entities": {},
+        "constraints": {},
+        "missing_information": [],
+        "unsupported_parts": []
+      },
+      "capability_matches": {
+        "matches": [],
+        "unmatched_tasks": [
+          {
+            "task_id": "search",
+            "capability": "headphone_shopping_search_links",
+            "reason": "五个统一 Skill 没有耳机搜索能力；既有购物子流程也仅支持鲜花和蛋糕",
+            "clarification_required": false
+          }
+        ]
+      },
+      "selected_skills": [],
+      "extracted_arguments": [],
+      "missing_fields": [],
+      "unsupported_parts": [
+        {
+          "capability": "headphone_shopping_search_links",
+          "reason": "五个统一 Skill 没有耳机搜索能力；既有购物子流程也仅支持鲜花和蛋糕"
+        }
+      ],
+      "execution_plan": {
+        "steps": []
+      },
+      "final_route_decision": "UNSUPPORTED",
+      "failure_stage": null
+    },
+    {
+      "case_id": "B",
+      "passed": true,
+      "query": "创建一条模拟规则：娱乐卡本月消费达到预算的80%时提醒我",
+      "intent_analysis": {
+        "user_goal": "基于娱乐卡消费预算的阈值提醒",
+        "normalized_intent": "用户目标",
+        "tasks": [
+          {
+            "task_id": "snapshot",
+            "goal": "查询娱乐卡预算和本月已消费",
+            "required_capability": "card_budget_snapshot",
+            "depends_on": []
+          },
+          {
+            "task_id": "monitor",
+            "goal": "监听消费是否达到80%预算",
+            "required_capability": "budget_threshold_monitoring",
+            "depends_on": [
+              "snapshot"
+            ]
+          },
+          {
+            "task_id": "notify",
+            "goal": "达到条件后发提醒",
+            "required_capability": "notification_delivery",
+            "depends_on": [
+              "monitor"
+            ]
+          }
+        ],
+        "entities": {},
+        "constraints": {},
+        "missing_information": [],
+        "unsupported_parts": []
+      },
+      "capability_matches": {
+        "matches": [
+          {
+            "task_id": "snapshot",
+            "skill_name": "card",
+            "capability": "card_budget_snapshot",
+            "confidence": 0.95,
+            "reason": "该任务语义符合已注册能力及其边界"
+          }
+        ],
+        "unmatched_tasks": [
+          {
+            "task_id": "monitor",
+            "capability": "budget_threshold_monitoring",
+            "reason": "规则提案不能替代已运行的阈值监听器",
+            "clarification_required": false
+          },
+          {
+            "task_id": "notify",
+            "capability": "notification_delivery",
+            "reason": "没有已注册的通知发送能力",
+            "clarification_required": false
+          }
+        ]
+      },
+      "selected_skills": [
+        "card"
+      ],
+      "extracted_arguments": [
+        {
+          "card_ref": "娱乐卡",
+          "action": "card.get"
+        }
+      ],
+      "missing_fields": [],
+      "unsupported_parts": [
+        {
+          "capability": "budget_threshold_monitoring",
+          "reason": "规则提案不能替代已运行的阈值监听器"
+        },
+        {
+          "capability": "notification_delivery",
+          "reason": "没有已注册的通知发送能力"
+        }
+      ],
+      "execution_plan": {
+        "steps": [
+          {
+            "step_id": "snapshot",
+            "skill_name": "card",
+            "arguments": {
+              "card_ref": "娱乐卡",
+              "action": "card.get"
+            },
+            "dependencies": [],
+            "mappings": []
+          }
+        ]
+      },
+      "final_route_decision": "PARTIALLY_SUPPORTED",
+      "failure_stage": null
+    }
+  ]
+}

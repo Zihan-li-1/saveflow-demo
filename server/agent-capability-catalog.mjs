@@ -53,9 +53,9 @@ export async function buildCapabilityCatalog({ core, repository = core?.reposito
   entries.push({ action: 'planning.read_only', description: '跨账单、订阅、卡片和产品的多步骤只读分析', status: dataReady && modelReady ? 'available_demo' : 'unavailable',
     evidence: { formalHandler: 'runReadOnlyPlanner / ReadOnlyToolGateway', tools: [...READ_ONLY_TOOL_NAMES], repositoryReady: dataReady, modelConfigured: modelReady },
     mockOnly: true, preview: false, confirmation: false, execution: false, dataSource: '已核验的模拟 Repository / Skill 结果', limitations: ['最多六轮；不能执行写操作；理财条件必须由用户明确提供'] });
-  entries.push({ action: 'scenario.plan_purchase', description: '生成平台购物搜索链接', status: dataReady && modelReady ? 'available_demo' : 'unavailable',
+  entries.push({ action: 'scenario.plan_purchase', description: '生成鲜花或蛋糕的平台购物搜索链接', status: dataReady && modelReady ? 'available_demo' : 'unavailable',
     evidence: { registered: PARSED_INTENT_ACTIONS.includes('scenario.plan_purchase'), formalHandler: 'Banking Orchestrator purchase_request / purchase-links', repositoryReady: dataReady, modelConfigured: modelReady },
-    mockOnly: true, preview: false, confirmation: false, execution: false, dataSource: '应用内品类与平台搜索链接', limitations: ['只生成购物链接，不代表已经下单或预留预算；不创建真实订单'] });
+    mockOnly: true, preview: false, confirmation: false, execution: false, dataSource: '应用内品类与平台搜索链接', limitations: ['仅支持 flowers/cake，不支持耳机等其他商品类别', '只生成购物链接，不代表已经下单或预留预算；不创建真实订单'] });
   entries.push({ action: 'purchase.budget_reservation', description: '购物预算预留及提醒场景', status: env.DATABASE_URL ? 'conditional' : 'unavailable',
     evidence: { registered: PARSED_INTENT_ACTIONS.includes('scenario.plan_purchase'), formalHandler: 'configuredPurchaseSkill / purchase API', persistenceConfigured: !!env.DATABASE_URL, schedulerVerified: false },
     mockOnly: true, preview: !!env.DATABASE_URL, confirmation: !!env.DATABASE_URL, execution: false, dataSource: '应用内购物目录和预算记录', limitations: ['持久化和预约工作进程需在购物接口另行核验；当前没有核验工作进程心跳', '预算预留是应用内记账，不是真实资金冻结；链接不代表下单；不能创建真实订单'] });

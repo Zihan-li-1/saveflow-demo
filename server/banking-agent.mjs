@@ -12,6 +12,8 @@ import { createPlanningRuntimeClient } from './planning-runtime.mjs';
 import { createAgentDiagnostics, diagnosticCategory } from './agent-diagnostics.mjs';
 import { routeConversation, validateChatHistory, validateConversationRoute } from './conversation-route.mjs';
 import { buildCapabilityCatalog, publicCapabilityCatalog, capabilityIntroduction } from './agent-capability-catalog.mjs';
+import { registerExistingSkills } from './agent-framework/adapters.mjs';
+import { createInMemoryScenarioStore } from '../src/skills/scenario/scenario-skill.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const RATE_LIMIT = 10;
@@ -98,6 +100,7 @@ export async function handleBankingAgent(
   diagnostics.emit('agent_request_received', { mode: 'banking', hasContinuation: false });
   let style = 'concise';
   let conversation;
+  let routingRegistry, semanticRecovery;
   const reply = (status, code, message, data, replyContext) => {
     diagnostics.emit('agent_response_sent', { httpStatus: status, code, status: data?.status || 'unknown', responseSource: data?.status === 'error' ? 'error' : data?.status === 'conversation_reply' ? 'conversation' : 'business' });
     const metadata = conversation?.metadata();
@@ -160,10 +163,12 @@ export async function handleBankingAgent(
     const skippedModelReason = body?.choice ? 'choice_option_id' : body?.taskMode === 'sync' ? 'session_sync' : body?.continuationToken && explicitCancel ? 'explicit_cancel' : undefined;
     diagnostics.emit('agent_model_route', { selected: implementation === 'legacy-qwen' ? 'qwen' : 'trueforge', modelCallPrepared: !skippedModelReason, ...(skippedModelReason ? { skippedModelReason } : {}) });
     const parseIntent = options.parseIntent ?? (implementation === 'legacy-qwen' ? ((message, context) => defaultParseBankingIntent(message, { ...context, onDiagnostic: diagnostics.emit })) :
-      (message, context) => parseTrueforgeBankingIntent(message, { ...context, signal: request.signal, client: options.trueforgeRuntimeClient, onDiagnostic: diagnostics.emit }));
+      (message, context) => semanticRecovery?.intent && !context?.context ? semanticRecovery.intent : parseTrueforgeBankingIntent(message, { ...context, signal: request.signal, client: options.trueforgeRuntimeClient, onDiagnostic: diagnostics.emit,
+        routingRegistry: !options.trueforgeRuntimeClient || options.semanticModel ? routingRegistry : undefined, semanticModel: options.semanticModel }));
     // Conversation binding rejects retired/unbound tokens before any understanding.
     let core, coreError;
     try { core = options.core ?? await getConfiguredBankingCore(env); } catch (error) { coreError = error; }
+    if (core) routingRegistry = registerExistingSkills(options.repository ?? core.repository, createInMemoryScenarioStore());
     if (invalidFields) {
       if (core) {
         // Preserve authenticated recovery metadata on rejected business fields.
@@ -180,11 +185,12 @@ export async function handleBankingAgent(
       if (/^(?:确认|确认转账|确认执行|执行|同意|确认保存|保存规则)[。！!]?\s*$/.test(body.message.trim())) throw Object.assign(new Error('聊天文字不能确认执行，请使用页面确认按钮。'), { code: 'CONFIRMATION_REQUIRED', userMessage: '聊天文字不能确认执行，请使用页面确认按钮。', status: 403 });
       const catalog = await buildCapabilityCatalog({ core, repository: options.repository ?? core?.repository, env });
       const taskContext = core ? bankingRouteContext(body, { core, env, now, conversationHost: options.conversationHost }) : undefined;
-      route = validateConversationRoute(await (options.routeConversation ?? routeConversation)(body.message, { env, fetchImpl, client: options.conversationRuntimeClient, signal: request.signal, chatHistory, catalog: publicCapabilityCatalog(catalog), hasContinuation: !!body.continuationToken, taskContext, replyStyle: style }));
+      route = validateConversationRoute(await (options.routeConversation ?? routeConversation)(body.message, { env, fetchImpl, client: options.conversationRuntimeClient, signal: request.signal, chatHistory, catalog: publicCapabilityCatalog(catalog), hasContinuation: !!body.continuationToken, taskContext, replyStyle: style,
+        routingRegistry, semanticModel: options.semanticModel, onSemanticRoute: result => { semanticRecovery = result; } }));
       if (['conversation_reply', 'clarify', 'unsupported'].includes(route.kind)) {
         const text = route.kind === 'conversation_reply' && route.topic === 'capabilities' ? capabilityIntroduction(catalog) : route.text;
         // No ConversationState adapter, task transition, or Core mutation is opened.
-        return reply(200, 'OK', text, { status: 'conversation_reply' });
+        return reply(200, 'OK', text, { status: 'conversation_reply', ...(semanticRecovery ? { routing: semanticRecovery.result } : {}) });
       }
       if (route.kind === 'planning_intent' || route.kind === 'business_intent' && route.continuation === 'new') {
         delete body.continuationToken; delete body.taskId;
@@ -222,6 +228,7 @@ export async function handleBankingAgent(
     const data = result.data?.recovery ? { ...result.data, recovery: { ...result.data.recovery, continuationToken: result.data.recovery.continuationToken ?? result.data.continuationToken } } : result.data;
     return reply(result.httpStatus, result.code, result.message, data, result.replyContext);
   } catch (error) {
+    if (error.code === 'SEMANTIC_ROUTING_REVIEW') return reply(200, 'OK', error.userMessage, { status: 'conversation_reply', routing: error.routing });
     const code = typeof error?.code === 'string' ? error.code : error instanceof BankingIntentParserError || error instanceof ParsedIntentValidationError ? 'MODEL_FORMAT_ERROR' : error?.message?.includes('DATABASE_URL') ? 'DATABASE_NOT_CONFIGURED' : 'MODEL_UNAVAILABLE';
     const message = error.userMessage ?? (code.startsWith('CONVERSATION_') ? '会话已更新或暂时不可用，请重新选择或开始当前业务；聊天记录可以保留。' : error instanceof BankingIntentParserError ? error.message : publicMessage(code, '请求未取得可靠结果，请稍后重试。'));
     const data = errorData(code, message);
