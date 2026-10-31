@@ -51,6 +51,7 @@ export function BankingReadCard({ data, active = false, busy = false, onConfirm,
         <p><span>最低金额</span><strong>{money(p.minimum_amount_minor)}</strong></p><p><span>最快何时可取</span><strong>{liquidityText(p.liquidity)}</strong></p><p><span>建议持有时间</span><strong>{durationText(p.duration_days)}</strong></p>
       </div>
       <ProductTerms />
+      <a href="https://personal.webank.com/s/hj/focus2/client/index.html?fid=1912&aid=10482&bg=_ffffff" target="_blank" rel="noopener noreferrer">前往微众银行理财界面查看 →</a>
     </article>)}
     {data?.status === "risk_assessment_required" && <article><h3>需要用户本人完成正式问卷</h3><p>模型不能代答；完成适当性评估前不提供申购入口。</p></article>}
     {steps?.map((step, index) => <article key={`${step.action}-${index}`}><h3>{index + 1}. {actionName(step.action)}</h3><p>{step.reason}</p></article>)}

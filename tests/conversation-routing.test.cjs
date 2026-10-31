@@ -9,7 +9,7 @@ require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileMo
 const { handleBankingAgent } = require('../server/banking-agent.mjs');
 const { createBankingCore } = require('../src/banking-core/core.mjs');
 const { createConversationStore } = require('../server/conversation-state.mjs');
-const { validateConversationRoute, conversationAgentSpec } = require('../server/conversation-route.mjs');
+const { validateConversationRoute, conversationAgentSpec, routeConversation } = require('../server/conversation-route.mjs');
 const { buildCapabilityCatalog, buildSkillOverview, publicCapabilityCatalog } = require('../server/agent-capability-catalog.mjs');
 const { buildParsedIntent } = require('../src/agent/clarification/merge-intent.mjs');
 const { askBankingAgent } = require('../src/lib/banking-agent-client.ts');
@@ -218,6 +218,18 @@ test('路由权限为空且 strict schema 拒绝业务参数、计划控制和�
   const spec = conversationAgentSpec(env); assert.deepEqual(spec.skills, []); assert.deepEqual(spec.mcpServers, []);
   assert.equal(spec.config.sandbox.enabled, false); assert.equal(spec.config.dynamicSubAgents.enabled, false);
   for (const value of [null, {}, { ...business('new'), amount: 500 }, { ...control('resume'), control: { command: 'finish', target: 'current' } }, messageRoute('x'.repeat(2001)), { ...messageRoute('正常'), text: 12 }]) assert.throws(() => validateConversationRoute(value));
+});
+
+test('明确理财推荐与储蓄计划走各自业务入口，解释问题仍交给普通对话', async () => {
+  const wealth = await routeConversation('我计划投资12个月，能接受小幅亏损，希望需要时较快取出，推荐模拟理财产品。');
+  assert.deepEqual(wealth, business('new'));
+  const savings = await routeConversation('帮我制定一个储蓄计划，年底存下1万元。');
+  assert.deepEqual(savings, business('new'));
+  const explanation = await routeConversation('储蓄计划是什么意思？', { client: {
+    async createSession() { return 'route-explanation'; }, async cancel() {},
+    async runTurn() { return JSON.stringify(messageRoute('储蓄计划用于把目标金额和时间拆成储蓄安排。')); },
+  } });
+  assert.equal(explanation.kind, 'conversation_reply');
 });
 
 test('普通回复允许收益风险说明，明确拒绝取消会员不会调用订阅查询', async () => {

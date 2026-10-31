@@ -24,6 +24,15 @@ test('generic plan step action IDs become Chinese user-facing titles', () => {
   assert.doesNotMatch(html, /bill\.analyze|wealth\.recommend/);
 });
 
+test('理财产品对比卡片展示微众银行入口链接', () => {
+  const html = render(BankingReadCard, { status: 'wealth_comparison', action: 'wealth.compare', data: { products: [
+    { product_ref: 'product_001', name: '模拟灵活现金 A', risk_level: 'R1', expected_yield_bps: 150, minimum_amount_minor: 100, liquidity: 'T+0', duration_days: 0, currency: 'CNY' },
+    { product_ref: 'product_002', name: '模拟稳健现金 B', risk_level: 'R2', expected_yield_bps: 320, minimum_amount_minor: 10000, liquidity: 'T+1', duration_days: 180, currency: 'CNY' },
+  ] } });
+  assert.equal((html.match(/前往微众银行理财界面查看 →/g) || []).length, 2);
+  assert.equal((html.match(/https:\/\/personal\.webank\.com\/s\/hj\/focus2\/client\/index\.html\?fid=1912&amp;aid=10482&amp;bg=_ffffff/g) || []).length, 2);
+});
+
 test('missing data card requests saved amount, income and every category without showing a plan', () => {
   const html = render(BankingSavingsInputsCard, { status: 'needs_plan_inputs', goal: { target_amount_minor: 1000000, deadline: '2026-12-31' }, recentSource: 'user_provided', requiredMonth: '2026-09', categories: ['房租', '购物'], continuationToken: 'opaque' });
   for (const label of ['2026-09', '本目标已存金额', '月收入', '房租', '购物', '¥10,000.00', '2026-12-31']) assert.ok(html.includes(label), label);
