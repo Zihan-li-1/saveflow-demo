@@ -10,6 +10,9 @@ export type ReadOnlyPlan = { status: string; taskId: string; goal: string; analy
 export type BankingChoice = { optionId: string; label: string };
 export type WealthScreeningInputs = { investable_amount_minor: number; max_risk_level: 'R1' | 'R2' | 'R3'; liquidity_requirement: 'T+0' | 'T+1' | 'AT_MATURITY' };
 export type SavingsPlanInputs = { saved_amount_minor: number } | { month: string; saved_amount_minor: number; income_minor: number; category_expenses_minor: Record<string, number> };
+export type CapabilityStatus = 'available_demo' | 'planning_only' | 'conditional' | 'unavailable';
+export type SkillGroupId = 'transfer' | 'bills' | 'wealth' | 'cards' | 'subscriptions' | 'cross_scenario';
+export type SkillOverview = { schemaVersion: '1.0.0'; groups: Array<{ id: SkillGroupId; title: string; description: string; status: CapabilityStatus; capabilities: Array<{ action: string; label: string; status: CapabilityStatus; limitations: string[] }>; examples: Array<{ label: string; prompt: string; status: 'available_demo' | 'planning_only' }> }> };
 export type BankingAgentData = {
   wealthHandoffToken?: string;
   conversation?: BankingConversation;
@@ -17,6 +20,7 @@ export type BankingAgentData = {
   kind?: 'clarification';
   status: string;
   plan?: ReadOnlyPlan;
+  capabilityOverview?: SkillOverview;
   control?: { command: 'undo' | 'resume' | 'modify'; status: string; taskId?: string };
   action?: string;
   question?: string;
@@ -79,6 +83,19 @@ export type BankingResponseDiagnostic = ResponseFailure & {
 };
 
 const planningTools = new Set(['bill.summary', 'subscription.list', 'card.get', 'product.list', 'wealth.recommend', 'wealth.compare']);
+const skillGroupIds: SkillGroupId[] = ['transfer', 'bills', 'wealth', 'cards', 'subscriptions', 'cross_scenario'];
+const capabilityStatuses = new Set<CapabilityStatus>(['available_demo', 'planning_only', 'conditional', 'unavailable']);
+const catalogActions = new Set(['transfer.create', 'bill.summary', 'subscription.list', 'subscription.cancel', 'card.get', 'card.security_review', 'card.set_budget', 'card.set_controls', 'card.freeze', 'card.unfreeze', 'wealth.recommend', 'wealth.compare', 'wealth.assess_risk', 'wealth.subscribe', 'wealth.redeem', 'orchestrator.goal', 'scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule', 'scenario.review_event', 'product.list', 'planning.read_only', 'scenario.plan_purchase', 'purchase.budget_reservation']);
+export function validSkillOverview(value: unknown): value is SkillOverview {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const overview = value as SkillOverview;
+  if (overview.schemaVersion !== '1.0.0' || Object.keys(overview).some(key => !['schemaVersion', 'groups'].includes(key)) || !Array.isArray(overview.groups) || overview.groups.length !== 6 || overview.groups.map(group => group.id).join(',') !== skillGroupIds.join(',')) return false;
+  return overview.groups.every(group => group && Object.keys(group).every(key => ['id', 'title', 'description', 'status', 'capabilities', 'examples'].includes(key)) &&
+    typeof group.title === 'string' && !!group.title && group.title.length <= 40 && typeof group.description === 'string' && !!group.description && group.description.length <= 200 && capabilityStatuses.has(group.status) &&
+    Array.isArray(group.capabilities) && group.capabilities.length <= 12 && group.capabilities.every(item => item && Object.keys(item).every(key => ['action', 'label', 'status', 'limitations'].includes(key)) && catalogActions.has(item.action) && typeof item.label === 'string' && !!item.label && item.label.length <= 100 && capabilityStatuses.has(item.status) && Array.isArray(item.limitations) && item.limitations.length <= 5 && item.limitations.every(text => typeof text === 'string' && text.length <= 300)) &&
+    Array.isArray(group.examples) && group.examples.length <= 4 && group.examples.every(example => example && Object.keys(example).every(key => ['label', 'prompt', 'status'].includes(key)) && typeof example.label === 'string' && !!example.label && example.label.length <= 60 && typeof example.prompt === 'string' && !!example.prompt && example.prompt.length <= 300 && ['available_demo', 'planning_only'].includes(example.status)) &&
+    (group.status !== 'unavailable' || group.examples.length === 0));
+}
 function validPlanningResult(tool: string, result: NonNullable<ReadOnlyPlan['steps'][number]['result']>['result']): boolean {
   const kinds: Record<string, string> = { 'bill.summary': 'bill_result', 'subscription.list': 'subscription_result', 'card.get': 'card_result', 'product.list': 'product_result', 'wealth.recommend': 'wealth_recommendation', 'wealth.compare': 'wealth_comparison' };
   const nonnegative = (v: unknown) => Number.isSafeInteger(v) && Number(v) >= 0;
@@ -157,7 +174,7 @@ export async function askBankingAgent(
   if (['ACCESS_NOT_CONFIGURED', 'CONTINUATION_CONFIG_ERROR', 'SERVICE_UNAVAILABLE'].includes(payload?.code || '')) throw new ApiError('SERVICE_UNAVAILABLE', '服务暂时不可用，请联系演示维护者。');
   const validReply = (reply: BankingReply | undefined, allowEmpty = false): reply is BankingReply => !!reply && typeof reply.text === 'string' && (allowEmpty || !!reply.text.trim()) && reply.text.length <= 4000 && ['concise', 'friendly', 'professional'].includes(reply.style) && Array.isArray(reply.safetyNotices) && reply.safetyNotices.length <= 10 && reply.safetyNotices.every(n => typeof n === 'string' && n.length <= 1000);
   if ((payload.data?.conversation !== undefined && !validBankingConversation(payload.data.conversation)) ||
-      (response.ok && body.conversationToken !== undefined && payload.data?.status !== 'conversation_reply' && !payload.data?.conversation)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.conversation' }, 'envelope');
+      (response.ok && body.conversationToken !== undefined && !['conversation_reply', 'capability_overview'].includes(payload.data?.status ?? '') && !payload.data?.conversation)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.conversation' }, 'envelope');
   const session = payload.data?.conversation;
   if (session && ((body.conversationToken !== undefined && session.token !== body.conversationToken) ||
       (response.ok && body.conversationRevision !== undefined && session.revision < body.conversationRevision) ||
@@ -192,6 +209,10 @@ export async function askBankingAgent(
         Object.keys(reply).some(key => !['text', 'style', 'safetyNotices'].includes(key)) || reply.text.length > 2000 ||
         /(?:operationId|previewHash|continuationToken|op_|tfpreview:)/i.test(reply.text)) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data' }, 'envelope');
     return { status: 'conversation_reply', reply, requestId: payload.requestId };
+  }
+  if (data.status === 'capability_overview') {
+    if (payload.code !== 'OK' || Object.keys(data).some(key => !['status', 'capabilityOverview'].includes(key)) || !validSkillOverview(data.capabilityOverview) || reply.text.length > 4000) return invalid({ reason: 'INVALID_REPLY_ENVELOPE', path: 'data.capabilityOverview' }, 'envelope');
+    return { status: 'capability_overview', capabilityOverview: data.capabilityOverview, reply, requestId: payload.requestId };
   }
   if (data.status === 'task_control') {
     const c = data.control;

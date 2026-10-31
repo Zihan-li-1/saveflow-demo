@@ -16,7 +16,7 @@ import { transferFlow, bankingContinuationToken, updateBankingFlows, type Bankin
 import { agentErrorHint, agentErrorPolicy } from "./agent-error-policy.mjs";
 import type { BankingConversation } from './banking-conversation-contract';
 
-export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "conversation" | "banking_purchase" | "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_plan" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_wealth_inputs" | "banking_savings_inputs" | "banking_savings_plan" | "banking_internal_transfer"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
+export type Message = { id: number; role: "agent" | "user"; text: string; kind?: "conversation" | "banking_skill_overview" | "banking_purchase" | "normal" | "analysis" | "result" | "error" | "banking_clarification" | "banking_bill" | "banking_preview" | "banking_card" | "banking_card_preview" | "banking_read" | "banking_plan" | "banking_receipt" | "banking_wealth" | "banking_wealth_preview" | "banking_wealth_inputs" | "banking_savings_inputs" | "banking_savings_plan" | "banking_internal_transfer"; analysis?: Analysis; banking?: BankingAgentData; receipt?: ActionReceipt; verification?: { availableBalanceFen: number; transactionId: string; occurredAt: string; amountFen: number; status: string }; errorHint?: string };
 const initialMessages: Message[] = [{ id: 1, role: "agent", text: "你好，我是 SaveFlow。可以查询模拟账单，或生成转账正式预览，例如：给张三转 500 元。" }];
 const pendingKey = "saveflow.pending-operation.v1";
 
@@ -225,10 +225,10 @@ export function useSaveflow() {
         ...(!syncOnly && resumed?.taskId ? { taskId: resumed.taskId, taskMode: resumeMode ? 'resume' as const : 'continue' as const } : {}),
         ...(explicitNew ? { taskMode: 'new' as const } : {}) }, accessCode, active.current.signal);
       if (generation.current !== version) return;
-      if (answer.status === 'conversation_reply') {
+      if (['conversation_reply', 'capability_overview'].includes(answer.status)) {
         const replyText = [answer.reply!.text, ...answer.reply!.safetyNotices].join('\n');
         chatHistory.current = [...chatHistory.current, { role: 'user' as const, content: text.slice(0, 400) }, { role: 'assistant' as const, content: answer.reply!.text.slice(0, 400) }].slice(-6);
-        addMessage({ role: 'agent', kind: 'conversation', text: replyText });
+        addMessage({ role: 'agent', kind: answer.status === 'capability_overview' ? 'banking_skill_overview' : 'conversation', text: replyText, ...(answer.status === 'capability_overview' ? { banking: answer } : {}) });
         return;
       }
       forceNewTask.current = false;
