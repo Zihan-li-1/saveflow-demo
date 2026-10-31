@@ -25,7 +25,8 @@ const helperSchemas = {
   'purchase.balance_check': z.strictObject({ workflow_ref: ref, manual_finance: z.strictObject({ available_minor: z.number().int().min(0).max(1e9), obligations_minor: z.number().int().min(0).max(1e9) }) }),
   'purchase.cancel_preview': z.strictObject({ workflow_ref: ref, expected_version: version }),
 };
-const messages = { PERSISTENCE_UNAVAILABLE: '购物流程数据库未配置，尚未保存预约。', SCHEDULER_UNAVAILABLE: '后台预约服务未运行，尚未安排任务。',
+const messages = { ACCESS_NOT_CONFIGURED: '演示访问服务尚未配置，提醒不能预览或保存，请联系项目维护者。',
+  PERSISTENCE_UNAVAILABLE: '购物流程数据库未配置，尚未保存预约。', SCHEDULER_UNAVAILABLE: '后台预约服务未运行，尚未安排任务。',
   CAPABILITY_UNAVAILABLE: '当前只提供购物链接，请自行在平台下单；Agent 不创建或查询订单。', FINANCIAL_DATA_REQUIRED: '缺少近期余额和待付义务，请在表单补充用于预算规划的数据。',
   DATE_AMBIGUOUS: '请填写明确日期和开始、结束时间，并选择下单日或送达日。', DATE_IN_PAST: '请选择未来日期。',
   CONFIRMATION_INVALID: '确认凭据无效，请重新核对预览。', PREVIEW_STALE: '内容已变化，请刷新报价并重新确认。', PREVIEW_EXPIRED: '确认窗口已过期，请刷新报价。',
