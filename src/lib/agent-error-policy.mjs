@@ -1,5 +1,6 @@
 // Shared policy over machine codes only. Unknown errors never authorize a retry.
 const groups = {
+  advice_review: ['ADVICE_REVIEW_FAILED'],
   invalid_input: ['INVALID_REQUEST', 'VALIDATION_ERROR', 'INVALID_AMOUNT', 'MODEL_FORMAT_ERROR', 'TRUEFORGE_FORMAT_ERROR', 'CONTINUATION_ACTION_MISMATCH'],
   missing_information: ['MISSING_SLOTS'],
   invalid_choice: ['INVALID_CHOICE', 'CARD_NOT_FOUND', 'PAYEE_NOT_FOUND', 'ACCOUNT_NOT_FOUND', 'CARD_AMBIGUOUS'],
@@ -24,10 +25,10 @@ export function validRecoverySlot(action, slot) {
 export function agentErrorPolicy(code, { hasRecovery = false, hasChoices = hasRecovery, uncertain = false } = {}) {
   const category = Object.entries(groups).find(([, codes]) => codes.includes(code))?.[0] ?? 'internal';
   const nextAction = uncertain ? 'query_status' : hasRecovery ? hasChoices ? 'choose_option' : 'edit_input' :
-    category === 'transient' ? 'retry_request' : category === 'session_expired' ? 'restart_flow' :
+    ['transient', 'advice_review'].includes(category) ? 'retry_request' : category === 'session_expired' ? 'restart_flow' :
     ['invalid_input', 'missing_information', 'invalid_choice'].includes(category) ? 'edit_input' :
     category === 'restricted' ? 'contact_support' : 'new_request';
-  return { category, retryable: category === 'transient' && !uncertain, nextAction,
+  return { category, retryable: ['transient', 'advice_review'].includes(category) && !uncertain, nextAction,
     context: category === 'session_expired' || category === 'restricted' && code !== 'CONFIRMATION_REQUIRED' || (category === 'business_conflict' && !hasRecovery) ? 'clear' : 'preserve' };
 }
 
@@ -38,6 +39,7 @@ export function validAgentErrorPolicy(error, hasRecovery = false, hasChoices = h
 }
 
 export function agentErrorHint(policy) {
+  if (policy.category === 'advice_review') return '本次填写和有效续接状态已保留。可手动重试生成储蓄建议；不会自动重试或执行资金操作。';
   return {
     choose_option: '请使用下方新选项继续；修改后仍需重新生成并确认预览。',
     edit_input: '请修改输入或补充信息，也可以直接提出新的完整请求。',

@@ -12,6 +12,8 @@ import { createPlanningRuntimeClient } from './planning-runtime.mjs';
 import { createAgentDiagnostics, diagnosticCategory } from './agent-diagnostics.mjs';
 import { routeConversation, validateChatHistory, validateConversationRoute } from './conversation-route.mjs';
 import { buildCapabilityCatalog, buildSkillOverview, publicCapabilityCatalog, capabilityIntroduction } from './agent-capability-catalog.mjs';
+import { purchaseIntentFromMessage } from '../src/lib/purchase-flow.mjs';
+import { localDate } from '../src/lib/calendar.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const RATE_LIMIT = 10;
@@ -32,6 +34,7 @@ function allowRequest(request, now = Date.now()) {
 function publicMessage(code, fallback) {
   return {
     CONTINUATION_CONFIG_ERROR: '澄清续接服务未配置。',
+    ADVICE_REVIEW_FAILED: '本次储蓄建议未通过安全复核，尚未生成计划。请保留本次填写，手动重试。',
     MODEL_TIMEOUT: '模型请求超时。', MODEL_RATE_LIMIT: '模型请求过于频繁，请稍后重试。',
     MODEL_FORMAT_ERROR: '模型结果格式无效，请重新描述请求。', MODEL_AUTH_ERROR: '模型服务鉴权失败。',
     MODEL_UPSTREAM_ERROR: '模型服务暂时不可用，请稍后重试。', MODEL_UNAVAILABLE: '模型服务暂时不可用，请稍后重试。',
@@ -175,7 +178,8 @@ export async function handleBankingAgent(
     // existing harness. Production and route tests use the semantic outer boundary.
     let route;
     const naturalTurn = typeof body.message === 'string' && !body.choice && !body.planInputs && !body.wealthInputs && !['sync', 'resume', 'continue', 'plan'].includes(body.taskMode) && body.planning !== true;
-    if (naturalTurn && (options.routeConversation || options.conversationRuntimeClient || implementation === 'trueforge' && !options.parseIntent && !options.trueforgeRuntimeClient)) {
+    const newPurchase = naturalTurn && !body.continuationToken && !body.taskId && purchaseIntentFromMessage(body.message, localDate(now(), options.timezone ?? 'Asia/Shanghai'));
+    if (naturalTurn && !newPurchase && (options.routeConversation || options.conversationRuntimeClient || implementation === 'trueforge' && !options.parseIntent && !options.trueforgeRuntimeClient)) {
       if (/^(?:确认|确认转账|确认执行|执行|同意|确认保存|保存规则)[。！!]?\s*$/.test(body.message.trim())) throw Object.assign(new Error('聊天文字不能确认执行，请使用页面确认按钮。'), { code: 'CONFIRMATION_REQUIRED', userMessage: '聊天文字不能确认执行，请使用页面确认按钮。', status: 403 });
       const catalog = await buildCapabilityCatalog({ core, repository: options.repository ?? core?.repository, env });
       const taskContext = core ? bankingRouteContext(body, { core, env, now, conversationHost: options.conversationHost }) : undefined;
@@ -221,7 +225,7 @@ export async function handleBankingAgent(
       return reply(200, 'OK', plan.status === 'business_intent' ? '这是单项业务请求，请直接描述要查询或办理的业务。' : plan.status === 'needs_clarification' ? plan.question : plan.analysis || plan.reason || '只读规划已完成', { status: plan.status, plan });
     }
     const scenarioScope = createHash('sha256').update(`${expected}:${clientKey(request)}`).digest('hex');
-    const result = await conversation.finish(await runBankingConversation(conversation.body, { core: { ...core, prepare: request => conversation.prepare(request) }, repository, env, now, timezone: options.timezone ?? 'Asia/Shanghai', parseIntent, fetchImpl, requestId, scenarioHandler: options.scenarioHandler, scenarioScope, savingsAdvisor: options.savingsAdvisor, conversation, resumeOnly: conversation.resumeOnly, onDiagnostic: diagnostics.emit }));
+    const result = await conversation.finish(await runBankingConversation(conversation.body, { core: { ...core, prepare: request => conversation.prepare(request) }, repository, env, now, timezone: options.timezone ?? 'Asia/Shanghai', parseIntent, fetchImpl, signal: request.signal, requestId, scenarioHandler: options.scenarioHandler, scenarioScope, savingsAdvisor: options.savingsAdvisor, conversation, resumeOnly: conversation.resumeOnly, onDiagnostic: diagnostics.emit }));
     const data = result.data?.recovery ? { ...result.data, recovery: { ...result.data.recovery, continuationToken: result.data.recovery.continuationToken ?? result.data.continuationToken } } : result.data;
     return reply(result.httpStatus, result.code, result.message, data, result.replyContext);
   } catch (error) {
@@ -235,4 +239,5 @@ export async function handleBankingAgent(
     conversation?.release();
   }
 }
+
 

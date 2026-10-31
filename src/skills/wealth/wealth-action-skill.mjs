@@ -207,6 +207,8 @@ function productView(product) {
   return {
     product_id: product.id,
     name: product.name,
+    category: product.category,
+    product_code: product.displayCode,
     risk_level: product.riskLevel,
     expected_yield_bps: product.expectedYield,
     liquidity: product.liquidity,

@@ -12,11 +12,30 @@ export function BankingWealthResult({ data }: { data?: BankingAgentData }) {
   if (!result) return null;
   const kind = String(result.kind);
   const screening = result.screening_context as { target_date: string; investable_amount_minor: number; max_risk_level: string; liquidity_requirement: string; source: string } | undefined;
-  const products = (kind === "recommendation" ? result.matches : kind === "comparison" ? result.products : []) as Array<{ name: string; risk_level: string; liquidity: string; expected_yield_bps: number; duration_days?: number }>;
+  const products = (kind === "recommendation" ? (result.products ?? result.matches) : kind === "comparison" ? result.products : []) as Array<{ name: string; product_code?: string; category?: "fund" | "bond" | "stock"; risk_level: string; liquidity: string; expected_yield_bps: number; duration_days?: number }>;
+  const categories = [{ key: "fund", label: "基金" }, { key: "bond", label: "债券" }, { key: "stock", label: "股票" }] as const;
   return <div className="banking-result-card">
     <b>{kind === "recommendation" ? "模拟产品筛选" : kind === "comparison" ? "模拟产品对比" : kind === "risk_assessment" ? "模拟风险测评" : "风险测评入口"}</b>
     {screening?.source === "verified_savings_plan" && <p>按已核验储蓄目标筛选：目标日 {screening.target_date}，独立可投资金额 ¥{(screening.investable_amount_minor / 100).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}，所选风险上限 {screening.max_risk_level}（仍受测评结果约束），资金{liquidityText(screening.liquidity_requirement)}。</p>}
-    {products?.map((product, index) => <span key={index}>{product.name} · {riskText(product.risk_level)} · {liquidityText(product.liquidity)} · 示例年化 {(product.expected_yield_bps / 100).toFixed(2)}%{product.duration_days ? ` · 建议持有约 ${Math.max(1, Math.round(product.duration_days / 30))} 个月` : ""}</span>)}
+    {products.length > 0 && <>
+      <div className="wealth-product-sections">
+        {categories.map(({ key, label }) => {
+          const categoryProducts = products.filter(product => product.category === key);
+          return <section className="wealth-product-section" key={key} aria-label={`${label}推荐`}>
+            <h3>{label}</h3>
+            {categoryProducts.length ? <div className="wealth-product-list">{categoryProducts.map(product => <article className="wealth-product-card" key={product.product_code || product.name}>
+          <strong>{product.name}</strong>
+          <span>模拟产品代码：{product.product_code || "待补充"}</span>
+          <span>{riskText(product.risk_level)} · {liquidityText(product.liquidity)}{product.duration_days ? ` · 建议持有约 ${Math.max(1, Math.round(product.duration_days / 30))} 个月` : ""}</span>
+          {key !== "stock" && <span>模拟参考年化 {(product.expected_yield_bps / 100).toFixed(2)}%（不代表实际收益）</span>}
+          {key === "stock" && <span>股票价格会波动，可能损失本金；本项目不展示或预测实际收益。</span>}
+          <a href="https://personal.webank.com/s/hj/focus2/client/index.html?fid=1912&aid=10482&bg=_ffffff" target="_blank" rel="noopener noreferrer">前往微众银行理财界面查看 →</a>
+        </article>)}</div> : <span>当前筛选条件下没有匹配的{label}模拟产品。</span>}
+          </section>;
+        })}
+      </div>
+      <small>产品代码为本项目生成的模拟编号，仅用于识别卡片，不可用于微众银行查询或购买。</small>
+    </>}
     {kind === "risk_assessment" && <span>测评结果：{riskText(String((result.assessment as { risk_level?: string } | undefined)?.risk_level || ""))}</span>}
     {kind === "questionnaire_required" && <span>需先通过可信页面完成风险测评。</span>}
     {products?.length > 0 && <ProductTerms />}

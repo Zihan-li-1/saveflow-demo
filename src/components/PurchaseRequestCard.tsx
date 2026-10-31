@@ -107,7 +107,6 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
         {link.check_before_order.length > 0 && <p style={{ margin: '2px 0 0' }}>下单前核对排除项：{link.check_before_order.join('、')}</p>}
       </article>)}
     </div>}
-    {!needsReservation && items.length > 0 && <p style={{ marginTop: 8 }}>现在就买，不预留预算、不设置提醒。</p>}
     {needsReservation && <div aria-busy={busy} style={{ marginTop: 12, padding: '12px 14px', border: '1px solid #e2e5ea', borderRadius: 10, background: '#fafbfc' }}>
       {receipt ? <div role="status" aria-label="提醒设置回执">
         <b>预提醒已设置成功</b>

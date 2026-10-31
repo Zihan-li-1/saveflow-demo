@@ -11,10 +11,11 @@ import { createInMemoryScenarioStore, createScenarioSkill } from '../src/skills/
 import { agentErrorPolicy } from '../src/lib/agent-error-policy.mjs';
 import { calculateSavingsGoal, validatePlanInputs, validateSavedAmount } from '../src/agent/savings-plan.mjs';
 import { requestSavingsAdvice, verifySavingsAdvice } from './savings-advisor.mjs';
+import { savingsFailureDiagnostic } from './savings-advice-contract.mjs';
 import { understandingContext } from './understanding-context.mjs';
 import { collectSavingsData } from './savings-data.mjs';
 import { buildFinancialAnalysisContext } from './financial-analysis-context.mjs';
-import { purchaseNeedsReservation, purchaseMissingQuestions, normalizePurchaseSlots } from '../src/lib/purchase-flow.mjs';
+import { purchaseNeedsReservation, purchaseMissingQuestions, normalizePurchaseSlots, purchaseIntentFromMessage } from '../src/lib/purchase-flow.mjs';
 
 const scenarioStores = new Map();
 const transferTypeChoices = [
@@ -143,7 +144,7 @@ function nextMissingSlot(intent) {
 /** Shared clarification and preview workflow. The only Core capability used is prepare(). */
 export async function runBankingConversation(body, {
   core, repository = core.repository, env = process.env, now = Date.now, timezone = 'Asia/Shanghai',
-  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, requestId = crypto.randomUUID(), origin = 'user_requested', scenarioHandler, scenarioScope = 'fixed_mock_user', savingsAdvisor = requestSavingsAdvice, conversation, resumeOnly = false,
+  parseIntent, initialIntent, expectedAction, fetchImpl = fetch, signal, requestId = crypto.randomUUID(), origin = 'user_requested', scenarioHandler, scenarioScope = 'fixed_mock_user', savingsAdvisor = requestSavingsAdvice, conversation, resumeOnly = false,
   onDiagnostic = () => {},
 }) {
   let replyContext = {};
@@ -250,8 +251,20 @@ export async function runBankingConversation(body, {
       const calculation = calculateSavingsGoal({ targetAmountMinor: continuation.slots.amount.amount_minor, deadline: continuation.slots.deadline, ...normalized, currentDate });
       const recent = financial.recent || { month: normalized.month, income_minor: normalized.incomeMinor, category_expenses_minor: normalized.categoryExpensesMinor };
       const facts = { recent, history: financial.history, sources: financial.sources, required_monthly_minor: calculation.required_monthly_minor };
-      const candidate = await savingsAdvisor(facts, { env, fetchImpl });
-      const advice = verifySavingsAdvice(candidate, facts);
+      let advice;
+      try {
+        const candidate = await savingsAdvisor(facts, { env, fetchImpl, signal });
+        advice = verifySavingsAdvice(candidate, facts);
+        try { onDiagnostic('savings_advice_review', { requestId, stage: 'complete', code: 'OK', reason: 'checks_passed' }); } catch { /* observational */ }
+      } catch (error) {
+        // A malformed advice reply is a rejected read-only generation, not bad user input.
+        if (['MODEL_FORMAT_ERROR', 'TRUEFORGE_FORMAT_ERROR', 'TRUEFORGE_TURN_FAILED'].includes(error?.code)) {
+          error.savingsReview ??= { reason: 'turn_output_invalid' };
+          error.code = 'ADVICE_REVIEW_FAILED'; delete error.userMessage;
+        }
+        try { onDiagnostic('savings_advice_review', { requestId, ...savingsFailureDiagnostic(error) }); } catch { /* observational */ }
+        throw error;
+      }
       const generic = await handleGoal({ slots: continuation.slots }, repository);
       const wealthHandoffToken = core.wealthPorts ? issueState({ action: 'wealth.recommend', slots: { goal: { kind: 'steady_growth', target_date: calculation.deadline } }, pendingSlot: '__wealth_screening', env, now }) : undefined;
       return reply(200, 'OK', '储蓄计划已核算', { status: 'goal_plan', action: 'orchestrator.goal', data: {
@@ -350,6 +363,13 @@ export async function runBankingConversation(body, {
   }
   // Apply exactly the same boundary to all configured/injected understanders.
   parsed = validateParsedIntent(parsed);
+  // 模型可能把「买花 / 买蛋糕 + 提醒」判成 unsupported、clarify，甚至 scenario.create_rule；
+  // 只要原话是购物请求，就按原话重建购物意图，绝不能因为模型一句话让购物流程消失。
+  // 必须在 conversation/acceptIntent 之前改，否则状态机会按错误动作留下挂起任务。
+  if (!continuing && !expectedAction && parsed.action !== 'scenario.plan_purchase') {
+    const recovered = purchaseIntentFromMessage(body.message, understandingContext({ now, timezone }).currentDate);
+    if (recovered) parsed = { schemaVersion: parsed.schemaVersion ?? '1.0.0', action: 'scenario.plan_purchase', slots: recovered, missingSlots: [], status: 'ready_for_resolution' };
+  }
   if (conversation) {
     parsed = await conversation.acceptIntent(parsed, modelOptions);
     if (continuation && parsed.action !== continuation.action) selections = {};
@@ -369,12 +389,10 @@ export async function runBankingConversation(body, {
     if (missing.some(item => item.field === 'funding_account_ref') && typeof repository.getCards === 'function') {
       try { fundingCardOptions = (await repository.getCards()).filter(card => card.status === 'active').map(card => card.name); } catch { /* 卡片选项不可用时不阻塞主流程 */ }
     }
-    const purchaseMessage = datePassed ? ''
-      : !needsReservation
-        ? '已生成平台搜索链接。按现在就买处理，不预留预算、不设置提醒。'
-        : missing.length
-          ? '已生成平台搜索链接。预留预算还差几项信息，请在下方选择或补充。'
-          : '已生成平台搜索链接。预算与提醒信息已齐，请在下方卡片核对并确认预留。';
+    const purchaseMessage = datePassed || !needsReservation ? ''
+      : missing.length
+        ? '已生成平台搜索链接。预留预算还差几项信息，请在下方选择或补充。'
+        : '已生成平台搜索链接。预算与提醒信息已齐，请在下方卡片核对并确认预留。';
     return reply(200, 'OK', purchaseMessage, {
       status: 'purchase_request', action: parsed.action, data: {
         slots: purchaseSlots, synthetic_demo_only: true,
@@ -526,4 +544,5 @@ export async function runBankingConversation(body, {
     throw error;
   }
 }
+
 

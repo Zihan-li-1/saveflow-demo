@@ -1,0 +1,96 @@
+{
+  "date": "2026-10-30",
+  "baseCommit": "416433c",
+  "model": "test/deepseek-v4-1-flash",
+  "inference": "real TrueForge/DeepSeek in every advice request, including the truncated-reply fault; no fixed model outputs",
+  "transport": "real Chrome -> HTTP -> authenticated handler -> installed SDK",
+  "cases": [
+    {
+      "name": "eight-month nine-category live generation 1",
+      "passed": true,
+      "requestId": "43321e97-1417-4437-831e-1d13bc3cb255",
+      "httpStatus": 200
+    },
+    {
+      "name": "eight-month nine-category live generation 2",
+      "passed": true,
+      "requestId": "f2a98c82-3561-4855-ad27-18090d0b3a48",
+      "httpStatus": 200
+    },
+    {
+      "name": "eight-month nine-category live generation 3",
+      "passed": true,
+      "requestId": "f217e53c-ac63-407e-a005-f9076bff4ee4",
+      "httpStatus": 200
+    },
+    {
+      "name": "income cannot cover large savings goal; genuine shortfall retained",
+      "passed": true,
+      "requestId": "10f5269f-bb3f-48df-9cb2-7ec18a6a680b",
+      "required_monthly_minor": 50000000,
+      "remaining_gap_minor": 49540000
+    },
+    {
+      "name": "actual live model reply truncated after inference; JSON rejected; form retained; explicit retry uses same signed inputs",
+      "passed": true,
+      "failureRequestId": "65f826b3-14a6-418e-9abd-488a71d0fee8",
+      "retryRequestId": "981b2de5-ddeb-44c6-9efd-23f0a6467157",
+      "noAutomaticRetry": true,
+      "sameSignedInputs": true
+    }
+  ],
+  "pageErrors": 0,
+  "financialWrites": 0,
+  "historyMonths": 8,
+  "adviceCalls": 6,
+  "diagnostics": [
+    {
+      "event": "savings_advice_review",
+      "requestId": "43321e97-1417-4437-831e-1d13bc3cb255",
+      "stage": "complete",
+      "code": "OK",
+      "reason": "checks_passed"
+    },
+    {
+      "event": "savings_advice_review",
+      "requestId": "f2a98c82-3561-4855-ad27-18090d0b3a48",
+      "stage": "complete",
+      "code": "OK",
+      "reason": "checks_passed"
+    },
+    {
+      "event": "savings_advice_review",
+      "requestId": "f217e53c-ac63-407e-a005-f9076bff4ee4",
+      "stage": "complete",
+      "code": "OK",
+      "reason": "checks_passed"
+    },
+    {
+      "event": "savings_advice_review",
+      "requestId": "10f5269f-bb3f-48df-9cb2-7ec18a6a680b",
+      "stage": "complete",
+      "code": "OK",
+      "reason": "checks_passed"
+    },
+    {
+      "event": "savings_advice_review",
+      "requestId": "65f826b3-14a6-418e-9abd-488a71d0fee8",
+      "stage": "json_parse",
+      "reason": "json_invalid",
+      "code": "ADVICE_REVIEW_FAILED"
+    },
+    {
+      "event": "savings_advice_review",
+      "requestId": "981b2de5-ddeb-44c6-9efd-23f0a6467157",
+      "stage": "complete",
+      "code": "OK",
+      "reason": "checks_passed"
+    }
+  ],
+  "passed": true,
+  "resolvedModel": {
+    "name": "test/deepseek-v4-1-flash",
+    "modelId": "deepseek-flash",
+    "provider": "test"
+  }
+}

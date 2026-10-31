@@ -8,7 +8,7 @@ const run = () => createWealthSkill(createBankingCore().repository);
 test('E wealth: recommendation filters risk, horizon, liquidity and amount with evidence', async () => {
   const result = await run()({ action: 'wealth.recommend', goal: '六个月应急金', max_risk_level: 'R2', horizon_days: 180, liquidity_requirement: 'T+1', amount: { amount_minor: 50000, currency: 'CNY' } });
   assert.equal(result.ok, true);
-  assert.deepEqual(result.data.products.map(item => item.product_ref), ['product_001', 'product_002']);
+  assert.deepEqual(result.data.products.map(item => item.product_ref), ['product_001', 'product_002', 'product_004', 'product_007']);
   assert.equal(result.data.methodology.personalized_suitability_completed, false);
   assert.equal(result.evidence[0].source, 'financial_context.investment_products');
 });

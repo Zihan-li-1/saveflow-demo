@@ -4,7 +4,45 @@ import { validateParsedIntent } from '../src/agent/validate-parsed-intent.mjs';
 import { handleBankingAgent } from '../server/banking-agent.mjs';
 import { bankingIntentSystemPrompt } from '../server/banking-intent-parser.mjs';
 import { bankingAgentSpec } from '../server/trueforge-banking-runtime.mjs';
-import { normalizePurchaseSlots, purchaseDateFields } from '../src/lib/purchase-flow.mjs';
+import { normalizePurchaseSlots, purchaseDateFields, purchaseIntentFromMessage, purchaseMissingQuestions } from '../src/lib/purchase-flow.mjs';
+
+test('a clear flower reminder bypasses an outer chat reply and keeps business slot extraction', async () => {
+  const env = { SAVEFLOW_ACCESS_CODE: 'purchase-test-access', CONTINUATION_TOKEN_SECRET: 'purchase-test-continuation' };
+  let routeCalls = 0, parserCalls = 0;
+  const request = new Request('http://localhost/api/banking-agent', { method: 'POST', headers: {
+    'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'content-type': 'application/json', 'x-forwarded-for': 'purchase-outer-route-test',
+  }, body: JSON.stringify({ consent: true, history: [], message: '提醒我在11.3号买鲜花' }) });
+  const response = await handleBankingAgent(request, { env, now: () => Date.parse('2026-10-30T00:00:00Z'),
+    routeConversation: async () => { routeCalls++; return { schemaVersion: '1.0.0', kind: 'conversation_reply', topic: 'general', text: '我无法设置真实提醒。' }; },
+    parseIntent: async () => { parserCalls++; return { schemaVersion: '1.0.0', action: 'scenario.plan_purchase', slots: {
+      date_expression: '11.3号', date_meaning: 'order_on', items: [{ category: 'flowers', quantity: 1 }],
+    }, missingSlots: [], status: 'ready_for_resolution' }; },
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.data.status, 'purchase_request');
+  assert.equal(payload.data.data.slots.date_expression, '2026-11-03');
+  assert.deepEqual(purchaseMissingQuestions(payload.data.data.slots).map(item => item.field), ['date_expression', 'budget', 'funding_account_ref']);
+  assert.equal(payload.data.data.slots.budget, undefined);
+  assert.equal(routeCalls, 0);
+  assert.equal(parserCalls, 1);
+});
+
+test('a past flower reminder reaches the purchase date guard without creating a reminder', async () => {
+  const env = { SAVEFLOW_ACCESS_CODE: 'purchase-test-access', CONTINUATION_TOKEN_SECRET: 'purchase-test-continuation' };
+  const request = new Request('http://localhost/api/banking-agent', { method: 'POST', headers: {
+    'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'content-type': 'application/json', 'x-forwarded-for': 'purchase-past-outer-route',
+  }, body: JSON.stringify({ consent: true, history: [], message: '提醒我在九月一号买花' }) });
+  const response = await handleBankingAgent(request, { env, now: () => Date.parse('2026-10-30T00:00:00Z'),
+    routeConversation: async () => ({ schemaVersion: '1.0.0', kind: 'conversation_reply', topic: 'general', text: '我无法设置真实日历提醒。' }),
+    parseIntent: async () => ({ schemaVersion: '1.0.0', action: 'unsupported', slots: {}, missingSlots: [], status: 'unsupported' }),
+  });
+  const payload = await response.json();
+  assert.equal(payload.data.status, 'purchase_request');
+  assert.equal(payload.data.data.slots.date_expression, '2026-09-01');
+  assert.equal(payload.reply.text, '');
+  assert.equal(payload.data.data.slots.budget, undefined);
+});
 
 test('purchase keeps a known month/day without inventing a time, and defaults the year to the current one', () => {
   for (const expression of ['9.1号', '九月一号', '9月1日', '9/1']) {
@@ -17,6 +55,22 @@ test('purchase keeps a known month/day without inventing a time, and defaults th
   assert.deepEqual(normalizePurchaseSlots({ date_expression: '十一月一日', preferences: { occasion: '生日' } }, '2026-10-29'), {
     date_expression: '2026-11-01', budget_month: '2026-11', preferences: { occasion: '生日' },
   });
+  assert.equal(purchaseIntentFromMessage('提醒我在九月一号买花', '2027-10-30').date_expression, '2027-09-01');
+});
+
+test('a purchase capability question stays in the outer conversation route', async () => {
+  const env = { SAVEFLOW_ACCESS_CODE: 'purchase-test-access', CONTINUATION_TOKEN_SECRET: 'purchase-test-continuation' };
+  let routeCalls = 0;
+  const request = new Request('http://localhost/api/banking-agent', { method: 'POST', headers: {
+    'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'content-type': 'application/json', 'x-forwarded-for': 'purchase-capability-question',
+  }, body: JSON.stringify({ consent: true, history: [], message: '你能提醒我买花吗？' }) });
+  const response = await handleBankingAgent(request, { env,
+    routeConversation: async () => { routeCalls++; return { schemaVersion: '1.0.0', kind: 'conversation_reply', topic: 'general', text: '可以提供应用内模拟提醒。' }; },
+    parseIntent: async () => assert.fail('Capability question must not enter the business parser'),
+  });
+  assert.equal((await response.json()).data.status, 'conversation_reply');
+  assert.equal(routeCalls, 1);
+  assert.equal(purchaseIntentFromMessage('你能提醒我买花吗？'), null);
 });
 
 test('banking purchase response fills September 1 from the model slots before asking for missing time', async () => {
@@ -52,3 +106,39 @@ test('banking HTTP routes birthday shopping to a business flow card without exec
   const payload = await response.json(); assert.equal(payload.data.status, 'purchase_request');
   assert.deepEqual(payload.data.data.slots, intent.slots);
 });
+
+test('a model refusal on a shopping request still reaches the purchase flow', async () => {
+  assert.deepEqual(purchaseIntentFromMessage('提醒我在九月一号买花'), { items: [{ category: 'flowers', quantity: 1 }], date_expression: '2026-09-01', date_meaning: 'order_on' });
+  for (const message of ['取消鲜花订阅', '看看花呗账单', '转 200 给张三', '提醒我给花店转账 200', '帮我查一下买花的订单']) assert.equal(purchaseIntentFromMessage(message), null);
+  const env = { SAVEFLOW_ACCESS_CODE: 'purchase-test-access', CONTINUATION_TOKEN_SECRET: 'purchase-test-continuation' };
+  const refusal = { schemaVersion: '1.0.0', action: 'unsupported', slots: {}, missingSlots: [], status: 'unsupported' };
+  const request = new Request('http://localhost/api/banking-agent', { method: 'POST', headers: {
+    'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'content-type': 'application/json', 'x-forwarded-for': 'purchase-guard-test',
+  }, body: JSON.stringify({ consent: true, history: [], message: '提醒我在九月一号买花' }) });
+  const response = await handleBankingAgent(request, { env, now: () => Date.parse('2026-10-30T00:00:00Z'), parseIntent: async () => refusal });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.data.status, 'purchase_request');
+  assert.equal(payload.data.data.slots.date_expression, '2026-09-01');
+  assert.deepEqual(payload.data.data.slots.items, [{ category: 'flowers', quantity: 1 }]);
+});
+
+test('any wrong model action on a shopping request is corrected to the purchase flow', async () => {
+  const env = { SAVEFLOW_ACCESS_CODE: 'purchase-test-access', CONTINUATION_TOKEN_SECRET: 'purchase-test-continuation' };
+  const wrongActions = [
+    { schemaVersion: '1.0.0', action: 'unsupported', slots: {}, missingSlots: [], status: 'unsupported' },
+    { schemaVersion: '1.0.0', action: 'clarify', slots: {}, missingSlots: ['action'], status: 'needs_clarification' },
+  ];
+  for (const intent of wrongActions) {
+    const request = new Request('http://localhost/api/banking-agent', { method: 'POST', headers: {
+      'x-saveflow-access': env.SAVEFLOW_ACCESS_CODE, 'content-type': 'application/json', 'x-forwarded-for': 'purchase-any-wrong-action',
+    }, body: JSON.stringify({ consent: true, history: [], message: '提醒我在11月3号买花' }) });
+    const response = await handleBankingAgent(request, { env, now: () => Date.parse('2026-10-30T00:00:00Z'), parseIntent: async () => intent });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.data.status, 'purchase_request');
+    assert.equal(payload.data.data.slots.date_expression, '2026-11-03');
+    assert.equal(payload.data.data.slots.date_meaning, 'order_on');
+  }
+});
+

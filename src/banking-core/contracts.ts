@@ -1,5 +1,14 @@
 /** Banking Core 1.0.0. Internal money = safe integer fen; rates = integer bps.
  * NLP/HTTP snake_case conversion belongs exclusively to wire.mjs. */
+/**
+ * 版本与命名对照（接口对齐用；以下均为独立维度，不是版本漂移）：
+ * - 本文件（Banking Core 契约）：1.0.0，内部 camelCase / 整数分。
+ * - wire.mjs 的 WIRE_VERSION = 1.1.0：网络线格式，snake_case / *_minor。
+ * - ParsedIntent schema：src/agent/validate-parsed-intent.mjs 的 PARSED_INTENT_SCHEMA_VERSION = 1.0.0。
+ * - effect.kind ↔ 账本流水 type 映射（「操作效果」与「账本分录」两个层次，命名不必同名）：
+ *     transfer_out       → 流水 type 'transfer_out'（对外转账，一笔）
+ *     transfer_internal  → 流水 type 'internal_transfer_out' + 'internal_transfer_in'（本人互转，两笔）
+ */
 export type Currency = "CNY";
 export type RiskLevel = "L0" | "L1" | "L2" | "L3";
 export type Account = { id: string; name: string; type: "checking" | "saving"; currency: Currency; balanceFen: number; availableBalanceFen: number; version: number; status: "active" | "frozen" };
@@ -8,7 +17,7 @@ export type Transaction = { id: string; accountId: string; payeeId?: string; cou
 export type Card = { id: string; name: string; accountId: string; status: "active" | "frozen"; monthlyBudgetFen: number; monthlySpentFen: number; onlinePaymentsEnabled: boolean; blockedCategories: string[]; alertThresholdFen: number | null; balanceReminderAmountFen: number | null; balanceReminderPercent: number | null; version: number; previewGeneration: number };
 export type Subscription = { id: string; name: string; monthlyFeeFen: number; status: "active" | "cancelled"; lastUsedDate: string; isPotentiallyUnused: boolean; mandateId: string | null };
 /** expectedYield is an illustrative annual rate in BPS, never a guaranteed yield. */
-export type InvestmentProduct = { id: string; name: string; riskLevel: "R1" | "R2" | "R3"; expectedYield: number; liquidity: "T+0" | "T+1" | "AT_MATURITY"; minimumAmountFen: number; durationDays: number; currency: Currency; isSynthetic: true };
+export type InvestmentProduct = { id: string; name: string; category: "fund" | "bond" | "stock"; displayCode: string; riskLevel: "R1" | "R2" | "R3"; expectedYield: number; liquidity: "T+0" | "T+1" | "AT_MATURITY"; minimumAmountFen: number; durationDays: number; currency: Currency; isSynthetic: true };
 export type ContextInfo = { availableMonths?: string[]; completeMonths?: string[]; datasetId: string; asOf: string; currentMonth: string; previousMonth: string; snapshotId: string; dataSource: "synthetic_demo_only"; currency: Currency };
 export type SavingGoal = { id: string; targetAmountFen: number; currentAmountFen: number; targetDate: string; proposedMonthlySavingFen: number };
 export type DemoSettings = { monthlyIncomeFen: number; defaultMonthlySavingFen: number; monthlySavingCapFen: number };
