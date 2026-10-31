@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
+try { process.loadEnvFile('.env.local'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+
 /** Split SQL only at statement terminators outside strings, identifiers, comments, and dollar quotes. */
 export function splitSqlStatements(sql) {
   const statements = [];
