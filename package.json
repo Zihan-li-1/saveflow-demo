@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "test:agent-framework": "node --test tests/agent-framework.test.mjs tests/agent-framework-postgres.test.mjs",
     "dev:qwen": "node scripts/dev-qwen.mjs",
     "mcp:trial": "node server/mcp/saveflow-trial.mjs",
     "test:mcp:trial": "node --test tests/saveflow-trial.test.mjs",
