@@ -8,6 +8,15 @@
 
 先运行 `npm run db:migrate`，再运行 `npm run worker:purchase` 与应用。也可在现有 Compose 文件上叠加 `compose.purchase.yaml` 启动 `web` 和 `purchase-worker`。worker 的近期数据库心跳是保存提醒的前提；若失联超过两分钟，预览返回 `SCHEDULER_UNAVAILABLE`。Netlify 的 API 函数本身不是常驻 worker。
 
+### 本地 `npm run dev` 验证预览和确认
+
+1. 将 `.env.example` 复制为不提交的 `.env.local`，设置长度至少 16 的 `SAVEFLOW_ACCESS_CODE`、长度至少 32 的 `CONTINUATION_TOKEN_SECRET`、`PURCHASE_WORKER_ENABLED=true` 和 `DATABASE_URL`。银行流水仍是合成 Mock；数据库只负责保存演示状态。若使用现有 Docker PostgreSQL，连接地址为 `postgresql://saveflow_web:local-synthetic-web-only@127.0.0.1:5433/saveflow_web`。若本机已有 PostgreSQL，改成其实际地址即可，不需要 Docker。
+2. 有 Docker 时，运行 `docker compose --env-file .env.local -f compose.yaml -f compose.postgres.yaml up -d pilot-db`，只启动数据库；本机 `npm run dev` 通过 `127.0.0.1:5433` 访问。没有 Docker 时，先自行启动 PostgreSQL 并建立 `DATABASE_URL` 指向的数据库。
+3. 运行一次 `npm run db:migrate`。在另一个终端运行 `npm run worker:purchase`，保持它运行；再运行 `npm run dev`。迁移与 worker 会读取 `.env.local`，已由部署环境设置的变量保持优先。
+4. 在 `http://localhost:3000` 填演示访问码并勾选同意。选择未来日期、时间段、预算和卡后点击“预览提醒设置”；如缺少近期余额和待付金额，按卡片提示补齐。预览卡片出现“确认设置提醒”后再点击确认，只有保存成功才显示回执。到期后打开或刷新应用查看待办；不会主动发短信、系统通知或真实购物订单。
+
+若显示“购物流程数据库未配置”，核对 `DATABASE_URL` 和数据库连接；若显示“后台预约服务未运行”，核对 worker 进程与 `PURCHASE_WORKER_ENABLED=true`。不要通过关闭这两项检查来伪造成功回执。
+
 打开 `/shopping/`，填访问码并同意在使用模型理解目标时发送本次自由文本及已有购物草案槽位；不要在自由文本中填写电话、地址或恢复码。没有模型时可手动补全槽位。确认预算前要核对日期含义：`order_on` 是希望收到提醒去下单的日子；`deliver_on` 是希望送达的日子，页面会预估提前三天提醒。到期事项由 worker 写入数据库，用户**再次打开或刷新页面**才看得到；没有短信或系统推送，也不保证平台送达日期。
 
 ## 人工验收
