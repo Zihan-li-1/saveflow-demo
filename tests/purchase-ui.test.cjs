@@ -30,63 +30,36 @@ test('purchase request pre-fills the known day and only asks for missing informa
   assert.doesNotMatch(immediate, /预览提醒设置|type="date"|现在就买/);
 });
 
-test('supplement → preview → confirm calls the real purchase API and only receipts a persisted reminder', async t => {
+test('purchase preview, confirmation and browser-saved card work without an API', async t => {
   const { create, act } = require('react-test-renderer');
-  const { handlePurchaseRequest } = await import('../server/purchase-api.mjs');
-  const { createPurchaseSkill } = await import('../src/skills/scenario/purchase-skill.mjs');
-  const { createPurchaseTestStore } = await import('./fixtures/purchase-memory-store.mjs');
   const previousActEnvironment = global.IS_REACT_ACT_ENVIRONMENT;
+  const previousStorage = global.localStorage;
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  t.after(() => { global.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment; });
-  const now = () => Date.parse('2026-10-29T00:00:00Z');
-  const env = { SAVEFLOW_ACCESS_CODE: 'purchase-ui-test-access', CONTINUATION_TOKEN_SECRET: 'purchase-test-secret-longer-than-32-characters' };
-  const store = createPurchaseTestStore();
-  let cookie = '', schedulerEnabled = true, loseSaveResponse = false;
-  const actions = [];
-  t.mock.method(global, 'fetch', async (_url, init) => {
-    const { action } = JSON.parse(init.body); actions.push(action);
-    const request = new Request('https://saveflow.test/api/purchase', { ...init, headers: {
-      ...init.headers, origin: 'https://saveflow.test', ...(cookie ? { cookie } : {}),
-    } });
-    const response = await handlePurchaseRequest(request, { env, now,
-      getSkill: async () => createPurchaseSkill({ store, now, schedulerEnabled }) });
-    cookie = response.headers.get('set-cookie')?.split(';')[0] || cookie;
-    if (action === 'scenario.purchase.save' && response.ok && loseSaveResponse) { loseSaveResponse = false; throw new Error('response lost'); }
-    return response;
-  });
+  const saved = new Map();
+  global.localStorage = { getItem: key => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) };
+  t.after(() => { global.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment; global.localStorage = previousStorage; });
+  let fetchCalls = 0;
+  t.mock.method(global, 'fetch', () => { fetchCalls++; throw new Error('No API should be called'); });
   let root;
-  const click = text => act(async () => { await root.root.findAllByType('button').find(button => button.children.join('') === text).props.onClick(); });
+  const click = text => act(() => root.root.findAllByType('button').find(button => button.children.join('') === text).props.onClick());
   const field = (label, value) => act(() => root.root.findByProps({ 'aria-label': label }).props.onChange({ target: { value } }));
-  const receiptCount = () => root.root.findAllByProps({ 'aria-label': '提醒设置回执' }).length;
-  const state = () => store.transaction(cookie.split('=')[1].split('.')[0], value => value);
+  const props = { slots: { date_expression: '2027-09-01', date_meaning: 'order_on', items: [{ category: 'flowers', quantity: 1 }] }, cards: ['日常虚拟卡'] };
   try {
-    await act(async () => { root = create(React.createElement(PurchaseRequestCard, { consent: true, accessCode: env.SAVEFLOW_ACCESS_CODE,
-      slots: { date_expression: '2027-09-01', date_meaning: 'order_on', items: [{ category: 'flowers', quantity: 1 }] }, cards: ['日常虚拟卡'] })); });
+    await act(async () => { root = create(React.createElement(PurchaseRequestCard, props)); });
     assert.equal(root.root.findByProps({ 'aria-label': '购买日期' }).props.value, '2027-09-01');
     await field('开始时间', '09:00'); await field('结束时间', '12:00'); await field('预留预算', '500'); await click('日常虚拟卡');
-    await click('预览提醒设置'); // Missing repository finance asks for data, not fake success.
-    assert.equal(receiptCount(), 0);
-    assert.equal(Object.keys((await state()).jobs).length, 0);
-    await field('可用余额', '1000'); await field('近期待付金额', '100');
     await click('预览提醒设置');
-    assert.equal(actions.includes('scenario.purchase.save'), false);
-    assert.equal(Object.keys((await state()).jobs).length, 0);
-    schedulerEnabled = false; await click('确认设置提醒');
-    assert.equal(receiptCount(), 0);
-    assert.match(JSON.stringify(root.toJSON()), /后台预约服务未运行/);
-    schedulerEnabled = true; loseSaveResponse = true; await click('确认设置提醒');
-    assert.equal(receiptCount(), 0); // Lost response is not a success receipt.
-    await click('确认设置提醒'); // Exact retry recovers the same persisted reminder.
-    assert.equal(receiptCount(), 1);
-    const saved = await state();
-    assert.equal(Object.keys(saved.workflows).length, 1);
-    assert.equal(Object.keys(saved.jobs).length, 1);
-    assert.equal(Object.values(saved.jobs)[0].due_at, '2027-09-01T09:00:00+08:00');
-    assert.equal(Object.values(saved.reservations)[0].total_minor, 50000);
-    assert.equal(Object.keys(saved.operations).length, 0);
-    assert.match(JSON.stringify(root.toJSON()), /预提醒已设置成功/);
-    await click('获取恢复码');
-    assert.ok(root.root.findByProps({ 'aria-label': '提醒恢复码' }).props.value.length >= 40);
+    assert.equal(root.root.findAllByProps({ 'aria-label': '确认提醒' }).length, 1);
+    assert.equal(root.root.findAllByProps({ 'aria-label': '提醒设置回执' }).length, 0);
+    assert.equal(saved.size, 0);
+    await click('确认设置提醒');
+    assert.equal(root.root.findAllByProps({ 'aria-label': '提醒设置回执' }).length, 1);
+    assert.match(JSON.stringify(root.toJSON()), /仅保存在此浏览器|不会定时通知/);
+    assert.equal(saved.size, 1);
+    assert.equal(fetchCalls, 0);
+    await act(async () => root.unmount());
+    await act(async () => { root = create(React.createElement(PurchaseRequestCard, props)); });
+    assert.equal(root.root.findAllByProps({ 'aria-label': '提醒设置回执' }).length, 1);
   } finally { if (root) await act(async () => root.unmount()); }
 });
 
@@ -120,3 +93,4 @@ test('old mock order is shown as read-only historical state', () => {
   assert.match(html, /结果待核实/);
   assert.doesNotMatch(html, /查询订单|已付款成功/);
 });
+
