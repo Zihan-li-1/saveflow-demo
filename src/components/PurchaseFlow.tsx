@@ -17,7 +17,8 @@ export function PurchaseFlow({ accessCode = '', consent = false, initialSlots = 
   const parsedDate = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})-(\d{2}:\d{2})$/.exec(initialSlots.date_expression ?? '');
   const [date, setDate] = useState(parsedDate?.[1] ?? ''), [start, setStart] = useState(parsedDate?.[2] ?? ''), [end, setEnd] = useState(parsedDate?.[3] ?? '');
   const [meaning, setMeaning] = useState(initialSlots.date_meaning ?? '');
-  const [items, setItems] = useState<Array<'flowers' | 'cake'>>(initialSlots.items?.map(item => item.category) ?? []);
+  const reservableCategory = (value: string): value is 'flowers' | 'cake' => value === 'flowers' || value === 'cake';
+  const [items, setItems] = useState<Array<'flowers' | 'cake'>>(initialSlots.items?.map(item => item.category).filter(reservableCategory) ?? []);
   const [message, setMessage] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [balance, setBalance] = useState(''), [obligations, setObligations] = useState('');
   const [plan, setPlan] = useState<PlanPreview>();
@@ -42,7 +43,7 @@ export function PurchaseFlow({ accessCode = '', consent = false, initialSlots = 
     setMonth(slots.budget_month ?? ''); setAccount(slots.funding_account_ref ?? '');
     const parsed = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})-(\d{2}:\d{2})$/.exec(slots.date_expression ?? '');
     setDate(parsed?.[1] ?? ''); setStart(parsed?.[2] ?? ''); setEnd(parsed?.[3] ?? '');
-    setMeaning(slots.date_meaning ?? ''); setItems(slots.items?.map(item => item.category) ?? []);
+    setMeaning(slots.date_meaning ?? ''); setItems(slots.items?.map(item => item.category).filter(reservableCategory) ?? []);
   }
   function revisedSlots(): PurchaseSlots {
     if (!date || !start || !end || !meaning || !month || !account || !items.length) throw new Error('请填写预算月份、账户、日期、时间窗和购买品类。');

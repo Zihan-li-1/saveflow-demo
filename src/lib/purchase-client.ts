@@ -1,7 +1,7 @@
 export type PurchaseSlots = {
   budget?: { amount_minor: number; currency: 'CNY' }; budget_month?: string; funding_account_ref?: string;
   date_expression?: string; date_meaning?: 'order_on' | 'deliver_on'; selection_mode?: 'guided' | 'browse';
-  items?: Array<{ category: 'flowers' | 'cake'; quantity: number }>; preferences?: Record<string, unknown>;
+  items?: Array<{ category: 'flowers' | 'cake' | 'headphones'; quantity: number }>; preferences?: Record<string, unknown>;
 };
 export type PurchaseOrder = { operation_ref: string; status: string; amount_minor: number; category?: string };
 export type PurchaseWorkflow = {

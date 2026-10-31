@@ -16,6 +16,7 @@ import { understandingContext } from './understanding-context.mjs';
 import { collectSavingsData } from './savings-data.mjs';
 import { buildFinancialAnalysisContext } from './financial-analysis-context.mjs';
 import { purchaseNeedsReservation, purchaseMissingQuestions, normalizePurchaseSlots, purchaseIntentFromMessage } from '../src/lib/purchase-flow.mjs';
+import { budgetReminderRuleIntentFromMessage } from '../src/lib/scenario-rule-flow.mjs';
 
 const scenarioStores = new Map();
 const transferTypeChoices = [
@@ -361,7 +362,10 @@ export async function runBankingConversation(body, {
       parsed = buildParsedIntent(continuation.action, mergeSlots(continuation.slots, { [continuation.pendingSlot]: selected.rawValue || selected.label }));
     }
   } else {
-    parsed = initialIntent ?? await parseIntent(body.message, { ...modelOptions, history });
+    // This catalog example has a strict server representation. Recovering it
+    // here cannot execute anything: it only enters Core preview/confirmation.
+    const recoveredBudgetReminder = !expectedAction && budgetReminderRuleIntentFromMessage(body.message);
+    parsed = initialIntent ?? recoveredBudgetReminder ?? await parseIntent(body.message, { ...modelOptions, history });
   }
   // Apply exactly the same boundary to all configured/injected understanders.
   parsed = validateParsedIntent(parsed);

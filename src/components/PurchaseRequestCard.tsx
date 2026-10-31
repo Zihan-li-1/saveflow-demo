@@ -5,7 +5,8 @@ import { yuan, inputMinor, purchaseRequest, type PurchaseSlots, type PurchaseWor
 import { purchaseNeedsReservation, purchaseMissingQuestions, purchaseDateFields } from '../lib/purchase-flow.mjs';
 import { localDate } from '../lib/calendar.mjs';
 
-const categoryLabel = (category: 'flowers' | 'cake') => (category === 'flowers' ? '鲜花' : '蛋糕');
+type PurchaseCategory = 'flowers' | 'cake' | 'headphones';
+const categoryLabel = (category: PurchaseCategory) => (category === 'flowers' ? '鲜花' : category === 'cake' ? '蛋糕' : '耳机');
 const meaningLabel = (meaning?: 'order_on' | 'deliver_on') =>
   meaning === 'order_on' ? '提醒我下单' : meaning === 'deliver_on' ? '希望送达' : '';
 const chip: React.CSSProperties = {
@@ -29,8 +30,8 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
   const [editing, setEditing] = useState(false);
   const need = (field: string) => editing || missing.some(item => item.field === field);
   const [dateFields] = useState(() => purchaseDateFields(slots.date_expression));
-  const [cats, setCats] = useState<Array<'flowers' | 'cake'>>(items.map(item => item.category));
-  const links = shoppingSearchLinks({ ...slots, items: cats.map(category => ({ category })) }) as Array<{ category: 'flowers' | 'cake'; label: string; query: string; url: string; check_before_order: string[] }>;
+  const [cats, setCats] = useState<PurchaseCategory[]>(items.map(item => item.category));
+  const links = shoppingSearchLinks({ ...slots, items: cats.map(category => ({ category, quantity: 1 })) }) as Array<{ category: PurchaseCategory; label: string; query: string; url: string; check_before_order: string[] }>;
   const [dateText, setDateText] = useState(dateFields.date);
   const [startTime, setStartTime] = useState(dateFields.start);
   const [endTime, setEndTime] = useState(dateFields.end);
@@ -84,7 +85,7 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
     try { localStorage.setItem('saveflow.purchase.last.v1', saved.workflow_ref); } catch { /* Optional browser storage. */ }
   }
 
-  const toggleCat = (category: 'flowers' | 'cake') =>
+  const toggleCat = (category: PurchaseCategory) =>
     setCats(current => current.includes(category) ? current.filter(item => item !== category) : [...current, category]);
 
   const recognised = [

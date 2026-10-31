@@ -1,6 +1,6 @@
 // @ts-check
 export const SCENARIO_ACTIONS = Object.freeze(['scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule', 'scenario.review_event']);
-const SAFE_STEP_ACTIONS = new Set(['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get']);
+const SAFE_STEP_ACTIONS = new Set(['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get', 'notification.remind']);
 
 export class ScenarioSkillError extends Error {
   /** @param {string} code @param {string} message */
