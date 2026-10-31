@@ -42,6 +42,23 @@ test('理财澄清使用普通用户语言，并能理解风险、月份和取�
   assert.deepEqual(parseClarificationAnswer('计划结束前都不需要取', { action: 'wealth.recommend', slot: 'liquidity_requirement', slots: {} }), { kind: 'slot', updates: { liquidity_requirement: 'AT_MATURITY' } });
 });
 
+test('理财理解结果格式异常时兜底追问模糊的流动性条件', async () => {
+  const { parseTrueforgeBankingIntent } = await import('../server/trueforge-banking-runtime.mjs');
+  const { runBankingConversation } = await import('../server/banking-orchestrator.mjs');
+  const message = '我计划投资12个月，能接受小幅亏损，希望需要时较快取出，推荐模拟理财产品。';
+  const parsed = await parseTrueforgeBankingIntent(message, { env: { TRUEFORGE_MODEL: 'test-model' }, client: {
+    async createSession() { return 'wealth-fallback'; }, async cancel() {}, async runTurn() { return 'not-json'; },
+  } });
+  assert.equal(parsed.action, 'wealth.recommend');
+  assert.equal(parsed.slots.max_risk_level, 'R2');
+  assert.equal(parsed.slots.horizon_days, 360);
+  assert.deepEqual(parsed.missingSlots, ['liquidity_requirement']);
+  const response = await runBankingConversation({ message }, { core: createBankingCore(), env, now: () => 6000, initialIntent: parsed });
+  assert.equal(response.data.kind, 'clarification');
+  assert.equal(response.data.slot, 'liquidity_requirement');
+  assert.match(response.data.question, /T\+0.*T\+1/);
+});
+
 test('统一 Agent 续接时模型结合草稿理解 R2，不要求复述完整句子', async () => {
   const core = createBankingCore();
   let modelCalls = 0;

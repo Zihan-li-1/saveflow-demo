@@ -77,6 +77,7 @@ const clarificationQuestions = {
 function questionFor(action, slot, message, slots = {}) {
   if (action === 'orchestrator.goal' && slot === 'amount') return '希望存到的准确目标金额是多少？';
   if (action === 'orchestrator.goal' && slot === 'deadline') return '希望在哪一天完成目标？';
+  if (action === 'wealth.recommend' && slot === 'liquidity_requirement') return '你说“需要时较快取出”，我还不能确定具体要求。你需要随时可取（T+0），还是可以等到下一个工作日（T+1）？也可以说明计划结束前都不需要取。';
   if (slot === 'month' && action === 'bill.summary') return billClarificationQuestion(slots.year ? `${slots.year}年账单` : slots.monthNumber ? `${slots.monthNumber}月账单` : message);
   return slot === 'amount' && action === 'card.set_budget'
     ? '新的月消费预算是多少元？例如 1000 元。'
@@ -137,7 +138,8 @@ function clarificationResponse(reply, { action, slot, question, choices = [], sl
 function nextMissingSlot(intent) {
   const order = intent.action === 'transfer.create'
     ? ['transfer_type', 'source_account_ref', 'target_account_ref', 'payee_ref', 'amount']
-    : intent.action.startsWith('card.') ? ['card_ref', 'amount'] : ['month'];
+    : intent.action === 'wealth.recommend' ? ['max_risk_level', 'horizon_days', 'liquidity_requirement', 'goal']
+      : intent.action.startsWith('card.') ? ['card_ref', 'amount'] : ['month'];
   return order.find(slot => intent.missingSlots?.includes(slot)) || intent.missingSlots?.[0];
 }
 
