@@ -5,7 +5,9 @@ import { yuan, inputMinor, type PurchaseSlots } from '../lib/purchase-client';
 import { purchaseNeedsReservation, purchaseMissingQuestions, purchaseDateFields } from '../lib/purchase-flow.mjs';
 import { localDate } from '../lib/calendar.mjs';
 
-const categoryLabel = (category: 'flowers' | 'cake') => (category === 'flowers' ? '鲜花' : '蛋糕');
+type PurchaseCategory = 'flowers' | 'cake' | 'headphones';
+const categoryLabel = (category: PurchaseCategory) =>
+  category === 'flowers' ? '鲜花' : category === 'cake' ? '蛋糕' : '耳机';
 const meaningLabel = (meaning?: 'order_on' | 'deliver_on') =>
   meaning === 'order_on' ? '提醒我下单' : meaning === 'deliver_on' ? '希望送达' : '';
 const chip: React.CSSProperties = {
@@ -17,7 +19,7 @@ const inputStyle: React.CSSProperties = { padding: '6px 8px', border: '1px solid
 const submitStyle: React.CSSProperties = { marginTop: 4, padding: '6px 16px', borderRadius: 6, border: '1px solid #d0d4da', background: '#fff', cursor: 'pointer' };
 
 type BrowserReminder = {
-  categories: Array<'flowers' | 'cake'>;
+  categories: PurchaseCategory[];
   date: string;
   start: string;
   end: string;
@@ -29,7 +31,7 @@ function readBrowserReminder(raw: string | null): BrowserReminder | undefined {
   try {
     const value = raw ? JSON.parse(raw) as BrowserReminder : undefined;
     return value && Array.isArray(value.categories) &&
-      value.categories.every(category => category === 'flowers' || category === 'cake') &&
+      value.categories.every(category => category === 'flowers' || category === 'cake' || category === 'headphones') &&
       typeof value.date === 'string' && typeof value.start === 'string' && typeof value.end === 'string' &&
       (value.meaning === 'order_on' || value.meaning === 'deliver_on') &&
       Number.isSafeInteger(value.amountMinor) && value.amountMinor > 0 && typeof value.card === 'string' ? value : undefined;
@@ -49,8 +51,8 @@ export function PurchaseRequestCard({ slots = {}, cards = [] }: {
   const [editing, setEditing] = useState(false);
   const need = (field: string) => editing || missing.some(item => item.field === field);
   const [dateFields] = useState(() => purchaseDateFields(slots.date_expression));
-  const [cats, setCats] = useState<Array<'flowers' | 'cake'>>(items.map(item => item.category));
-  const links = shoppingSearchLinks({ ...slots, items: cats.map(category => ({ category })) }) as Array<{ category: 'flowers' | 'cake'; label: string; query: string; url: string; check_before_order: string[] }>;
+  const [cats, setCats] = useState<PurchaseCategory[]>(items.map(item => item.category));
+  const links = shoppingSearchLinks({ ...slots, items: cats.map(category => ({ category, quantity: 1 })) }) as Array<{ category: PurchaseCategory; label: string; query: string; url: string; check_before_order: string[] }>;
   const [dateText, setDateText] = useState(dateFields.date);
   const [startTime, setStartTime] = useState(dateFields.start);
   const [endTime, setEndTime] = useState(dateFields.end);
@@ -94,7 +96,7 @@ export function PurchaseRequestCard({ slots = {}, cards = [] }: {
     } catch { setError('浏览器存储不可用，提醒信息尚未保存。'); }
   }
 
-  const toggleCat = (category: 'flowers' | 'cake') =>
+  const toggleCat = (category: PurchaseCategory) =>
     setCats(current => current.includes(category) ? current.filter(item => item !== category) : [...current, category]);
 
   const recognised = [
@@ -113,7 +115,7 @@ export function PurchaseRequestCard({ slots = {}, cards = [] }: {
   return <section aria-label="购物请求">
     {links.length > 0 && <div style={{ display: 'grid', gap: 6 }}>
       {links.map(link => <article key={link.category}>
-        <a href={link.url} target="_blank" rel="noopener noreferrer">在京东搜索{categoryLabel(link.category)}</a>
+        <a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a>
         {link.check_before_order.length > 0 && <p style={{ margin: '2px 0 0' }}>下单前核对排除项：{link.check_before_order.join('、')}</p>}
       </article>)}
     </div>}
@@ -137,8 +139,8 @@ export function PurchaseRequestCard({ slots = {}, cards = [] }: {
       </p>}
       <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
       {need('items') && <div style={fieldStyle}><span>买什么？ </span>
-        {(['鲜花', '蛋糕'] as const).map(option => {
-          const category = option === '鲜花' ? 'flowers' as const : 'cake' as const;
+        {(['鲜花', '蛋糕', '耳机'] as const).map(option => {
+          const category = option === '鲜花' ? 'flowers' as const : option === '蛋糕' ? 'cake' as const : 'headphones' as const;
           const selected = cats.includes(category);
           return <button key={option} type="button" style={{ ...chip, background: selected ? '#e8f0fe' : '#f2f4f7' }} onClick={() => toggleCat(category)}>{option}</button>;
         })}
