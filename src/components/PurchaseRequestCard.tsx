@@ -1,12 +1,13 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useCallback, useState, useSyncExternalStore } from 'react';
 import { shoppingSearchLinks } from '../lib/purchase-links.mjs';
-import { yuan, inputMinor, purchaseRequest, type PurchaseSlots, type PurchaseWorkflow, type PlanPreview } from '../lib/purchase-client';
+import { yuan, inputMinor, type PurchaseSlots } from '../lib/purchase-client';
 import { purchaseNeedsReservation, purchaseMissingQuestions, purchaseDateFields } from '../lib/purchase-flow.mjs';
 import { localDate } from '../lib/calendar.mjs';
 
 type PurchaseCategory = 'flowers' | 'cake' | 'headphones';
-const categoryLabel = (category: PurchaseCategory) => (category === 'flowers' ? '鲜花' : category === 'cake' ? '蛋糕' : '耳机');
+const categoryLabel = (category: PurchaseCategory) =>
+  category === 'flowers' ? '鲜花' : category === 'cake' ? '蛋糕' : '耳机';
 const meaningLabel = (meaning?: 'order_on' | 'deliver_on') =>
   meaning === 'order_on' ? '提醒我下单' : meaning === 'deliver_on' ? '希望送达' : '';
 const chip: React.CSSProperties = {
@@ -17,7 +18,27 @@ const fieldStyle: React.CSSProperties = { margin: '8px 0' };
 const inputStyle: React.CSSProperties = { padding: '6px 8px', border: '1px solid #d0d4da', borderRadius: 6, marginRight: 4 };
 const submitStyle: React.CSSProperties = { marginTop: 4, padding: '6px 16px', borderRadius: 6, border: '1px solid #d0d4da', background: '#fff', cursor: 'pointer' };
 
-export function PurchaseRequestCard({ accessCode = '', consent = false, slots = {}, cards = [] }: {
+type BrowserReminder = {
+  categories: PurchaseCategory[];
+  date: string;
+  start: string;
+  end: string;
+  meaning: 'order_on' | 'deliver_on';
+  amountMinor: number;
+  card: string;
+};
+function readBrowserReminder(raw: string | null): BrowserReminder | undefined {
+  try {
+    const value = raw ? JSON.parse(raw) as BrowserReminder : undefined;
+    return value && Array.isArray(value.categories) &&
+      value.categories.every(category => category === 'flowers' || category === 'cake' || category === 'headphones') &&
+      typeof value.date === 'string' && typeof value.start === 'string' && typeof value.end === 'string' &&
+      (value.meaning === 'order_on' || value.meaning === 'deliver_on') &&
+      Number.isSafeInteger(value.amountMinor) && value.amountMinor > 0 && typeof value.card === 'string' ? value : undefined;
+  } catch { return undefined; }
+}
+
+export function PurchaseRequestCard({ slots = {}, cards = [] }: {
   accessCode?: string;
   consent?: boolean;
   slots?: PurchaseSlots;
@@ -38,51 +59,41 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
   const [meaning, setMeaning] = useState<'order_on' | 'deliver_on' | ''>(slots.date_meaning ?? '');
   const [amount, setAmount] = useState(slots.budget ? String(slots.budget.amount_minor / 100) : '');
   const [card, setCard] = useState(slots.funding_account_ref ?? '');
-  const [draft, setDraft] = useState<PurchaseWorkflow>();
-  const [preview, setPreview] = useState<PlanPreview>();
-  const [receipt, setReceipt] = useState<PurchaseWorkflow>();
-  const [recoveryCode, setRecoveryCode] = useState('');
-  const [busy, setBusy] = useState(false), [error, setError] = useState('');
-  const [needFinance, setNeedFinance] = useState(false);
-  const [balance, setBalance] = useState(''), [obligations, setObligations] = useState('');
-  const inFlight = useRef(false);
-  const call = <T,>(action: string, input: unknown) => purchaseRequest<T>(action, input, accessCode, consent);
+  const [preview, setPreview] = useState<BrowserReminder>();
+  const [receipt, setReceipt] = useState<{ key: string; value: BrowserReminder }>();
+  const [error, setError] = useState('');
+  const storageKey = `saveflow.purchase.browser.v1:${JSON.stringify({ items: items.map(item => item.category), date: slots.date_expression, meaning: slots.date_meaning })}`;
+  const subscribe = useCallback((notify: () => void) => {
+    if (typeof window === 'undefined') return () => {};
+    window.addEventListener('storage', notify);
+    return () => window.removeEventListener('storage', notify);
+  }, []);
+  const storedJson = useSyncExternalStore(subscribe, () => {
+    try { return localStorage.getItem(storageKey); } catch { return null; }
+  }, () => null);
+  const savedReminder = receipt?.key === storageKey ? receipt.value : readBrowserReminder(storedJson);
   const [today] = useState(() => localDate(Date.now()));
   const datePast = Boolean(dateText) && dateText < today;
   const ready = cats.length > 0 && dateText && startTime && endTime && meaning && Number(amount) > 0 && card && !datePast;
 
-  async function run(work: () => Promise<void>) {
-    if (inFlight.current) return;
-    inFlight.current = true; setBusy(true); setError('');
-    try { await work(); } catch (cause) {
-      if ((cause as { code?: string })?.code === 'FINANCIAL_DATA_REQUIRED') setNeedFinance(true);
-      setError(cause instanceof Error ? cause.message : '请求未完成，请重试。');
-    } finally { inFlight.current = false; setBusy(false); }
+  function prepare() {
+    try {
+      if (!ready) throw new Error('请补齐下方缺少的信息。');
+      if (startTime >= endTime) throw new Error('结束时间必须晚于开始时间。');
+      setPreview({ categories: cats, date: dateText, start: startTime, end: endTime,
+        meaning: meaning as 'order_on' | 'deliver_on', amountMinor: inputMinor(amount), card });
+      setError('');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '请核对填写的信息。'); }
   }
 
-  async function prepare() {
-    if (!ready) throw new Error('请补齐下方缺少的信息。');
-    const nextSlots: PurchaseSlots = { ...slots, budget: { amount_minor: inputMinor(amount), currency: 'CNY' },
-      budget_month: dateText.slice(0, 7), funding_account_ref: card, date_expression: `${dateText} ${startTime}-${endTime}`,
-      date_meaning: meaning as 'order_on' | 'deliver_on', items: cats.map(category => ({ category, quantity: items.find(item => item.category === category)?.quantity ?? 1 })) };
-    const next = draft ? await call<PurchaseWorkflow>('purchase.draft.update', { workflow_ref: draft.workflow_ref, expected_version: draft.version, slots: nextSlots })
-      : await call<PurchaseWorkflow>('scenario.plan_purchase', nextSlots);
-    setDraft(next);
-    const result = await call<PlanPreview>('purchase.plan_preview', { workflow_ref: next.workflow_ref, expected_version: next.version,
-      ...(needFinance ? { manual_finance: { available_minor: inputMinor(balance), obligations_minor: inputMinor(obligations) } } : {}) });
-    if (!result.preview?.reminder_due_at || !result.plan_preview_ref || !result.plan_confirmation_token) throw new Error('未取得有效提醒预览，请重试。');
-    setPreview(result);
-  }
-
-  async function confirm() {
-    if (!draft || !preview) return;
-    const saved = await call<PurchaseWorkflow>('scenario.purchase.save', { draft_ref: draft.workflow_ref, expected_version: draft.version,
-      plan_preview_ref: preview.plan_preview_ref, plan_confirmation_token: preview.plan_confirmation_token });
-    if (saved.workflow_ref !== draft.workflow_ref || saved.status !== 'active' || !saved.reminder?.due_at || !['scheduled', 'delivered'].includes(saved.reminder.status)) {
-      throw new Error('尚未核实提醒已保存，请重试确认原提醒。');
-    }
-    setReceipt(saved);
-    try { localStorage.setItem('saveflow.purchase.last.v1', saved.workflow_ref); } catch { /* Optional browser storage. */ }
+  function confirm() {
+    if (!preview) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(preview));
+      setReceipt({ key: storageKey, value: preview });
+      setPreview(undefined);
+      setError('');
+    } catch { setError('浏览器存储不可用，提醒信息尚未保存。'); }
   }
 
   const toggleCat = (category: PurchaseCategory) =>
@@ -97,49 +108,39 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
   const cardOptions = cards.length ? cards : ['娱乐虚拟卡', '日常虚拟卡'];
 
   // 日期已过去：只回一句，不再展开任何信息或表单。
-  if (datePast) return <section aria-label="购物请求">
+  if (datePast && !savedReminder) return <section aria-label="购物请求">
     <p role="alert" style={{ margin: '12px 0 0' }}>所选日期已过去</p>
   </section>;
 
   return <section aria-label="购物请求">
     {links.length > 0 && <div style={{ display: 'grid', gap: 6 }}>
       {links.map(link => <article key={link.category}>
-        <a href={link.url} target="_blank" rel="noopener noreferrer">在京东搜索{categoryLabel(link.category)}</a>
+        <a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a>
         {link.check_before_order.length > 0 && <p style={{ margin: '2px 0 0' }}>下单前核对排除项：{link.check_before_order.join('、')}</p>}
       </article>)}
     </div>}
-    {needsReservation && <div aria-busy={busy} style={{ marginTop: 12, padding: '12px 14px', border: '1px solid #e2e5ea', borderRadius: 10, background: '#fafbfc' }}>
-      {receipt ? <div role="status" aria-label="提醒设置回执">
-        <b>预提醒已设置成功</b>
-        <p>{receipt.slots.items?.map(item => categoryLabel(item.category)).join('、')} · {meaningLabel(receipt.slots.date_meaning)} {receipt.slots.date_expression}</p>
-        <p>提醒时间：{new Date(receipt.reminder!.due_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}（北京时间）</p>
-        <p>预留 {yuan(receipt.reservation?.total_minor ?? receipt.slots.budget!.amount_minor)} · {receipt.slots.funding_account_ref}</p>
-        <p>已保存。到期提醒在本应用内查看；银行余额不变，商品由你自行下单。</p>
-        <details><summary>保存恢复码（会话过期时使用）</summary>
-          <p>恢复码仅供本人保存，可在购物页面恢复提醒。</p>
-          {recoveryCode ? <textarea aria-label="提醒恢复码" readOnly value={recoveryCode} /> : <button type="button" disabled={busy} onClick={() => run(async () => {
-            const backup = await call<{ recovery_code: string }>('purchase.session.backup', {});
-            setRecoveryCode(backup.recovery_code);
-          })}>获取恢复码</button>}
-        </details>
+    {needsReservation && <div style={{ marginTop: 12, padding: '12px 14px', border: '1px solid #e2e5ea', borderRadius: 10, background: '#fafbfc' }}>
+      {savedReminder ? <div role="status" aria-label="提醒设置回执">
+        <b>提醒信息已保存</b>
+        <p>{savedReminder.categories.map(categoryLabel).join('、')} · {meaningLabel(savedReminder.meaning)} {savedReminder.date} {savedReminder.start}–{savedReminder.end}</p>
+        <p>模拟预留 {yuan(savedReminder.amountMinor)} · {savedReminder.card}</p>
+        <p>仅保存在此浏览器；不会定时通知或冻结资金。到时请自行查看并下单。</p>
       </div> : preview ? <div aria-label="确认提醒">
-        <b>请确认预留预算与提醒</b>
-        <p>{preview.preview!.slots.date_expression} · {meaningLabel(preview.preview!.slots.date_meaning)}</p>
-        <p>{yuan(preview.preview!.slots.budget!.amount_minor)} · {preview.preview!.slots.funding_account_ref}</p>
-        <p>提醒时间：{new Date(preview.preview!.reminder_due_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}（北京时间）</p>
-        <p>预算依据：{preview.preview!.context.source === 'user_provided' ? '你填写的数据，未经银行核实' : '模拟财务数据'}。</p>
-        <p>{preview.notice}</p>
-        <button type="button" disabled={busy} onClick={() => run(confirm)} style={submitStyle}>确认设置提醒</button>
-        <button type="button" disabled={busy} onClick={() => { setPreview(undefined); setError(''); setEditing(true); }} style={submitStyle}>返回修改</button>
+        <b>请核对将保存的信息</b>
+        <p>{preview.categories.map(categoryLabel).join('、')} · {meaningLabel(preview.meaning)} {preview.date} {preview.start}–{preview.end}</p>
+        <p>模拟预留 {yuan(preview.amountMinor)} · {preview.card}</p>
+        <p>仅本浏览器保存，不会定时通知或冻结资金。</p>
+        <button type="button" onClick={confirm} style={submitStyle}>确认设置提醒</button>
+        <button type="button" onClick={() => { setPreview(undefined); setError(''); setEditing(true); }} style={submitStyle}>返回修改</button>
       </div> : <>
       <b>预留预算与提醒</b>
       {!editing && recognised.length > 0 && <p style={{ margin: '6px 0 2px' }}>
         已识别：{recognised.join(' · ')}
       </p>}
-      <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}>
+      <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
       {need('items') && <div style={fieldStyle}><span>买什么？ </span>
-        {(['鲜花', '蛋糕'] as const).map(option => {
-          const category = option === '鲜花' ? 'flowers' as const : 'cake' as const;
+        {(['鲜花', '蛋糕', '耳机'] as const).map(option => {
+          const category = option === '鲜花' ? 'flowers' as const : option === '蛋糕' ? 'cake' as const : 'headphones' as const;
           const selected = cats.includes(category);
           return <button key={option} type="button" style={{ ...chip, background: selected ? '#e8f0fe' : '#f2f4f7' }} onClick={() => toggleCat(category)}>{option}</button>;
         })}
@@ -161,16 +162,12 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
       {need('funding_account_ref') && <div style={fieldStyle}><span>用哪张卡预留？ </span>
         {cardOptions.map(option => <button key={option} type="button" style={{ ...chip, background: card === option ? '#e8f0fe' : '#f2f4f7' }} onClick={() => setCard(option)}>{option}</button>)}
       </div>}
-      {needFinance && <div style={fieldStyle}>
-        <p>还缺可用余额和近期待付金额，请核对后填写（仅用于预算规划）。</p>
-        <label>可用余额（元）<input aria-label="可用余额" type="number" min="0" step="0.01" value={balance} onChange={event => setBalance(event.target.value)} style={inputStyle} /></label>
-        <label>近期待付金额（元，无则填0）<input aria-label="近期待付金额" type="number" min="0" step="0.01" value={obligations} onChange={event => setObligations(event.target.value)} style={inputStyle} /></label>
-      </div>}
       </fieldset>
-      <button type="button" disabled={busy || !ready || (needFinance && (!balance || !obligations))} onClick={() => run(prepare)} style={submitStyle}>预览提醒设置</button>
+      {error && <p role="alert" style={{ color: '#a22121', margin: '8px 0 0' }}>{error}</p>}
+      <button type="button" onClick={prepare} style={submitStyle}>预览提醒设置</button>
       </>}
-      {error && <p role="alert">{error}</p>}
-      {busy && <p role="status">正在保存或核对，请稍候……</p>}
+      {(preview || savedReminder) && error && <p role="alert">{error}</p>}
     </div>}
   </section>;
 }
+
