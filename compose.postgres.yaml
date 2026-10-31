@@ -4,6 +4,8 @@
 services:
   pilot-db:
     image: postgres:17-bookworm
+    ports:
+      - "127.0.0.1:5433:5432"
     environment:
       POSTGRES_USER: saveflow_web
       POSTGRES_PASSWORD: local-synthetic-web-only
