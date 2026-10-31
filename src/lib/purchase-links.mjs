@@ -9,15 +9,18 @@ const allowed = (value, field) => words(value).map(word => searchTerms[field][wo
 /** Search links contain only shopping preferences. No account, budget, address or recipient leaves SaveFlow. */
 export function shoppingSearchLinks(slots = {}) {
   const preferences = slots.preferences ?? {};
-  return (slots.items ?? []).filter(item => ['flowers', 'cake'].includes(item.category)).map(item => {
+  return (slots.items ?? []).filter(item => ['flowers', 'cake', 'headphones'].includes(item.category)).map(item => {
     const flowers = item.category === 'flowers';
-    const query = [flowers ? '鲜花花束' : '生日蛋糕',
+    const cake = item.category === 'cake';
+    const productName = flowers ? '鲜花花束' : cake ? '生日蛋糕' : '耳机';
+    const budgetText = Number.isSafeInteger(slots.budget?.amount_minor) ? `${Math.floor(slots.budget.amount_minor / 100)}元以内` : '';
+    const query = [productName, budgetText,
       ...(flowers ? [...allowed(preferences.flower_colors, 'flower_colors'), ...allowed(preferences.flower_materials, 'flower_materials')]
-        : [...allowed(preferences.cake_flavors, 'cake_flavors'), Number.isSafeInteger(preferences.cake_servings) && preferences.cake_servings >= 1 && preferences.cake_servings <= 100 ? `${preferences.cake_servings}人` : ''])]
+        : cake ? [...allowed(preferences.cake_flavors, 'cake_flavors'), Number.isSafeInteger(preferences.cake_servings) && preferences.cake_servings >= 1 && preferences.cake_servings <= 100 ? `${preferences.cake_servings}人` : ''] : [])]
       .filter(Boolean).slice(0, 11).join(' ');
     const url = new URL('https://search.jd.com/Search');
     url.searchParams.set('keyword', query);
-    return { category: item.category, label: flowers ? '在京东搜索鲜花' : '在京东搜索蛋糕', query, url: url.toString(),
-      check_before_order: flowers ? words(preferences.flower_exclusions) : words(preferences.ingredient_exclusions) };
+    return { category: item.category, label: `在京东搜索${productName}`, query, url: url.toString(),
+      check_before_order: flowers ? words(preferences.flower_exclusions) : cake ? words(preferences.ingredient_exclusions) : [] };
   });
 }

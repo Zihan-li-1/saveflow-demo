@@ -7,7 +7,7 @@ const ref = text().regex(/^[a-zA-Z0-9_-]+$/);
 const version = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
 const money = z.strictObject({ amount_minor: z.number().int().min(1).max(1_000_000_000), currency: z.literal('CNY') });
 const mode = z.enum(['guided', 'browse']);
-const category = z.enum(['flowers', 'cake']);
+const category = z.enum(['flowers', 'cake', 'headphones']);
 const list = z.array(text(80)).max(20);
 const preferences = z.strictObject({
   flower_colors: list.optional(), flower_materials: list.optional(), flower_exclusions: list.optional(),

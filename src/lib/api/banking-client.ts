@@ -33,7 +33,7 @@ function scenarioEffect(v: unknown, action: string): boolean {
   const rule = v.after;
   return rule.id === v.ruleId && ['active', 'disabled'].includes(String(rule.status)) && rule.authorization_scope === 'suggest_only' &&
     Number.isSafeInteger(rule.version) && object(rule.trigger) && typeof rule.trigger.value === 'string' && Array.isArray(rule.proposed_steps) &&
-    rule.proposed_steps.every(step => object(step) && ['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get'].includes(String(step.action)) && object(step.parameters));
+    rule.proposed_steps.every(step => object(step) && ['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get', 'notification.remind'].includes(String(step.action)) && object(step.parameters));
 }
 function wealthEffect(v: unknown, action: string): boolean {
   if (!object(v) || v.kind !== "wealth_change" || v.action !== action || typeof v.productId !== "string" || typeof v.productName !== "string" || typeof v.holdingId !== "string" || !fen(v.amountFen) || Number(v.amountFen) <= 0 || !fen(v.unitsMilli) || Number(v.unitsMilli) <= 0) return false;

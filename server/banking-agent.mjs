@@ -13,6 +13,7 @@ import { createAgentDiagnostics, diagnosticCategory } from './agent-diagnostics.
 import { routeConversation, validateChatHistory, validateConversationRoute } from './conversation-route.mjs';
 import { buildCapabilityCatalog, buildSkillOverview, publicCapabilityCatalog, capabilityIntroduction } from './agent-capability-catalog.mjs';
 import { purchaseIntentFromMessage } from '../src/lib/purchase-flow.mjs';
+import { budgetReminderRuleIntentFromMessage } from '../src/lib/scenario-rule-flow.mjs';
 import { localDate } from '../src/lib/calendar.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
@@ -179,7 +180,8 @@ export async function handleBankingAgent(
     let route;
     const naturalTurn = typeof body.message === 'string' && !body.choice && !body.planInputs && !body.wealthInputs && !['sync', 'resume', 'continue', 'plan'].includes(body.taskMode) && body.planning !== true;
     const newPurchase = naturalTurn && !body.continuationToken && !body.taskId && purchaseIntentFromMessage(body.message, localDate(now(), options.timezone ?? 'Asia/Shanghai'));
-    if (naturalTurn && !newPurchase && (options.routeConversation || options.conversationRuntimeClient || implementation === 'trueforge' && !options.parseIntent && !options.trueforgeRuntimeClient)) {
+    const newBudgetReminderRule = naturalTurn && !body.continuationToken && !body.taskId && budgetReminderRuleIntentFromMessage(body.message);
+    if (naturalTurn && !newPurchase && !newBudgetReminderRule && (options.routeConversation || options.conversationRuntimeClient || implementation === 'trueforge' && !options.parseIntent && !options.trueforgeRuntimeClient)) {
       if (/^(?:确认|确认转账|确认执行|执行|同意|确认保存|保存规则)[。！!]?\s*$/.test(body.message.trim())) throw Object.assign(new Error('聊天文字不能确认执行，请使用页面确认按钮。'), { code: 'CONFIRMATION_REQUIRED', userMessage: '聊天文字不能确认执行，请使用页面确认按钮。', status: 403 });
       const catalog = await buildCapabilityCatalog({ core, repository: options.repository ?? core?.repository, env });
       const taskContext = core ? bankingRouteContext(body, { core, env, now, conversationHost: options.conversationHost }) : undefined;

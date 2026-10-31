@@ -6,7 +6,7 @@ const money = (fen: number) => `¥${(fen / 100).toFixed(2)}`;
 const riskText = (level: string) => level === "R1" ? "较低风险（示例：短期可能约亏 0%–2%）" : level === "R2" ? "中等风险（示例：阶段亏损可能约 2%–10%）" : level === "R3" ? "较高风险（示例：亏损可能超过 10%）" : "风险情况待确认";
 const liquidityText = (value: string) => value === "T+0" ? "通常当天可取" : value === "T+1" ? "通常下一个工作日可取" : value === "AT_MATURITY" ? "一般需持有到计划结束" : "取用时间待确认";
 const durationText = (days: number) => days === 0 ? "没有固定持有期" : days % 30 === 0 ? `约 ${days / 30} 个月` : days >= 30 ? `约 ${Math.round(days / 30)} 个月（${days} 天）` : `${days} 天`;
-const actionNames: Record<string, string> = { "bill.analyze": "分析收支", "bill.report": "查看账单报告", "subscription.list": "查看订阅", "card.get": "查看卡片预算", "wealth.recommend": "筛选理财产品", "wealth.compare": "比较理财产品" };
+const actionNames: Record<string, string> = { "bill.analyze": "分析收支", "bill.report": "查看账单报告", "subscription.list": "查看订阅", "card.get": "查看卡片预算", "wealth.recommend": "筛选理财产品", "wealth.compare": "比较理财产品", "notification.remind": "达到条件时在应用内提醒" };
 const actionName = (action: string) => actionNames[action] || "查看建议";
 const ProductTerms = () => <div className="financial-term-help">
   <details><summary>风险等级 <span>点此了解</span></summary><p>风险等级用来表示价格波动和发生亏损的可能性。这里的百分比只是帮助理解差异的演示尺度，不代表实际产品最多只会亏这么多；购买前仍需查看产品说明和正式风险测评。</p></details>

@@ -26,7 +26,7 @@ function validateTransfer(input) {
 const cardActions = new Set(['card.set_budget', 'card.set_controls', 'card.freeze', 'card.unfreeze']);
 const wealthActions = new Set(['wealth.subscribe', 'wealth.redeem']);
 const scenarioActions = new Set(['scenario.create_rule', 'scenario.update_rule', 'scenario.disable_rule']);
-const safeScenarioSteps = new Set(['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get']);
+const safeScenarioSteps = new Set(['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get', 'notification.remind']);
 /** @param {string} action @param {unknown} input @returns {import('./contracts').CardInput} */
 function validateCardInput(action, input) {
   if (!cardActions.has(action) || !input || typeof input !== 'object' || Array.isArray(input)) throw new BankingError('VALIDATION_ERROR', '卡片操作参数无效');

@@ -237,7 +237,7 @@ function validateScenario(input, slots) {
     if (Object.keys(conditions).length > 20 || Object.values(conditions).some(item => !['string', 'number', 'boolean'].includes(typeof item) || (typeof item === 'number' && !Number.isFinite(item)))) fail('slots.conditions is invalid');
   };
   const validateSteps = value => {
-    const safe = ['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get'];
+    const safe = ['bill.analyze', 'bill.report', 'subscription.list', 'wealth.recommend', 'wealth.compare', 'card.get', 'notification.remind'];
     if (!Array.isArray(value) || value.length < 1 || value.length > 10) fail('slots.proposed_steps is invalid');
     for (const candidate of value) {
       const step = requireRecord(candidate, 'slots.proposed_steps[]'); rejectUnknownKeys(step, ['action', 'parameters'], 'slots.proposed_steps[]');
