@@ -26,6 +26,7 @@
     "test:wealth-bill": "node --test tests/wealth-bill-recommend.test.mjs tests/wealth-skill.test.mjs tests/wealth-agent-integration.test.mjs",
     "demo:banking": "node scripts/demo-banking.mjs",
     "db:migrate": "node scripts/migrate-banking.mjs",
+    "worker:purchase": "node scripts/purchase-worker.mjs",
     "typecheck": "tsc --noEmit",
     "mcp:bridge": "node server/mcp/trueforge-token-bridge.mjs",
     "configure:trueforge:bridge": "node scripts/configure-trueforge-bridge.mjs",
