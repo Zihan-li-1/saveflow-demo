@@ -61,6 +61,7 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
 
   async function prepare() {
     if (!ready) throw new Error('请补齐下方缺少的信息。');
+    if (needFinance && (!balance || !obligations)) throw new Error('请填写可用余额和近期待付金额（无则填0）。');
     const nextSlots: PurchaseSlots = { ...slots, budget: { amount_minor: inputMinor(amount), currency: 'CNY' },
       budget_month: dateText.slice(0, 7), funding_account_ref: card, date_expression: `${dateText} ${startTime}-${endTime}`,
       date_meaning: meaning as 'order_on' | 'deliver_on', items: cats.map(category => ({ category, quantity: items.find(item => item.category === category)?.quantity ?? 1 })) };
@@ -166,9 +167,10 @@ export function PurchaseRequestCard({ accessCode = '', consent = false, slots = 
         <label>近期待付金额（元，无则填0）<input aria-label="近期待付金额" type="number" min="0" step="0.01" value={obligations} onChange={event => setObligations(event.target.value)} style={inputStyle} /></label>
       </div>}
       </fieldset>
-      <button type="button" disabled={busy || !ready || (needFinance && (!balance || !obligations))} onClick={() => run(prepare)} style={submitStyle}>预览提醒设置</button>
+      {error && <p role="alert" style={{ color: '#a22121', margin: '8px 0 0' }}>{error}</p>}
+      <button type="button" disabled={busy} onClick={() => run(prepare)} style={submitStyle}>{busy ? '正在生成预览…' : '预览提醒设置'}</button>
       </>}
-      {error && <p role="alert">{error}</p>}
+      {(preview || receipt) && error && <p role="alert">{error}</p>}
       {busy && <p role="status">正在保存或核对，请稍候……</p>}
     </div>}
   </section>;
