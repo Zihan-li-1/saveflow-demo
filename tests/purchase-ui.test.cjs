@@ -12,6 +12,16 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { PurchaseFlow } = require('../src/components/PurchaseFlow.tsx');
 const { PurchaseRequestCard } = require('../src/components/PurchaseRequestCard.tsx');
 
+test('local Next purchase route reaches the shared JSON API', async () => {
+  const { POST } = require('../src/app/api/purchase/route.ts');
+  const response = await POST(new Request('http://localhost:3000/api/purchase', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+  }));
+  const body = await response.json();
+  assert.notEqual(response.status, 404);
+  assert.equal(typeof body.code, 'string');
+});
+
 test('purchase request pre-fills the known day and only asks for missing information', () => {
   const html = renderToStaticMarkup(React.createElement(PurchaseRequestCard, { slots: {
     date_expression: '2027-09-01', date_meaning: 'order_on', items: [{ category: 'flowers', quantity: 1 }],
